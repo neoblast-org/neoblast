@@ -21,9 +21,12 @@ jobs:
             exit 1
           fi
       - name: Maintainer commits are recorded in UTC
+        # Only commits made on a maintainer's machine are checked. Commits GitHub
+        # creates itself (the pull-request test merge, squash merges) have GitHub
+        # as committer and carry the account's time zone, so they are skipped.
         run: |
-          bad=$(git log --format='%h %ae %ad %cd' --date=format:%z \
-            | awk '$2=="dev@neoblast.dev" && ($3!="+0000" || $4!="+0000")')
+          bad=$(git log --no-merges --format='%h|%ae|%ce|%ad|%cd' --date=format:%z \
+            | awk -F'|' '$2=="dev@neoblast.dev" && $3!="noreply@github.com" && ($4!="+0000" || $5!="+0000")')
           if [ -n "$bad" ]; then
             echo "::error::Maintainer commits must use UTC timestamps:"; echo "$bad"; exit 1
           fi
