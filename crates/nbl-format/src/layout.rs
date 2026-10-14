@@ -3,6 +3,11 @@
 /// Poly1305 tag appended to each encrypted segment.
 pub const TAG_LEN: u64 = 16;
 
+/// Shard lengths are multiples of this many bytes (decision 0006). Leopard-RS
+/// requires it, and `reed-solomon-simd` keeps its byte output stable across
+/// versions only for multiples of 64.
+pub const SHARD_ALIGN: u64 = 64;
+
 /// Padmé padding (Nikitin et al., "Reducing Metadata Leakage from Encrypted
 /// Files and Communication with PURBs", PETS 2019).
 ///
@@ -31,16 +36,16 @@ pub fn segment_count(padded_length: u64, segment_size: u32) -> Option<u32> {
 }
 
 /// Shard length for a segment holding `plain_len` plaintext bytes split into
-/// `k` data shards: ciphertext (plaintext + tag) divided by k, rounded up to an
-/// even number of bytes (the only alignment `reed-solomon-simd` 3.1 needs).
+/// `k` data shards: ciphertext (plaintext + tag) divided by k, rounded up to a
+/// multiple of [`SHARD_ALIGN`] (64) bytes (decision 0006).
 pub fn shard_len(plain_len: u64, k: u16) -> Option<u32> {
     if k == 0 {
         return None;
     }
     let cipher = plain_len.checked_add(TAG_LEN)?;
     let per = cipher.div_ceil(u64::from(k));
-    let even = per.checked_add(per % 2)?;
-    u32::try_from(even).ok()
+    let aligned = per.div_ceil(SHARD_ALIGN).checked_mul(SHARD_ALIGN)?;
+    u32::try_from(aligned).ok()
 }
 
 #[cfg(test)]
@@ -57,7 +62,33 @@ mod tests {
         assert_eq!(padme(1_000_000), 1_015_808);
     }
 
+    #[test]
+    fn shard_len_known_values() {
+        // 1000 + 16 = 1016 bytes over 4 shards = 254, rounded up to 256.
+        assert_eq!(shard_len(1000, 4), Some(256));
+        // Even tiny segments get a full 64-byte shard.
+        assert_eq!(shard_len(0, 20), Some(64));
+        assert_eq!(shard_len(4 * 1024 * 1024, 20), Some(209_728));
+        assert_eq!(shard_len(10, 0), None);
+    }
+
     proptest! {
+        #[test]
+        fn shard_len_is_aligned_and_sufficient(plain in 0u64..(1 << 36), k in 1u16..=128) {
+            let exact = (plain + TAG_LEN).div_ceil(u64::from(k)).div_ceil(SHARD_ALIGN) * SHARD_ALIGN;
+            match shard_len(plain, k) {
+                Some(s) => {
+                    let s = u64::from(s);
+                    prop_assert_eq!(s, exact);
+                    prop_assert_eq!(s % SHARD_ALIGN, 0);
+                    prop_assert!(s * u64::from(k) >= plain + TAG_LEN);
+                    prop_assert!((s - SHARD_ALIGN) * u64::from(k) < plain + TAG_LEN);
+                }
+                // Only refused when the shard would not fit the header's u32 field.
+                None => prop_assert!(exact > u64::from(u32::MAX)),
+            }
+        }
+
         #[test]
         fn padme_is_idempotent_and_bounded(len in 0u64..(1 << 50)) {
             let p = padme(len);

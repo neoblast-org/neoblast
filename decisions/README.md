@@ -11,6 +11,7 @@ decision gets a new record that supersedes the old one.
 | [0003](0003-threat-model.md) | Threat model: four adversaries, no anonymity in v1 | Accepted |
 | [0004](0004-capability-model.md) | Capability model: verify ⊂ read ⊂ write | Proposed |
 | [0005](0005-storage-reciprocity.md) | Why strangers store your shards: swaps, pins, donors, leases | Proposed |
+| [0006](0006-erasure-code.md) | Erasure code: Leopard-RS high-rate, checked against Leopard | Accepted |
 
 ## How a question becomes a decision
 
@@ -27,4 +28,4 @@ decision gets a new record that supersedes the old one.
 - **Medium** (100–1,000, or backed by a large organisation but pre-1.0): use behind our own types; pin exact versions.
 - **Small** (fewer than 100, one maintainer, stale, or churning pre-1.0): question it. Can we vendor it (under ~2,000 lines)? Does its output reach the wire or disk format (then the spec must define those bytes and tests must cross-check)? Can a large-radius crate do the job?
 
-Currently flagged small: `reed-solomon-simd` (its parity bytes are part of the format), and later `mainline`, `pkarr` and `bao-tree`.
+Currently flagged small: `reed-solomon-simd` (its parity bytes are part of the format; cross-checked against Leopard-RS by decision 0006), and later `mainline`, `pkarr` and `bao-tree`.

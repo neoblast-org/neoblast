@@ -26,7 +26,7 @@ with the decision rule fixed *before* the result is known.
 | 4 | Channel tombstone format | Write from BEP 44 sequence rules | `seq = u64::MAX` + flag + optional successor link | Phase 2 |
 | 5 | Lease length | Monte Carlo of owners and pinners going offline (7 / 30 / 90 days) | Shortest lease where an owner offline 3 weeks with no pinners loses nothing, and abandoned content is gone within two lease periods | Phase 3 |
 | 6 | libp2p vs iroh | Two-evening spike each across home router, carrier-grade NAT and VPS | Higher direct-connection rate wins; on a tie, libp2p (built-in Kademlia) | Before Phase 2 |
-| 7 | Trusting `reed-solomon-simd` | Check byte-for-byte parity against another implementation of the same code (Leopard first) | Match → differential test in CI. No match → golden vectors are the spec and the crate is vendored and frozen | Phase 1 |
+| 7 | ~~Trusting `reed-solomon-simd`~~ | Check byte-for-byte parity against another implementation of the same code (Leopard first) | Match → differential test in CI. No match → golden vectors are the spec and the crate is vendored and frozen | **Settled: match** (high-rate, 64-byte shards, k ≥ 2). Differential test in CI; see [decision 0006](decisions/0006-erasure-code.md) |
 | 8 | Challenge interval and punishment | Simulate swap partners with realistic sleep patterns | A node offline 8 h a night loses < 1% of swaps a month; a cheater loses all within 7 days | Phase 3 |
 | 9 | Placement data (ASN, country) | Map the IP *we observe* with a public IP-to-ASN dataset (licence checked); never trust self-reports | ≥ 95% of testnet peers resolve | Phase 2 |
 | 10 | Anonymity layer | Deferred by decision 0003; revisit with a Tor spike (`arti`) | — | After Phase 3 |

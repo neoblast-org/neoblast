@@ -1,0 +1,76 @@
+# Leopard fixture cases: original_count recovery_count shard_bytes
+# Shard bytes must be a multiple of 64. k = 1 is excluded (decision 0006).
+# Cases with recovery_count > original_count use the guard-removed build.
+
+# m <= k: stock Leopard API, FF16 only. m = 1 takes Leopard's separate XOR path.
+2 1 64
+2 1 640
+2 2 64
+2 2 640
+3 1 64
+3 1 640
+3 1 4096
+4 3 64
+4 3 640
+4 3 4096
+10 6 64
+10 6 640
+10 6 4096
+16 16 64
+16 16 640
+16 16 4096
+20 10 64
+20 10 640
+20 10 4096
+20 20 64
+20 20 640
+20 20 4096
+20 20 65536
+25 25 64
+25 25 640
+25 25 4096
+32 32 64
+32 32 640
+32 32 4096
+50 13 64
+50 13 640
+50 13 4096
+64 1 64
+64 1 640
+64 64 64
+64 64 640
+64 64 4096
+100 100 64
+100 100 640
+100 100 4096
+200 56 64
+200 56 640
+200 56 4096
+300 300 64
+300 300 640
+1000 24 64
+1000 24 640
+
+# m > k: Leopard's high-rate algorithm with the m <= k API guard removed.
+# 20 of 50 (k = 20, m = 30) is the Neoblast default. 209728 is its real shard size
+# for a full 4 MiB segment.
+20 30 64
+20 30 640
+20 30 4096
+20 30 65536
+20 30 209728
+10 40 64
+10 40 640
+10 40 4096
+4 12 64
+4 12 640
+4 12 4096
+16 48 64
+16 48 640
+16 48 4096
+20 108 64
+20 108 640
+20 108 4096
+# Format extremes: smallest k at the largest n (128).
+2 126 64
+2 126 640

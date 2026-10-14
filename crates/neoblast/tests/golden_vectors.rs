@@ -1,7 +1,8 @@
 //! Golden test vectors: lock the v1 byte format.
 //!
 //! Any change to these bytes is a format change. It needs a spec version bump and
-//! a decision record, then regenerate with:
+//! a decision record (before the Phase 1 freeze, the record alone, as in decision
+//! 0006), then regenerate with:
 //!
 //! ```sh
 //! NBL_UPDATE_VECTORS=1 cargo test -p neoblast --test golden_vectors
