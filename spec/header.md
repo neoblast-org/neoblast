@@ -4,6 +4,12 @@ Implemented in `crates/neoblast-format`, `crates/neoblast-erasure` and
 `crates/neoblast/src/tree.rs`. Locked by `test-vectors/phase1.json` and, for the
 parity bytes, `test-vectors/erasure-leopard.json`.
 
+**v1 is frozen** (Phase 1 gate, v0.0.1). Nothing in this document, nor the file
+links in [`caps.md`](caps.md), changes its bytes again. A different format needs
+a new magic version byte (`NBL\x02`) or a new suite byte (for links, a new link
+version byte), a decision record and its own vector file; see
+[`test-vectors/README.md`](test-vectors/README.md).
+
 ## Header (32 bytes, big-endian)
 
 | Offset | Bytes | Field | Rule |

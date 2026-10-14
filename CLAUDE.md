@@ -27,8 +27,8 @@ Read before changing anything:
 
 - `cargo fmt --all` · `cargo clippy --all-targets -- -D warnings`
 - `cargo test --all` · `cargo deny check`
-- `NBL_UPDATE_VECTORS=1 cargo test -p neoblast --test golden_vectors`: only for an
-  intended format change that has a decision record and a spec update.
+- `NBL_UPDATE_VECTORS=1 cargo test -p neoblast --test golden_vectors`: rewrites the
+  frozen `phase1.json`; the result must be byte-identical (CI pins its hash).
 - `cargo +nightly fuzz run <target>` · `fuzz/campaign.sh summary` · `python3 sim/durability.py`
 
 Keep fmt, clippy, tests, `cargo deny` and the golden vectors green.
@@ -39,8 +39,9 @@ Keep fmt, clippy, tests, `cargo deny` and the golden vectors green.
   indices sent by a peer; take them from a header checked against the file root.
 - **Parsers never panic.** No `unwrap`, `expect`, `panic` or unchecked indexing
   outside tests. `unsafe` is forbidden in first-party crates.
-- **Byte-format changes** need a decision record, a `spec/` update and regenerated
-  golden vectors, in the same change.
+- **Byte-format changes:** v1 is frozen. A new format needs a new magic, suite
+  or link version byte, a decision record, a `spec/` update and its own new
+  vector file, in the same change. The v1 vector files never change.
 - **Dependencies follow the blast-radius rule** in `decisions/README.md`. A crate
   with few dependents needs a written reason, an exact pin and a wrapper trait.
 - **Secrets** appear only after `#` in links, never in logs or `Debug` output.

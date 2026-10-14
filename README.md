@@ -31,9 +31,10 @@ neoblast open  'nbl://f/...#...' --from ./store --out photo-copy.jpg
 ```
 
 Defaults are 20-of-50 shards over 4 MiB segments. `seal`, `open` and `heal`
-work one segment at a time, so their memory use (about 15–33 MiB at the defaults,
-depending on the operation) does not grow with the file size. The network (Phase 2),
-storage swaps and leases (Phase 3) and blind search (Phase 4) are not built yet.
+work one segment at a time, so their memory use is meant not to grow with the
+file size. Measured on macOS, `heal`'s still does; see [CHANGELOG.md](CHANGELOG.md).
+The network (Phase 2), storage swaps and leases (Phase 3) and blind search
+(Phase 4) are not built yet.
 See [ROADMAP.md](ROADMAP.md) for phases, gates and open questions.
 
 ## What Neoblast protects, and what it doesn't

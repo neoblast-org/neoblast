@@ -1,7 +1,8 @@
 # Segment-size decision (ROADMAP open item 2)
 
-Status: todo, for v0.0.2. Waiting on the reference run after the heal memory fix
-(branch `perf/heal-memory`), which lands after v0.0.1.
+Status: todo. Waiting on the reference run with the heal memory fix, which is an
+experiment on `exp/heal-reuse` (`phase-1-finish.md`, A3). In v0.0.1 if that fix
+lands before the campaign starts, otherwise v0.0.2.
 
 ## Success criteria
 

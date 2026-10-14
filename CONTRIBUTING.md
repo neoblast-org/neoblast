@@ -26,12 +26,14 @@ cargo deny check
 
 ## Changing the byte format
 
-Anything that changes bytes on disk or on the wire (the header, the hash tree,
-caps, the erasure code) needs:
+The v1 format is frozen (`spec/header.md`): its golden vectors never change, and
+CI checks their hashes. Anything that changes bytes on disk or on the wire (the
+header, the hash tree, caps, the erasure code) is a new format and needs:
 
-1. a decision record in `decisions/`,
-2. an update to the matching file in `spec/`,
-3. regenerated golden vectors (`NBL_UPDATE_VECTORS=1 cargo test -p neoblast --test golden_vectors`),
+1. a new magic version byte, a new suite byte or, for links, a new link version byte,
+2. a decision record in `decisions/`,
+3. an update to the matching file in `spec/`,
+4. a new golden-vector file beside the v1 ones (see `spec/test-vectors/README.md`),
    with the change explained in the PR.
 
 ## Dependencies

@@ -12,6 +12,9 @@ weaker ones, never the stronger (decision 0004).
 
 ## File caps (implemented)
 
+Frozen with v1 (see [`header.md`](header.md)): changing a file link's bytes
+needs a new link version byte.
+
 | Cap | Link | Contains |
 | --- | --- | --- |
 | Verify | `nbl://fv/<b32(0x01 ‖ H)>` | File root `H` |
