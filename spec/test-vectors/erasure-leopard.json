@@ -1,0 +1,544 @@
+{
+  "format": "neoblast erasure fixtures v1",
+  "note": "Recovery shards produced by Leopard-RS itself. nbl-erasure must reproduce every case byte for byte. Regenerate with tools/leopard-vectors/generate.sh.",
+  "leopard": {
+    "repo": "https://github.com/catid/leopard",
+    "commit": "22ddc7804998d31c8f1a2617ee720e063b1fa6cd",
+    "builds": {
+      "ff16": "LEO_HAS_FF8 disabled, so GF(2^16) is always used",
+      "ff16-m-gt-k": "ff16 plus the recovery_count > original_count argument check removed from leo_encode and leo_decode"
+    }
+  },
+  "input": "original shard i (0-based) is the next shard_bytes outputs of one splitmix64 stream, low byte of each output, shards filled in order; the stream state starts at k*1000003 + m*1009 + shard_bytes (wrapping u64)",
+  "output": "recovery_blake3 = BLAKE3 of all m recovery shards concatenated in index order; recovery_head = first 16 bytes of recovery shard 0",
+  "cases": [
+    {
+      "k": 2,
+      "m": 1,
+      "shard_bytes": 64,
+      "leopard_build": "ff16",
+      "recovery_head": "daeede01e0facbad03f8941f612a468d",
+      "recovery_blake3": "c214bd4b3e356da65709e4063343e6b2c56a1be43d90fe8ec01ed585b31cb91f"
+    },
+    {
+      "k": 2,
+      "m": 1,
+      "shard_bytes": 640,
+      "leopard_build": "ff16",
+      "recovery_head": "56a0629d1c3062a17b2b9c5b8f7f35ac",
+      "recovery_blake3": "a8df4db8037b7fa4c1e6ea994175cdf7a03d72fd61f07a63d35da220a04c4bb1"
+    },
+    {
+      "k": 2,
+      "m": 2,
+      "shard_bytes": 64,
+      "leopard_build": "ff16",
+      "recovery_head": "90bb7ade1745d7f511865422b103f92f",
+      "recovery_blake3": "16d51de61dec793c610029ae0b3001647567fddd07fe8371ac23831622d8817f"
+    },
+    {
+      "k": 2,
+      "m": 2,
+      "shard_bytes": 640,
+      "leopard_build": "ff16",
+      "recovery_head": "8374c92130a25db8d9c4e2d9c9674d69",
+      "recovery_blake3": "79c75e16d0e96dae4483ac886e3a3612fcb4480a430971a5f581301a3e33ddea"
+    },
+    {
+      "k": 3,
+      "m": 1,
+      "shard_bytes": 64,
+      "leopard_build": "ff16",
+      "recovery_head": "d165a351be823f11cd41599a9f87ea73",
+      "recovery_blake3": "d10777613aab0eb03b6f5b987936da22bcf5949ffe3661c881807b540d216241"
+    },
+    {
+      "k": 3,
+      "m": 1,
+      "shard_bytes": 640,
+      "leopard_build": "ff16",
+      "recovery_head": "d364fbd47d8dbc106fcd4f82c9c83ab2",
+      "recovery_blake3": "002b1d65449956b8bbbac18843cd0d45f772a396c337cd6d5548ce4708fbf044"
+    },
+    {
+      "k": 3,
+      "m": 1,
+      "shard_bytes": 4096,
+      "leopard_build": "ff16",
+      "recovery_head": "25e73e40b8de4cef98faad958f7a03ff",
+      "recovery_blake3": "b5e77b71c1d85c2c83a829f8dcfe3bfb056b38b8973527dc72bfb7a009521c98"
+    },
+    {
+      "k": 4,
+      "m": 3,
+      "shard_bytes": 64,
+      "leopard_build": "ff16",
+      "recovery_head": "610913042f070f22874c3890e5f28e6d",
+      "recovery_blake3": "868f54d27844590ecc6252d357c315a69cac6c28af3abb2f4b29a7c2fa2bec4a"
+    },
+    {
+      "k": 4,
+      "m": 3,
+      "shard_bytes": 640,
+      "leopard_build": "ff16",
+      "recovery_head": "ce47ae9a1884cf29a3a5b4f68280d330",
+      "recovery_blake3": "1c20646a7b0e7c1982589bc1e4eac4369c4cfc48dc5c331b17fdafcd9affa934"
+    },
+    {
+      "k": 4,
+      "m": 3,
+      "shard_bytes": 4096,
+      "leopard_build": "ff16",
+      "recovery_head": "c86d2f90c6f5b88ba9eac44b0ee14d7c",
+      "recovery_blake3": "dcb51aea4bdeb08a834fc2d47646cb542e6f45d068e1dcede4cd4c115d2c1685"
+    },
+    {
+      "k": 10,
+      "m": 6,
+      "shard_bytes": 64,
+      "leopard_build": "ff16",
+      "recovery_head": "b80d971553c04c3d828ca7174e28f8ee",
+      "recovery_blake3": "1cd587d389e1a2d709193001a589190b277dbca3e90b962fcac6b163eb626ec4"
+    },
+    {
+      "k": 10,
+      "m": 6,
+      "shard_bytes": 640,
+      "leopard_build": "ff16",
+      "recovery_head": "d1ff6342840b0975e80ce86a6949fc67",
+      "recovery_blake3": "6f97f972ce48681ec8aed7945d84895cc3bd22126b515bde8d6283c04d8b411f"
+    },
+    {
+      "k": 10,
+      "m": 6,
+      "shard_bytes": 4096,
+      "leopard_build": "ff16",
+      "recovery_head": "ea316e484d5c708597fbff293ef233f0",
+      "recovery_blake3": "9a890acccc18e5ab42e37d40b4e942d27038eb1d684436de763ebd3bdd5fda63"
+    },
+    {
+      "k": 16,
+      "m": 16,
+      "shard_bytes": 64,
+      "leopard_build": "ff16",
+      "recovery_head": "c07e60ab9d1f4a8de91c89d213aa878b",
+      "recovery_blake3": "d95a656d52f32eff2fb096a3193ea08c1d215ccdcdf7650e3d25555d41c40057"
+    },
+    {
+      "k": 16,
+      "m": 16,
+      "shard_bytes": 640,
+      "leopard_build": "ff16",
+      "recovery_head": "1a7912fd8b94010456f8e50377c1a2ae",
+      "recovery_blake3": "11cf945524beae4ec4d7f2a7b7992d2b2177cc98d2e2d2f90944f81781f5fc53"
+    },
+    {
+      "k": 16,
+      "m": 16,
+      "shard_bytes": 4096,
+      "leopard_build": "ff16",
+      "recovery_head": "61bd2ae91cc8bdc73fc71ea6bc91d346",
+      "recovery_blake3": "b1936f3e1ce9fe84a9ac75ca9267d03f8f463a59f242b00718c60e3b110c84e3"
+    },
+    {
+      "k": 20,
+      "m": 10,
+      "shard_bytes": 64,
+      "leopard_build": "ff16",
+      "recovery_head": "395feca5491fc2490fa3d0ddfe1c36ac",
+      "recovery_blake3": "8956f1b9768f1bbb709530f70da29154099dff1afc041582edc98bdca25e5886"
+    },
+    {
+      "k": 20,
+      "m": 10,
+      "shard_bytes": 640,
+      "leopard_build": "ff16",
+      "recovery_head": "6ab1a8e708a12cfa1eff797b8c49952a",
+      "recovery_blake3": "2f036a94cd45f6116de2526522c687135f275326fd3fe85f046fe234cdfc4406"
+    },
+    {
+      "k": 20,
+      "m": 10,
+      "shard_bytes": 4096,
+      "leopard_build": "ff16",
+      "recovery_head": "2f04b2f1dcddb52ab1182794c0865a1b",
+      "recovery_blake3": "bb3484cc8476993dad8d735754923a07a301183ea3f47cb30a54131455cd1848"
+    },
+    {
+      "k": 20,
+      "m": 20,
+      "shard_bytes": 64,
+      "leopard_build": "ff16",
+      "recovery_head": "6127afebbe2f7c96b1592931a92c916f",
+      "recovery_blake3": "130c84f1be43fe5bd6e729c4101ce81b1301702e667652841b799eafb3fff332"
+    },
+    {
+      "k": 20,
+      "m": 20,
+      "shard_bytes": 640,
+      "leopard_build": "ff16",
+      "recovery_head": "2efcd174900ab91d7898342ba01eea6d",
+      "recovery_blake3": "1869ad8f3aaf7143353c8f9bb25f6c4813686a7701c243047584095bc6f55c84"
+    },
+    {
+      "k": 20,
+      "m": 20,
+      "shard_bytes": 4096,
+      "leopard_build": "ff16",
+      "recovery_head": "3f218d5016f20d191f4aa089623af7ac",
+      "recovery_blake3": "79b4f38532b3fff3033b61a6fab90454ec5ee69b1970e0f752cf4419c143667a"
+    },
+    {
+      "k": 20,
+      "m": 20,
+      "shard_bytes": 65536,
+      "leopard_build": "ff16",
+      "recovery_head": "cde6bc86151a5dfb444d172603b1c317",
+      "recovery_blake3": "39776e9a527faed947f53b6268e40bb8fc1167f29063dfc165cec4cbcd98fcb3"
+    },
+    {
+      "k": 25,
+      "m": 25,
+      "shard_bytes": 64,
+      "leopard_build": "ff16",
+      "recovery_head": "e79cea0f147144a50de1d50fb4f748e1",
+      "recovery_blake3": "dc4b9ccff008e5bf4fc00a16d36e41e737934c9fd84e424562b29a66912915a9"
+    },
+    {
+      "k": 25,
+      "m": 25,
+      "shard_bytes": 640,
+      "leopard_build": "ff16",
+      "recovery_head": "5710a3e29b81e2d14e00991f6e256b09",
+      "recovery_blake3": "277ed3aea6a5bd48057d83c77841bd9ba3ca466218657d9ddfe9a076137f2fed"
+    },
+    {
+      "k": 25,
+      "m": 25,
+      "shard_bytes": 4096,
+      "leopard_build": "ff16",
+      "recovery_head": "b151d4103029af2d8333e0dedb2e1958",
+      "recovery_blake3": "4e89fddbb1371b4bf7610276b50c3e6be8043e5dce89a1749d411c124a8939ee"
+    },
+    {
+      "k": 32,
+      "m": 32,
+      "shard_bytes": 64,
+      "leopard_build": "ff16",
+      "recovery_head": "8d591d027493d0c12d745785cc6c08ff",
+      "recovery_blake3": "2631cad11c1cc42eb02719df325271f7f7a3922b7719942269f6214bdd9d0d58"
+    },
+    {
+      "k": 32,
+      "m": 32,
+      "shard_bytes": 640,
+      "leopard_build": "ff16",
+      "recovery_head": "25b101514067b76b165fa4df51faa070",
+      "recovery_blake3": "2464506f9ae6a9b403c06ce4f30b23465731a358cd02d3c3c74eda8d62df3824"
+    },
+    {
+      "k": 32,
+      "m": 32,
+      "shard_bytes": 4096,
+      "leopard_build": "ff16",
+      "recovery_head": "fa17bbbb0d8ca8447f2158d230ca0ecd",
+      "recovery_blake3": "a980a830205dbb3a11a65efa63cbab30e0f0acc3f6f899dbe6a415be37d7c112"
+    },
+    {
+      "k": 50,
+      "m": 13,
+      "shard_bytes": 64,
+      "leopard_build": "ff16",
+      "recovery_head": "2c08fef5d4be271ed6ce89c1d4eba970",
+      "recovery_blake3": "31aa372c982d6bc3abb94bb326a45b07b70b6eae46db3943496b75ad698a2f41"
+    },
+    {
+      "k": 50,
+      "m": 13,
+      "shard_bytes": 640,
+      "leopard_build": "ff16",
+      "recovery_head": "2c8948eb57bbc4323c329722b7511170",
+      "recovery_blake3": "aa8dbf5d1d537e58e7b7eafe9221c2934f7e936cbb9696759b9eccae904903ea"
+    },
+    {
+      "k": 50,
+      "m": 13,
+      "shard_bytes": 4096,
+      "leopard_build": "ff16",
+      "recovery_head": "730ea7308ee9b3a140872b8fb631cdf0",
+      "recovery_blake3": "49b7280d4cb0fa08e34e799c0e9626b0ea2e28dbe95eb939006ae049b63ca3f4"
+    },
+    {
+      "k": 64,
+      "m": 1,
+      "shard_bytes": 64,
+      "leopard_build": "ff16",
+      "recovery_head": "d349f458782390fbed909539888c6bd3",
+      "recovery_blake3": "5454952c56ee1cdc06dddee58a3b5ff4d7b5ab63fe2551aafad88644f96ee6e8"
+    },
+    {
+      "k": 64,
+      "m": 1,
+      "shard_bytes": 640,
+      "leopard_build": "ff16",
+      "recovery_head": "adca01a3e9820af4cca144dd6956426b",
+      "recovery_blake3": "93f19dd7a16c9d0e9e5b4b8271d3070a0047831cf990b01ed04674606849ebff"
+    },
+    {
+      "k": 64,
+      "m": 64,
+      "shard_bytes": 64,
+      "leopard_build": "ff16",
+      "recovery_head": "82bb3d6032f3ec17dfb2339f963685ff",
+      "recovery_blake3": "ae05bb48ee4602dfb3d433b39731ba18794f0f29516166f39a1dbabba8025331"
+    },
+    {
+      "k": 64,
+      "m": 64,
+      "shard_bytes": 640,
+      "leopard_build": "ff16",
+      "recovery_head": "70931959ab801d7f17a901e930fb4b9a",
+      "recovery_blake3": "9911ecbb0d6c4b0d6cce6a228656353fdcf3ce97d4b8b473cf915a5613bb2a85"
+    },
+    {
+      "k": 64,
+      "m": 64,
+      "shard_bytes": 4096,
+      "leopard_build": "ff16",
+      "recovery_head": "3f1af2a1614081e82d34e85c1739ca02",
+      "recovery_blake3": "4f9d1327e3904a05e96620a236225ee98da8227bebeb9d648a002d21f92c382f"
+    },
+    {
+      "k": 100,
+      "m": 100,
+      "shard_bytes": 64,
+      "leopard_build": "ff16",
+      "recovery_head": "1d6c646e902aa1976f73a052c1d42ca2",
+      "recovery_blake3": "28f497d871e7fa082f14d52024ecf9f95bb8d7b65ca5b5b2ddff1e2560d4ed5d"
+    },
+    {
+      "k": 100,
+      "m": 100,
+      "shard_bytes": 640,
+      "leopard_build": "ff16",
+      "recovery_head": "2ed18e304f1145abea25a12fa570ec8b",
+      "recovery_blake3": "e2c603ac3bfc2a83a67f4f8490e0ec9218b3bf9945a7b5d270089708a309a725"
+    },
+    {
+      "k": 100,
+      "m": 100,
+      "shard_bytes": 4096,
+      "leopard_build": "ff16",
+      "recovery_head": "6de061041733823fa96064e56506d508",
+      "recovery_blake3": "626d89e934440578621597d4b0920b37915cd7958defc09361e93edc6dfb6188"
+    },
+    {
+      "k": 200,
+      "m": 56,
+      "shard_bytes": 64,
+      "leopard_build": "ff16",
+      "recovery_head": "8f77c3e19bc0da610ddfd9cc1d982a32",
+      "recovery_blake3": "782bb56532675007d9aece1769a43b932060b2988554e204b42a801fb81c737a"
+    },
+    {
+      "k": 200,
+      "m": 56,
+      "shard_bytes": 640,
+      "leopard_build": "ff16",
+      "recovery_head": "e9715e9df59e85614e2e94bbd1aa3390",
+      "recovery_blake3": "cf353d8e5e84bd08c4ede1dbbb8e7240799e4b2739ab4289f04567b2b3410cab"
+    },
+    {
+      "k": 200,
+      "m": 56,
+      "shard_bytes": 4096,
+      "leopard_build": "ff16",
+      "recovery_head": "584cb3659ca80d73ca1c864dde1c1905",
+      "recovery_blake3": "ee1be545af297b13e5e9fb992e6bbfe5dfab2f877f3d32c407476882ed3402d1"
+    },
+    {
+      "k": 300,
+      "m": 300,
+      "shard_bytes": 64,
+      "leopard_build": "ff16",
+      "recovery_head": "16a26c0964505506dbadf4dae5d75942",
+      "recovery_blake3": "431f5a85531c3a18c2dde31398bf8442a67713a7ab42dd2aae8beb4e70970783"
+    },
+    {
+      "k": 300,
+      "m": 300,
+      "shard_bytes": 640,
+      "leopard_build": "ff16",
+      "recovery_head": "c667dc10559fc7b8b2da4515d27bc060",
+      "recovery_blake3": "67c901952087ff0aa358a87ac3c87e89064ddd055accf634f5cc87dd9561c053"
+    },
+    {
+      "k": 1000,
+      "m": 24,
+      "shard_bytes": 64,
+      "leopard_build": "ff16",
+      "recovery_head": "7e4912cf17bd4d806fe7f4b07bd9d006",
+      "recovery_blake3": "526a7330f54fcb9a8e867cd9292ec641910222c9d15f2908d25e9bd76ce44537"
+    },
+    {
+      "k": 1000,
+      "m": 24,
+      "shard_bytes": 640,
+      "leopard_build": "ff16",
+      "recovery_head": "1ce7dd479872aac2365314c1c534ab7c",
+      "recovery_blake3": "3cbaff310bf252f31fb98d319447bb49fbced8aff4541a11e80cea26d6337967"
+    },
+    {
+      "k": 20,
+      "m": 30,
+      "shard_bytes": 64,
+      "leopard_build": "ff16-m-gt-k",
+      "recovery_head": "ca02c4dabb25e05c5531d22facb4a165",
+      "recovery_blake3": "83bf4932dd074c79a48572454c18a309774ac4eeb0fced527e8d5bfaa862e5cf"
+    },
+    {
+      "k": 20,
+      "m": 30,
+      "shard_bytes": 640,
+      "leopard_build": "ff16-m-gt-k",
+      "recovery_head": "52cdb3935a0b447719a71a9b903b0f13",
+      "recovery_blake3": "108a53b97ea7c1baf57da6edd89c40c2d8d11c589b81f1734d41250928dc7ea9"
+    },
+    {
+      "k": 20,
+      "m": 30,
+      "shard_bytes": 4096,
+      "leopard_build": "ff16-m-gt-k",
+      "recovery_head": "1971e3c2d59671423d5f535df96b35bd",
+      "recovery_blake3": "a33d3108b072591c42f55a6d86ffabbddf1f761166be236ccb9821119fd0b529"
+    },
+    {
+      "k": 20,
+      "m": 30,
+      "shard_bytes": 65536,
+      "leopard_build": "ff16-m-gt-k",
+      "recovery_head": "4e1605778696b160353a3a3d485342c6",
+      "recovery_blake3": "72875c135266a23e336427b706837501712faae49f642ff643539f70ee1a683a"
+    },
+    {
+      "k": 20,
+      "m": 30,
+      "shard_bytes": 209728,
+      "leopard_build": "ff16-m-gt-k",
+      "recovery_head": "14fa7922505f94e3aa9e995e36d07733",
+      "recovery_blake3": "3ac1601bb15465c0aef53d130cef8ab95a780ff243b8f7bfa53106deb2f7a9aa"
+    },
+    {
+      "k": 10,
+      "m": 40,
+      "shard_bytes": 64,
+      "leopard_build": "ff16-m-gt-k",
+      "recovery_head": "93dc6c59d1101f790996503278c7e7b0",
+      "recovery_blake3": "25ab81f9da1acb75900c3bb34e1b9219bdcc7efe090f419d9bf78df11517e9da"
+    },
+    {
+      "k": 10,
+      "m": 40,
+      "shard_bytes": 640,
+      "leopard_build": "ff16-m-gt-k",
+      "recovery_head": "66f74290dd705edf90e54d750b2247a2",
+      "recovery_blake3": "bda43f46df40164071af13c71a0e2aedbd6066ab261de05144e252a9c570c9eb"
+    },
+    {
+      "k": 10,
+      "m": 40,
+      "shard_bytes": 4096,
+      "leopard_build": "ff16-m-gt-k",
+      "recovery_head": "77319584a8e60c99aae489192bef9d14",
+      "recovery_blake3": "223dd4af5c8c5cec69ed9c595257dd66795895009c236c50d0dffb483dc08c94"
+    },
+    {
+      "k": 4,
+      "m": 12,
+      "shard_bytes": 64,
+      "leopard_build": "ff16-m-gt-k",
+      "recovery_head": "5d2324df205ed03f72cafaef536309fe",
+      "recovery_blake3": "9d7d72e7b425dcab018c6a80fc9c80f617528fc7c932f923d5fc10470fb958af"
+    },
+    {
+      "k": 4,
+      "m": 12,
+      "shard_bytes": 640,
+      "leopard_build": "ff16-m-gt-k",
+      "recovery_head": "7c3ecd0ad2b211f897d136bf0cb52829",
+      "recovery_blake3": "23b98f931afc0f12be3e55144757deaf532022e4011ae5d9fa67f5fed2128192"
+    },
+    {
+      "k": 4,
+      "m": 12,
+      "shard_bytes": 4096,
+      "leopard_build": "ff16-m-gt-k",
+      "recovery_head": "3dccd6efc0d88279b0ba91fd2abf511a",
+      "recovery_blake3": "e8047810552f76360316c3a090f05ecd33221986a099299526cfa8cc7c92b071"
+    },
+    {
+      "k": 16,
+      "m": 48,
+      "shard_bytes": 64,
+      "leopard_build": "ff16-m-gt-k",
+      "recovery_head": "5d7500c4cf542019d41eaf9b377b4287",
+      "recovery_blake3": "7cdbeef48ef184416d053b9ee3fab50cd273ff52d8709335e28c0d066d9913d8"
+    },
+    {
+      "k": 16,
+      "m": 48,
+      "shard_bytes": 640,
+      "leopard_build": "ff16-m-gt-k",
+      "recovery_head": "82468458be365b2596119612f1436d92",
+      "recovery_blake3": "fd2b9e5d5e86545e429412250545ae2828a021652e411e0dd134d9e3e14a1aa1"
+    },
+    {
+      "k": 16,
+      "m": 48,
+      "shard_bytes": 4096,
+      "leopard_build": "ff16-m-gt-k",
+      "recovery_head": "d76e1a2a28daf20b860cc88009d86021",
+      "recovery_blake3": "a026fd7aa8678f555995f1e13adeafaba0b53f6f40b4520ddb6893072f4af57d"
+    },
+    {
+      "k": 20,
+      "m": 108,
+      "shard_bytes": 64,
+      "leopard_build": "ff16-m-gt-k",
+      "recovery_head": "59605b03712318f792d6712a596d975f",
+      "recovery_blake3": "1da1899e261e8e47879ad29737c9bd810547a8e4c51ce83a68712a656b257e8a"
+    },
+    {
+      "k": 20,
+      "m": 108,
+      "shard_bytes": 640,
+      "leopard_build": "ff16-m-gt-k",
+      "recovery_head": "7854bbca36b2af25d9759e3edd65525c",
+      "recovery_blake3": "4f46d7e72ba8cb85517e427734916ddd960b9cc7099b047960ad0bd575fc80e2"
+    },
+    {
+      "k": 20,
+      "m": 108,
+      "shard_bytes": 4096,
+      "leopard_build": "ff16-m-gt-k",
+      "recovery_head": "7ad57195bc739c7689d138612b93b970",
+      "recovery_blake3": "3290149a085e5c42cd2af9beb4c67c0a8e904d274fb46845c7f2f8ffce0c7a83"
+    },
+    {
+      "k": 2,
+      "m": 126,
+      "shard_bytes": 64,
+      "leopard_build": "ff16-m-gt-k",
+      "recovery_head": "5a735776ce629a0ad83f61feb30a3fd1",
+      "recovery_blake3": "7d45c8f724053814bc56d83e42235980e9e522dc920e605cc00c1d1895141aca"
+    },
+    {
+      "k": 2,
+      "m": 126,
+      "shard_bytes": 640,
+      "leopard_build": "ff16-m-gt-k",
+      "recovery_head": "4969299565795b196da5d7f12151488b",
+      "recovery_blake3": "01750363f13f1df6a425ac6f462ab582226e59f6af31e6c7cbdb3a543292d740"
+    }
+  ]
+}

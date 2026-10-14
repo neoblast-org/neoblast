@@ -1,15 +1,16 @@
 # File header, layout and root (v1)
 
-Implemented in `crates/nbl-format` and `crates/neoblast/src/tree.rs`. Locked by
-`test-vectors/phase1.json`.
+Implemented in `crates/nbl-format`, `crates/nbl-erasure` and
+`crates/neoblast/src/tree.rs`. Locked by `test-vectors/phase1.json` and, for the
+parity bytes, `test-vectors/erasure-leopard.json`.
 
 ## Header (32 bytes, big-endian)
 
 | Offset | Bytes | Field | Rule |
 | --- | --- | --- | --- |
 | 0 | 4 | magic | `4e 42 4c 01` (`NBL\x01`) |
-| 4 | 1 | suite | `0x01` = XChaCha20-Poly1305 + BLAKE3 + Reed-Solomon GF(2^16) as in `reed-solomon-simd` 3.1.0 |
-| 5 | 2 | k | 1 ≤ k ≤ 64 |
+| 4 | 1 | suite | `0x01` = XChaCha20-Poly1305 + BLAKE3 + Leopard-RS high-rate Reed-Solomon over GF(2^16) |
+| 5 | 2 | k | 2 ≤ k ≤ 64 |
 | 7 | 2 | n | k < n ≤ 128 |
 | 9 | 4 | segment_size | 64 ≤ s ≤ 64 MiB; plaintext bytes per full segment |
 | 13 | 4 | shard_size | MUST equal `shard_len(segment_size, k)` |
@@ -46,13 +47,25 @@ The read key is fresh and random per file, so deterministic nonces never repeat 
 ## Shards
 
 ```text
-shard_len(plain, k) = round_up_even(ceil((plain + 16) / k))
+shard_len(plain, k) = 64 · ceil(ceil((plain + 16) / k) / 64)
 ```
 
-Each segment's ciphertext is zero-padded to `k · shard_len` and cut into `k` data
-shards; `n − k` parity shards come from Reed-Solomon over GF(2^16)
-(`reed_solomon_simd::encode(k, n − k, data)`). The last segment uses its own
-`shard_len`. Openers truncate the joined data shards to `plain + 16` bytes.
+Shards are always a multiple of 64 bytes, Leopard-RS's alignment. Each segment's
+ciphertext is zero-padded to `k · shard_len` and cut into `k` data shards. The last
+segment uses its own `shard_len`. Openers truncate the joined data shards to
+`plain + 16` bytes.
+
+The `n − k` parity shards are the recovery shards of the Leopard-RS **high-rate**
+algorithm over GF(2^16) (decision 0006): `leo_encode` from
+[catid/leopard](https://github.com/catid/leopard) at commit
+`22ddc7804998d31c8f1a2617ee720e063b1fa6cd`, built
+without the 8-bit field (`LEO_HAS_FF8` off) and, when `n − k > k`, with its
+`recovery_count > original_count` argument check removed from `leo_encode` and
+`leo_decode`. The algorithm itself
+is unchanged. In Rust this is `reed_solomon_simd::rate::HighRateEncoder` 3.1.0;
+the crate's default rate selection MUST NOT be used, because for some k and n it
+picks the low-rate algorithm, which yields different parity.
+`test-vectors/erasure-leopard.json` holds Leopard's own output for 66 cases.
 
 ## Hash tree and root
 

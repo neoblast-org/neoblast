@@ -30,9 +30,13 @@ pub const HEADER_LEN: usize = 32;
 /// Magic bytes plus format version 1.
 pub const MAGIC_V1: [u8; 4] = *b"NBL\x01";
 
-/// Suite 1: XChaCha20-Poly1305, BLAKE3, Reed-Solomon over GF(2^16) (`reed-solomon-simd` 3.1).
+/// Suite 1: XChaCha20-Poly1305, BLAKE3, and Reed-Solomon over GF(2^16) using the
+/// Leopard-RS high-rate algorithm (decision 0006).
 pub const SUITE_V1: u8 = 0x01;
 
+/// Smallest k allowed in v1. With k = 1, Leopard-RS treats the code as plain
+/// replication and its parity bytes differ from `reed-solomon-simd` (decision 0006).
+pub const MIN_K: u16 = 2;
 /// Largest k allowed in v1.
 pub const MAX_K: u16 = 64;
 /// Largest n allowed in v1.
@@ -57,7 +61,7 @@ pub enum HeaderError {
     #[error("unsupported suite {0:#04x}")]
     Suite(u8),
     /// k or n outside the v1 limits.
-    #[error("invalid k/n: need 1 <= k < n <= {MAX_N} and k <= {MAX_K}, got k={k} n={n}")]
+    #[error("invalid k/n: need {MIN_K} <= k < n <= {MAX_N} and k <= {MAX_K}, got k={k} n={n}")]
     Params {
         /// Data shards per segment.
         k: u16,
@@ -114,7 +118,7 @@ impl Header {
 
     /// Checks every field and the relationships between them.
     pub fn validate(&self) -> Result<(), HeaderError> {
-        if self.k == 0 || self.k > MAX_K || self.n <= self.k || self.n > MAX_N {
+        if self.k < MIN_K || self.k > MAX_K || self.n <= self.k || self.n > MAX_N {
             return Err(HeaderError::Params {
                 k: self.k,
                 n: self.n,
@@ -296,6 +300,15 @@ mod tests {
     }
 
     #[test]
+    fn rejects_k_of_one() {
+        // Decision 0006: k = 1 is outside the Leopard-compatible range.
+        assert!(matches!(
+            Header::new(100, 1, 4, 1024),
+            Err(HeaderError::Params { .. })
+        ));
+    }
+
+    #[test]
     fn rejects_inconsistent_layout() {
         let mut bytes = Header::new(100_000, 4, 7, 1024).unwrap().encode();
         bytes[17..21].copy_from_slice(&1u32.to_be_bytes());
@@ -318,7 +331,7 @@ mod tests {
         #[test]
         fn valid_headers_round_trip(
             len in 0u64..(1 << 40),
-            k in 1u16..=MAX_K,
+            k in MIN_K..=MAX_K,
             extra in 1u16..=64,
             seg in MIN_SEGMENT_SIZE..=MAX_SEGMENT_SIZE,
         ) {

@@ -33,7 +33,8 @@ proptest = "1.12"
 # Medium blast radius: use behind our own types.
 data-encoding = "2.11"
 # Small blast radius (8 reverse deps): exact pin, wrapped by nbl-erasure's trait.
-# Its parity bytes are part of the on-disk format. See ROADMAP.md, open item 7.
+# Its parity bytes are part of the on-disk format. They match Leopard-RS, checked
+# by nbl-erasure's leopard_fixtures test (decision 0006).
 reed-solomon-simd = "=3.1.0"
 
 nbl-format = { path = "crates/nbl-format", version = "0.0.1" }

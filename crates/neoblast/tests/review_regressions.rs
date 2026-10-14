@@ -131,13 +131,29 @@ fn issue_09_open_uses_only_data_path() {
     );
 }
 
-/// Issue 10: shards are padded to an even length only (reed-solomon-simd 3.1's rule).
+/// Issue 10, revised by decision 0006: shards are padded to a multiple of 64 bytes,
+/// the Leopard-RS alignment, so our bytes stay reproducible by Leopard itself.
 #[test]
-fn issue_10_even_shard_lengths() {
+fn issue_10_shard_lengths_are_64_byte_multiples() {
+    // 333 bytes over 256-byte segments: a full segment plus a shorter last one.
     let sealed = seal(&[0u8; 333], SMALL).unwrap();
-    for segment in &sealed.shards {
+    let header = sealed.manifest.header();
+    assert!(sealed.shards.len() >= 2);
+    for (i, segment) in sealed.shards.iter().enumerate() {
+        let expected = header.segment_shard_len(i as u32).unwrap() as usize;
         for shard in segment {
-            assert_eq!(shard.len() % 2, 0);
+            assert_eq!(shard.len() % 64, 0);
+            assert_eq!(shard.len(), expected);
         }
     }
+}
+
+/// Decision 0006: the format crate and the erasure crate enforce the same rules.
+#[test]
+fn decision_0006_rules_agree_across_crates() {
+    assert_eq!(
+        nbl_format::layout::SHARD_ALIGN,
+        nbl_erasure::SHARD_ALIGN as u64
+    );
+    assert_eq!(usize::from(nbl_format::header::MIN_K), nbl_erasure::MIN_K);
 }
