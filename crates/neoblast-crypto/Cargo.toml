@@ -1,16 +1,19 @@
 [package]
-name = "nbl-crypto"
-description = "Neoblast key derivation and segmented authenticated encryption."
+name = "neoblast-crypto"
+description = "Neoblast key derivation and segmented XChaCha20-Poly1305 encryption."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
 authors.workspace = true
-publish = false
+readme = "README.md"
+keywords = ["storage", "encryption", "xchacha20", "blake3"]
+categories = ["cryptography", "filesystem"]
 
 [dependencies]
-nbl-format.workspace = true
+neoblast-format.workspace = true
 blake3.workspace = true
 chacha20poly1305.workspace = true
 getrandom.workspace = true

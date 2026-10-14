@@ -34,7 +34,7 @@ exist when m > 1 (it crashes once the check is removed), so there is no referenc
 `cases.txt` lists `k m shard_bytes`, one case per line. Shard bytes must be a
 multiple of 64 and k ≥ 2. The input data is one splitmix64 stream, seeded with
 `k*1000003 + m*1009 + shard_bytes`, matching `originals()` in
-`crates/nbl-erasure/tests/leopard_fixtures.rs`.
+`crates/neoblast-erasure/tests/leopard_fixtures.rs`.
 
 On x86 the build uses `-mssse3 -mavx2`, which needs an AVX2 CPU (any x86 machine
 from about 2015 on). Set `CXXFLAGS_SIMD=-mssse3` to build without AVX2 and confirm

@@ -94,7 +94,7 @@ for line in open(cases_path):
 
 doc = {
     "format": "neoblast erasure fixtures v1",
-    "note": "Recovery shards produced by Leopard-RS itself. nbl-erasure must reproduce "
+    "note": "Recovery shards produced by Leopard-RS itself. neoblast-erasure must reproduce "
             "every case byte for byte. Regenerate with tools/leopard-vectors/generate.sh.",
     "leopard": {
         "repo": repo,

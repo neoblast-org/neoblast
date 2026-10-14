@@ -7,7 +7,7 @@ stretches them.
 | Phase | What | Estimate | Gate |
 | --- | --- | --- | --- |
 | 0 · Spec and foundations | Threat model, reconciled spec, capability format, repo, CI | 2–3 weeks | Every format question resolved in `spec/` |
-| **1 · Crypto core** (current) | Committed header, segmented AEAD, erasure coding, offline `seal` / `open` / `heal` | 4–6 weeks | Golden vectors frozen; drop-any-(n−k) property tests pass; 24 h fuzzing per target with no crash |
+| **1 · Crypto core** (current) | Committed header, segmented AEAD, erasure coding, offline `seal` / `open` / `heal` | 4–6 weeks | Golden vectors frozen; drop-any-(n−k) property tests pass; 24 h fuzzing per target with no crash, recorded in `fuzz/campaigns/` |
 | 2 · Publish and fetch (MVP) | P2P swarm on its own protocol IDs, NAT traversal, placement across providers, channel records on the Mainline DHT, donors and `neoblast pin` | 6–8 weeks | 20 nodes on 3+ networks; a file still fetches with n − k of its holders offline |
 | 3 · Healing and fair storage | Storage swaps with claims, chunk challenges, lazy repair, leases, per-node denylist | 6–8 weeks | A week-long churn test keeps every file above k + margin; repair bandwidth measured |
 | 4 · Blind search and collections | Unicode `NFKC_Casefold`, keyed-BLAKE3 trapdoors, salted manifests, collection caps | 4–6 weeks | Multi-script normalisation suite passes; written leakage analysis |
@@ -22,7 +22,7 @@ with the decision rule fixed *before* the result is known.
 | --- | --- | --- | --- | --- |
 | 1 | Default k/n | Binomial model (`sim/durability.py`), then Monte Carlo with uptime measured on the testnet | Smallest overhead where a 1 GiB file is readable ≥ 99.9% of the time at the measured median uptime. Current default 20-of-50 (needs ~70% holder uptime; 10-of-16 needs ~95%) | Confirm at the Phase 2 gate |
 | 2 | Segment size | `criterion` benchmarks at 1, 4, 8, 16 MiB | Largest size keeping peak RAM ≤ 32 MiB per operation; also test announcing once per file instead of per shard | Phase 1 |
-| 3 | Adopt multiformats CIDs? | Desk check: encode links both ways; list features needing IPFS tooling | Adopt only if a planned feature needs it; otherwise keep the version byte. Leaning: no for v1 | Phase 1 |
+| 3 | ~~Adopt multiformats CIDs?~~ | Desk check: encode links both ways; list features needing IPFS tooling | Adopt only if a planned feature needs it; otherwise keep the version byte. Leaning: no for v1 | **Settled: no.** No planned feature needs IPFS tooling; see [decision 0007](decisions/0007-no-multiformats-cids.md) |
 | 4 | Channel tombstone format | Write from BEP 44 sequence rules | `seq = u64::MAX` + flag + optional successor link | Phase 2 |
 | 5 | Lease length | Monte Carlo of owners and pinners going offline (7 / 30 / 90 days) | Shortest lease where an owner offline 3 weeks with no pinners loses nothing, and abandoned content is gone within two lease periods | Phase 3 |
 | 6 | libp2p vs iroh | Two-evening spike each across home router, carrier-grade NAT and VPS | Higher direct-connection rate wins; on a tie, libp2p (built-in Kademlia) | Before Phase 2 |

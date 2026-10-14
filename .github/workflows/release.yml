@@ -1,0 +1,68 @@
+name: Release
+
+# Publishes all four crates to crates.io when a version tag is pushed.
+# Uses crates.io trusted publishing: no long-lived token is stored anywhere.
+# See RELEASING.md. The first release of each crate is done by hand.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Everything that runs third-party code (build scripts, tests) happens here,
+  # in a job that cannot request a publishing token.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
+        with:
+          toolchain: "1.97.0"
+      - name: Tag is on main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - name: Tag matches the workspace version
+        run: |
+          versions=$(cargo metadata --no-deps --format-version 1 | jq -r '[.packages[].version] | unique | .[]')
+          echo "workspace version(s): $versions, tag: $GITHUB_REF_NAME"
+          test "$(echo "$versions" | wc -l)" -eq 1
+          test "v$versions" = "$GITHUB_REF_NAME"
+      - run: cargo test --workspace --locked
+      - name: Golden vectors unchanged
+        run: git diff --exit-code spec/test-vectors
+      - run: cargo publish --workspace --locked --dry-run
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    # Needs a maintainer's approval, and crates.io only trusts tokens requested
+    # from this environment.
+    environment: release
+    permissions:
+      contents: read
+      id-token: write # exchanged for a short-lived crates.io token
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
+        with:
+          toolchain: "1.97.0"
+      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+        id: auth
+      # Already verified in the job above, so nothing is built or run here.
+      - run: cargo publish --workspace --locked --no-verify
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

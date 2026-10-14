@@ -2,6 +2,8 @@
 /fuzz/target
 /fuzz/corpus
 /fuzz/artifacts
+/fuzz/logs
+/fuzz/runs
 *.shard
 /out
 .DS_Store

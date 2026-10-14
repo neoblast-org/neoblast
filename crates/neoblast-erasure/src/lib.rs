@@ -188,6 +188,9 @@ pub fn regenerate(
 }
 
 /// Returns the `k` data shards, restoring any that are missing.
+///
+/// Any present shard whose length is not `shard_len` is an error, even when k
+/// other shards would be enough: it means the caller has a bug or a bad header.
 pub fn reconstruct_data(
     code: &impl ErasureCode,
     k: usize,

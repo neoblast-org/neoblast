@@ -152,8 +152,11 @@ fn issue_10_shard_lengths_are_64_byte_multiples() {
 #[test]
 fn decision_0006_rules_agree_across_crates() {
     assert_eq!(
-        nbl_format::layout::SHARD_ALIGN,
-        nbl_erasure::SHARD_ALIGN as u64
+        neoblast_format::layout::SHARD_ALIGN,
+        neoblast_erasure::SHARD_ALIGN as u64
     );
-    assert_eq!(usize::from(nbl_format::header::MIN_K), nbl_erasure::MIN_K);
+    assert_eq!(
+        usize::from(neoblast_format::header::MIN_K),
+        neoblast_erasure::MIN_K
+    );
 }

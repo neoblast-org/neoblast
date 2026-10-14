@@ -85,9 +85,9 @@ pub fn content_root(segment_roots: &[Hash]) -> Option<Hash> {
 }
 
 /// The file root `H` over the header bytes and the content root.
-pub fn file_root(header: &[u8; nbl_format::HEADER_LEN], content_root: &Hash) -> Hash {
-    let mut material = [0u8; nbl_format::HEADER_LEN + 32];
-    let (a, b) = material.split_at_mut(nbl_format::HEADER_LEN);
+pub fn file_root(header: &[u8; neoblast_format::HEADER_LEN], content_root: &Hash) -> Hash {
+    let mut material = [0u8; neoblast_format::HEADER_LEN + 32];
+    let (a, b) = material.split_at_mut(neoblast_format::HEADER_LEN);
     a.copy_from_slice(header);
     b.copy_from_slice(content_root);
     blake3::derive_key(CTX_ROOT, &material)

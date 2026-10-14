@@ -15,4 +15,4 @@ pub mod tree;
 
 pub use file::{Error, Params, RebuiltShard, Sealed, ShardSource, heal, open, seal, seal_with_key};
 pub use manifest::Manifest;
-pub use nbl_format::{FileReadCap, FileVerifyCap, Header};
+pub use neoblast_format::{FileReadCap, FileVerifyCap, Header};

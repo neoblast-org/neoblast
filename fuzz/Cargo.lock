@@ -331,19 +331,32 @@ dependencies = [
 ]
 
 [[package]]
-name = "nbl-crypto"
+name = "neoblast"
 version = "0.0.1"
 dependencies = [
  "blake3",
- "chacha20poly1305",
- "getrandom",
- "nbl-format",
+ "clap",
+ "neoblast-crypto",
+ "neoblast-erasure",
+ "neoblast-format",
  "thiserror",
  "zeroize",
 ]
 
 [[package]]
-name = "nbl-erasure"
+name = "neoblast-crypto"
+version = "0.0.1"
+dependencies = [
+ "blake3",
+ "chacha20poly1305",
+ "getrandom",
+ "neoblast-format",
+ "thiserror",
+ "zeroize",
+]
+
+[[package]]
+name = "neoblast-erasure"
 version = "0.0.1"
 dependencies = [
  "reed-solomon-simd",
@@ -351,23 +364,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "nbl-format"
+name = "neoblast-format"
 version = "0.0.1"
 dependencies = [
  "data-encoding",
- "thiserror",
- "zeroize",
-]
-
-[[package]]
-name = "neoblast"
-version = "0.0.1"
-dependencies = [
- "blake3",
- "clap",
- "nbl-crypto",
- "nbl-erasure",
- "nbl-format",
  "thiserror",
  "zeroize",
 ]
@@ -377,8 +377,9 @@ name = "neoblast-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
- "nbl-format",
  "neoblast",
+ "neoblast-erasure",
+ "neoblast-format",
 ]
 
 [[package]]

@@ -445,20 +445,37 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
-name = "nbl-crypto"
+name = "neoblast"
+version = "0.0.1"
+dependencies = [
+ "blake3",
+ "clap",
+ "hex",
+ "neoblast-crypto",
+ "neoblast-erasure",
+ "neoblast-format",
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "zeroize",
+]
+
+[[package]]
+name = "neoblast-crypto"
 version = "0.0.1"
 dependencies = [
  "blake3",
  "chacha20poly1305",
  "getrandom",
- "nbl-format",
+ "neoblast-format",
  "proptest",
  "thiserror",
  "zeroize",
 ]
 
 [[package]]
-name = "nbl-erasure"
+name = "neoblast-erasure"
 version = "0.0.1"
 dependencies = [
  "blake3",
@@ -471,28 +488,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "nbl-format"
+name = "neoblast-format"
 version = "0.0.1"
 dependencies = [
  "data-encoding",
  "proptest",
- "thiserror",
- "zeroize",
-]
-
-[[package]]
-name = "neoblast"
-version = "0.0.1"
-dependencies = [
- "blake3",
- "clap",
- "hex",
- "nbl-crypto",
- "nbl-erasure",
- "nbl-format",
- "proptest",
- "serde",
- "serde_json",
  "thiserror",
  "zeroize",
 ]

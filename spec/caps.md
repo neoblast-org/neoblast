@@ -6,7 +6,8 @@ weaker ones, never the stronger (decision 0004).
 ## Encoding
 
 - Payloads are RFC 4648 base32, **lowercase, unpadded**. Decoders MUST accept either case.
-- Every payload before `#` starts with a version byte, `0x01` in v1.
+- Every payload before `#` starts with a version byte, `0x01` in v1. Links are not
+  multiformats CIDs (decision 0007).
 - Secrets MUST appear only after `#`. Anything after `&` in the fragment is reserved for hints (for example `&p=<peer>`) and MUST be ignored by v1 decoders.
 
 ## File caps (implemented)

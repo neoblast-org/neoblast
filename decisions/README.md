@@ -12,6 +12,8 @@ decision gets a new record that supersedes the old one.
 | [0004](0004-capability-model.md) | Capability model: verify ⊂ read ⊂ write | Proposed |
 | [0005](0005-storage-reciprocity.md) | Why strangers store your shards: swaps, pins, donors, leases | Proposed |
 | [0006](0006-erasure-code.md) | Erasure code: Leopard-RS high-rate, checked against Leopard | Accepted |
+| [0007](0007-no-multiformats-cids.md) | Links keep their own version byte, not multiformats CIDs | Accepted |
+| [0008](0008-crate-names-and-publishing.md) | Crate names (`neoblast-*`) and publishing | Accepted |
 
 ## How a question becomes a decision
 
