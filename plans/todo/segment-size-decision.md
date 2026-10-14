@@ -1,6 +1,7 @@
 # Segment-size decision (ROADMAP open item 2)
 
-Status: todo. Waiting on the reference run and one clarification.
+Status: todo, for v0.0.2. Waiting on the reference run after the heal memory fix
+(branch `perf/heal-memory`), which lands after v0.0.1.
 
 ## Success criteria
 
@@ -9,11 +10,15 @@ Status: todo. Waiting on the reference run and one clarification.
 2. A decision record applies the rule written in ROADMAP item 2 ("largest size
    keeping peak RAM ≤ 32 MiB per operation") to those numbers, and changes
    `Params::default()` only if the rule says so.
-3. The record states which memory figure the rule uses. The benchmark reports
-   both total process peak and working memory (total minus the fixed ~11 MiB
-   for the program and codec tables), and the cloud numbers put 4 MiB on
-   different sides of the line depending on which is meant. The maintainer
-   picks the reading; we do not pick it after seeing the reference numbers.
+3. The record states which memory figure the rule uses. **Settled on
+   2026-10-14, before the final run (the two earlier runs, 15:06Z and 15:19Z,
+   had been seen): working memory** (the peak minus the same
+   operation on a 1 KB file), which must be ≤ 32 MiB for seal, open, heal and
+   open from parity. The fixed ~11 MiB (program and codec tables) is excluded
+   because a long-running process pays it once for all its operations.
+4. Runs at both 256 MiB and 1 GiB show working memory does not grow with the
+   file size. (The first reference runs showed heal growing on macOS, from
+   10.9 to 24.7 MiB at 1 MiB segments; that is fixed before the decision.)
 
 ## Precedent to match
 
