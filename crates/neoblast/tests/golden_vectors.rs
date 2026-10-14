@@ -1,8 +1,8 @@
 //! Golden test vectors: lock the v1 byte format.
 //!
-//! Any change to these bytes is a format change. It needs a spec version bump and
-//! a decision record (before the Phase 1 freeze, the record alone, as in decision
-//! 0006), then regenerate with:
+//! v1 is frozen: `phase1.json` never changes, and CI pins its hash. A new format
+//! gets a new magic, suite or link version byte and its own vector file (see
+//! `spec/test-vectors/README.md`). Rewriting this file must give the same bytes:
 //!
 //! ```sh
 //! NBL_UPDATE_VECTORS=1 cargo test -p neoblast --test golden_vectors
