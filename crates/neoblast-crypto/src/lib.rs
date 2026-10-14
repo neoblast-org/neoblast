@@ -12,7 +12,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 use chacha20poly1305::XChaCha20Poly1305;
-use chacha20poly1305::aead::{Aead, KeyInit, Payload};
+use chacha20poly1305::aead::{AeadInOut, KeyInit};
 use neoblast_format::Header;
 use thiserror::Error;
 use zeroize::Zeroizing;
@@ -75,7 +75,76 @@ pub fn segment_nonce(index: u32, last: bool) -> [u8; 24] {
     nonce
 }
 
+/// Encrypts and decrypts the segments of one file, one at a time.
+///
+/// Used by the streaming paths, which hold a single segment in memory. Each call
+/// checks the buffer length against the header, so a segment can't be sealed or
+/// opened at the wrong size or index.
+pub struct SegmentCipher {
+    cipher: XChaCha20Poly1305,
+    aad: [u8; neoblast_format::HEADER_LEN],
+    header: Header,
+}
+
+impl core::fmt::Debug for SegmentCipher {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        // Never print key material.
+        f.debug_struct("SegmentCipher").finish_non_exhaustive()
+    }
+}
+
+impl SegmentCipher {
+    /// Prepares the data key for the file described by `header`.
+    pub fn new(read_key: &[u8; KEY_LEN], header: &Header) -> Self {
+        let key = data_key(read_key);
+        Self {
+            cipher: XChaCha20Poly1305::new(&(*key).into()),
+            aad: header.encode(),
+            header: *header,
+        }
+    }
+
+    /// Encrypts segment `index` in place. `buf` must hold exactly that segment's
+    /// framed plaintext; on success it holds the ciphertext (16 bytes longer).
+    pub fn seal_in_place(&self, index: u32, buf: &mut Vec<u8>) -> Result<(), CryptoError> {
+        let want = self
+            .header
+            .segment_plain_len(index)
+            .ok_or(CryptoError::Segment(index))?;
+        if buf.len() as u64 != want {
+            return Err(CryptoError::LengthMismatch);
+        }
+        let nonce = segment_nonce(index, self.is_last(index));
+        self.cipher
+            .encrypt_in_place(&nonce.into(), &self.aad, buf)
+            .map_err(|_| CryptoError::Auth(index))
+    }
+
+    /// Decrypts and authenticates segment `index` in place. `buf` must hold
+    /// exactly that segment's ciphertext; on success it holds the framed plaintext.
+    pub fn open_in_place(&self, index: u32, buf: &mut Vec<u8>) -> Result<(), CryptoError> {
+        let want = self
+            .header
+            .segment_cipher_len(index)
+            .ok_or(CryptoError::Segment(index))?;
+        if buf.len() as u64 != want {
+            return Err(CryptoError::Segment(index));
+        }
+        let nonce = segment_nonce(index, self.is_last(index));
+        self.cipher
+            .decrypt_in_place(&nonce.into(), &self.aad, buf)
+            .map_err(|_| CryptoError::Auth(index))
+    }
+
+    fn is_last(&self, index: u32) -> bool {
+        index.checked_add(1) == Some(self.header.segment_count())
+    }
+}
+
 /// Encrypts `payload` into one ciphertext per segment, as laid out by `header`.
+///
+/// Holds the whole file in memory. The `neoblast` crate's streaming functions
+/// produce the same bytes one segment at a time.
 pub fn seal_segments(
     read_key: &[u8; KEY_LEN],
     header: &Header,
@@ -98,26 +167,18 @@ pub fn seal_segments(
     framed.extend_from_slice(payload);
     framed.resize(framed_len, 0);
 
-    let key = data_key(read_key);
-    let cipher = XChaCha20Poly1305::new(&(*key).into());
-    let aad = header.encode();
+    let cipher = SegmentCipher::new(read_key, header);
     let seg = usize::try_from(header.segment_size()).map_err(|_| CryptoError::LengthMismatch)?;
-    let count = header.segment_count();
     framed
         .chunks(seg)
         .zip(0u32..)
         .map(|(chunk, i)| {
-            let last = i.checked_add(1) == Some(count);
-            let nonce = segment_nonce(i, last);
-            cipher
-                .encrypt(
-                    &nonce.into(),
-                    Payload {
-                        msg: chunk,
-                        aad: &aad,
-                    },
-                )
-                .map_err(|_| CryptoError::Auth(i))
+            // Room for the tag up front, so the plaintext is never reallocated,
+            // and wiped if sealing fails.
+            let mut buf = Zeroizing::new(Vec::with_capacity(chunk.len() + 16));
+            buf.extend_from_slice(chunk);
+            cipher.seal_in_place(i, &mut buf)?;
+            Ok(core::mem::take(&mut *buf))
         })
         .collect()
 }
@@ -134,31 +195,14 @@ pub fn open_segments(
             segments.len().try_into().unwrap_or(u32::MAX),
         ));
     }
-    let key = data_key(read_key);
-    let cipher = XChaCha20Poly1305::new(&(*key).into());
-    let aad = header.encode();
+    let cipher = SegmentCipher::new(read_key, header);
     let mut framed = Zeroizing::new(Vec::with_capacity(
         usize::try_from(header.padded_length()).map_err(|_| CryptoError::Framing)?,
     ));
     for (segment, i) in segments.iter().zip(0u32..) {
-        let want = header
-            .segment_cipher_len(i)
-            .ok_or(CryptoError::Segment(i))?;
-        if segment.len() as u64 != want {
-            return Err(CryptoError::Segment(i));
-        }
-        let last = i.checked_add(1) == Some(count);
-        let nonce = segment_nonce(i, last);
-        let plain = cipher
-            .decrypt(
-                &nonce.into(),
-                Payload {
-                    msg: segment,
-                    aad: &aad,
-                },
-            )
-            .map_err(|_| CryptoError::Auth(i))?;
-        framed.extend_from_slice(&plain);
+        let mut buf = Zeroizing::new(segment.clone());
+        cipher.open_in_place(i, &mut buf)?;
+        framed.extend_from_slice(&buf);
     }
     unframe(&framed)
 }

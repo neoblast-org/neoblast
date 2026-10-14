@@ -21,7 +21,7 @@ impl MemStore {
 }
 
 impl ShardSource for MemStore {
-    fn get(&self, segment: u32, index: u16) -> Option<Vec<u8>> {
+    fn get(&self, segment: u32, index: u16, _len: usize) -> Option<Vec<u8>> {
         self.0.get(&(segment, index)).cloned()
     }
 }
