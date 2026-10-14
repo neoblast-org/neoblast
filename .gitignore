@@ -1,0 +1,7 @@
+/target
+/fuzz/target
+/fuzz/corpus
+/fuzz/artifacts
+*.shard
+/out
+.DS_Store

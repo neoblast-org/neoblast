@@ -1,0 +1,34 @@
+[package]
+name = "neoblast-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+nbl-format = { path = "../crates/nbl-format" }
+neoblast = { path = "../crates/neoblast" }
+
+[[bin]]
+name = "header_decode"
+path = "fuzz_targets/header_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "link_parse"
+path = "fuzz_targets/link_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "manifest_decode"
+path = "fuzz_targets/manifest_decode.rs"
+test = false
+doc = false
+bench = false

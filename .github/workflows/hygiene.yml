@@ -1,0 +1,29 @@
+name: Commit hygiene
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: No tool-session links in commit messages
+        run: |
+          if git log --format='%h %B' | grep -Ein 'claude\.ai/code/session|^claude-session:'; then
+            echo "::error::A commit message links to a private tool session. Rewrite it before merging."
+            exit 1
+          fi
+      - name: Maintainer commits are recorded in UTC
+        run: |
+          bad=$(git log --format='%h %ae %ad %cd' --date=format:%z \
+            | awk '$2=="dev@neoblast.dev" && ($3!="+0000" || $4!="+0000")')
+          if [ -n "$bad" ]; then
+            echo "::error::Maintainer commits must use UTC timestamps:"; echo "$bad"; exit 1
+          fi

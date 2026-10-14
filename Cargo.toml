@@ -1,0 +1,55 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/nbl-format",
+    "crates/nbl-crypto",
+    "crates/nbl-erasure",
+    "crates/neoblast",
+]
+exclude = ["fuzz"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/neoblast-org/neoblast"
+homepage = "https://neoblast.dev"
+authors = ["neoblast maintainers <dev@neoblast.dev>"]
+
+[workspace.dependencies]
+# Large blast radius: use freely, pinned by Cargo.lock.
+blake3 = "1.8"
+chacha20poly1305 = "0.11"
+zeroize = { version = "1.9", features = ["derive"] }
+subtle = "2.6"
+getrandom = "0.4"
+thiserror = "2.0"
+clap = { version = "4.6", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+hex = "0.4"
+proptest = "1.12"
+# Medium blast radius: use behind our own types.
+data-encoding = "2.11"
+# Small blast radius (8 reverse deps): exact pin, wrapped by nbl-erasure's trait.
+# Its parity bytes are part of the on-disk format. See ROADMAP.md, open item 7.
+reed-solomon-simd = "=3.1.0"
+
+nbl-format = { path = "crates/nbl-format", version = "0.0.1" }
+nbl-crypto = { path = "crates/nbl-crypto", version = "0.0.1" }
+nbl-erasure = { path = "crates/nbl-erasure", version = "0.0.1" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

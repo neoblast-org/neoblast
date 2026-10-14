@@ -1,0 +1,143 @@
+//! One test per issue found in the review of the first Phase 1 prototype.
+//! Each test's doc comment describes the issue. These must never be deleted.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+mod common;
+
+use common::MemStore;
+use neoblast::{Error, Header, Params, heal, open, seal, seal_with_key};
+
+const SMALL: Params = Params {
+    k: 4,
+    n: 7,
+    segment_size: 256,
+};
+
+/// Issue 1: k and n come only from the committed header. Forging them in the
+/// manifest changes the root, so the forged manifest is rejected outright.
+#[test]
+fn issue_01_forged_parameters_are_rejected() {
+    let sealed = seal(b"payload", SMALL).unwrap();
+    let mut forged = sealed.manifest.encode();
+    forged[5..7].copy_from_slice(&9u16.to_be_bytes()); // k = 9 > n = 7
+    let store = MemStore::from_sealed(&sealed);
+    assert!(open(&sealed.cap, &forged, &store).is_err());
+    assert!(heal(&sealed.cap.verify_cap(), &forged, &store).is_err());
+}
+
+/// Issue 2: a corrupt shard is skipped, not fatal. One bad peer cannot block healing.
+#[test]
+fn issue_02_bad_shard_does_not_block_heal() {
+    let sealed = seal(&[1u8; 900], SMALL).unwrap();
+    let manifest = sealed.manifest.encode();
+    let original = MemStore::from_sealed(&sealed);
+    let mut store = original.clone();
+    store.0.remove(&(0, 0));
+    store.0.get_mut(&(0, 1)).unwrap()[0] ^= 0xFF; // tampered
+    let rebuilt = heal(&sealed.cap.verify_cap(), &manifest, &store).unwrap();
+    let fixed: Vec<_> = rebuilt
+        .iter()
+        .filter(|r| r.segment == 0)
+        .map(|r| r.index)
+        .collect();
+    assert_eq!(fixed, vec![0, 1]);
+    for r in &rebuilt {
+        assert_eq!(Some(&r.bytes), original.0.get(&(r.segment, r.index)));
+    }
+    assert_eq!(
+        open(&sealed.cap, &manifest, &store).unwrap(),
+        vec![1u8; 900]
+    );
+}
+
+/// Issue 3: out-of-range values never reach the decoder; truncated or padded
+/// manifests are rejected without panicking.
+#[test]
+fn issue_03_truncated_or_extended_manifest_rejected() {
+    let sealed = seal(b"payload", SMALL).unwrap();
+    let bytes = sealed.manifest.encode();
+    let store = MemStore::from_sealed(&sealed);
+    for cut in [0, 1, 31, 32, bytes.len() - 1] {
+        assert!(open(&sealed.cap, &bytes[..cut], &store).is_err());
+    }
+    let mut longer = bytes.clone();
+    longer.push(0);
+    assert!(open(&sealed.cap, &longer, &store).is_err());
+}
+
+/// Issue 4: the exact payload length is not visible to storage nodes. Payloads of
+/// different lengths in the same Padmé bucket produce identical headers.
+#[test]
+fn issue_04_length_hidden_by_padding() {
+    let a = Header::new(1000, 4, 7, 4096).unwrap();
+    let b = Header::new(1010, 4, 7, 4096).unwrap();
+    assert_eq!(a.encode(), b.encode());
+}
+
+/// Issue 5: large files are split into independently sealed segments.
+#[test]
+fn issue_05_multi_segment_files() {
+    let payload: Vec<u8> = (0..5000u32).map(|i| (i % 251) as u8).collect();
+    let sealed = seal(&payload, SMALL).unwrap();
+    assert!(sealed.manifest.header().segment_count() > 10);
+    let store = MemStore::from_sealed(&sealed);
+    assert_eq!(
+        open(&sealed.cap, &sealed.manifest.encode(), &store).unwrap(),
+        payload
+    );
+}
+
+/// Issue 6: segments are bound to their file and position (header as AAD, index
+/// and last flag in the nonce). Moving shards between files fails.
+#[test]
+fn issue_06_segments_cannot_move_between_files() {
+    let key = [5u8; 32];
+    let a = seal_with_key(&[0xAA; 600], SMALL, &key).unwrap();
+    let b = seal_with_key(&[0xBB; 600], SMALL, &key).unwrap();
+    // b's shards under a's manifest: every hash check fails, so nothing opens.
+    let store = MemStore::from_sealed(&b);
+    let err = open(&a.cap, &a.manifest.encode(), &store).unwrap_err();
+    assert!(matches!(err, Error::Unrecoverable { .. }));
+}
+
+/// Issue 7: sealing is deterministic given the read key, so golden vectors exist.
+#[test]
+fn issue_07_deterministic_given_key() {
+    let a = seal_with_key(b"same", SMALL, &[1; 32]).unwrap();
+    let b = seal_with_key(b"same", SMALL, &[1; 32]).unwrap();
+    assert_eq!(a.manifest.encode(), b.manifest.encode());
+    assert_eq!(a.shards, b.shards);
+}
+
+/// Issue 8: odd tree nodes are promoted, never paired with themselves.
+/// Covered in `tree::tests::odd_node_is_not_self_paired`; re-checked here via n = 7.
+#[test]
+fn issue_08_odd_shard_count_has_unique_root() {
+    let a = seal_with_key(b"x", SMALL, &[1; 32]).unwrap();
+    let b = seal_with_key(b"x", Params { n: 8, ..SMALL }, &[1; 32]).unwrap();
+    assert_ne!(a.cap.root, b.cap.root);
+}
+
+/// Issue 9: opening needs only k shards per segment and never re-encodes parity.
+#[test]
+fn issue_09_open_uses_only_data_path() {
+    let sealed = seal(&[3u8; 700], SMALL).unwrap();
+    let mut store = MemStore::from_sealed(&sealed);
+    // Keep only the k data shards; all parity gone.
+    store.0.retain(|&(_, i), _| i < SMALL.k);
+    assert_eq!(
+        open(&sealed.cap, &sealed.manifest.encode(), &store).unwrap(),
+        vec![3u8; 700]
+    );
+}
+
+/// Issue 10: shards are padded to an even length only (reed-solomon-simd 3.1's rule).
+#[test]
+fn issue_10_even_shard_lengths() {
+    let sealed = seal(&[0u8; 333], SMALL).unwrap();
+    for segment in &sealed.shards {
+        for shard in segment {
+            assert_eq!(shard.len() % 2, 0);
+        }
+    }
+}
