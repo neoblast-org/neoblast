@@ -166,10 +166,7 @@ fn decision_0006_rules_agree_across_crates() {
 
 mod dir {
     use std::fs;
-    use std::path::{Path, PathBuf};
-
-    use neoblast::store::DirStore;
-    use neoblast::{FileReadCap, Params, seal_stream};
+    use std::path::PathBuf;
 
     /// A fresh scratch directory under the target directory.
     pub fn scratch(name: &str) -> PathBuf {
@@ -180,7 +177,13 @@ mod dir {
     }
 
     /// Seals 3 KB 2-of-4 into `<dir>/store`; returns the cap, store and manifest.
-    pub fn sealed(dir: &Path) -> (FileReadCap, DirStore, Vec<u8>) {
+    /// Only the unix tests (symlinks, FIFOs) use it.
+    #[cfg(unix)]
+    pub fn sealed(
+        dir: &std::path::Path,
+    ) -> (neoblast::FileReadCap, neoblast::store::DirStore, Vec<u8>) {
+        use neoblast::store::DirStore;
+        use neoblast::{Params, seal_stream};
         let mut store = DirStore::new(dir.join("store"));
         let data = vec![7u8; 3000];
         let params = Params {
