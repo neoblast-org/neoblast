@@ -21,6 +21,7 @@ Read before changing anything:
   All four crates are published together; see `RELEASING.md` (decision 0008).
 - `spec/test-vectors/`: golden vectors that lock the byte format.
 - `fuzz/`: `cargo-fuzz` targets, `campaign.sh` and run records in `fuzz/campaigns/`. `sim/`: durability model.
+- `bench/`: `segment-size.sh` and its records in `bench/results/`.
 
 ## Commands
 

@@ -162,11 +162,31 @@ pub fn encode_segment(
     }
     let mut padded = ciphertext.to_vec();
     padded.resize(capacity, 0);
-    let data: Vec<&[u8]> = padded.chunks_exact(shard_len).collect();
-    let parity = code.encode(&data, n.saturating_sub(k))?;
-    let mut shards: Vec<Vec<u8>> = data.into_iter().map(<[u8]>::to_vec).collect();
+    let parity = encode_parity(code, &padded, k, n, shard_len)?;
+    let mut shards: Vec<Vec<u8>> = padded.chunks_exact(shard_len).map(<[u8]>::to_vec).collect();
     shards.extend(parity);
     Ok(shards)
+}
+
+/// Computes the `n - k` parity shards of one segment whose `k` data shards lie
+/// back to back in `data` (exactly `k * shard_len` bytes, already zero-padded).
+///
+/// Unlike [`encode_segment`], this makes no owned copy of the data shards:
+/// callers hash and store `data.chunks_exact(shard_len)` directly. (The codec
+/// still reads them into its own work buffer while encoding.)
+pub fn encode_parity(
+    code: &impl ErasureCode,
+    data: &[u8],
+    k: usize,
+    n: usize,
+    shard_len: usize,
+) -> Result<Vec<Vec<u8>>, ErasureError> {
+    check(k, n, shard_len)?;
+    if Some(data.len()) != k.checked_mul(shard_len) {
+        return Err(ErasureError::Params);
+    }
+    let shards: Vec<&[u8]> = data.chunks_exact(shard_len).collect();
+    code.encode(&shards, n.saturating_sub(k))
 }
 
 /// Rebuilds all `n` shards from any `k` verified ones.

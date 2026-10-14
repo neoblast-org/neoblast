@@ -1,0 +1,96 @@
+{
+  "benchmark": "segment-size",
+  "started_utc": "2026-10-14T15:19:23Z",
+  "commit": "127933adaf88da4b7b015516610e1a56927a51ba",
+  "uncommitted_changes": false,
+  "file_mib": 256,
+  "k": 20,
+  "n": 50,
+  "machine": {
+    "os": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M5"
+  },
+  "segment_mib": {
+    "1": {
+      "fixed": {
+        "seal": {
+          "seconds": 0.3,
+          "peak_mib": 10.8
+        },
+        "open": {
+          "seconds": 0.0,
+          "peak_mib": 2.3
+        },
+        "heal": {
+          "seconds": 0.0,
+          "peak_mib": 11.0
+        },
+        "open_from_parity": {
+          "seconds": 0.01,
+          "peak_mib": 11.0
+        }
+      },
+      "seal": {
+        "seconds": 1.94,
+        "peak_mib": 17.5,
+        "working_mib": 6.7
+      },
+      "open": {
+        "seconds": 0.97,
+        "peak_mib": 8.0,
+        "working_mib": 5.7
+      },
+      "heal": {
+        "seconds": 1.27,
+        "peak_mib": 21.9,
+        "working_mib": 10.9
+      },
+      "open_from_parity": {
+        "seconds": 1.02,
+        "peak_mib": 22.0,
+        "working_mib": 11.0
+      }
+    },
+    "4": {
+      "fixed": {
+        "seal": {
+          "seconds": 0.01,
+          "peak_mib": 10.8
+        },
+        "open": {
+          "seconds": 0.0,
+          "peak_mib": 2.3
+        },
+        "heal": {
+          "seconds": 0.0,
+          "peak_mib": 11.0
+        },
+        "open_from_parity": {
+          "seconds": 0.0,
+          "peak_mib": 11.0
+        }
+      },
+      "seal": {
+        "seconds": 1.06,
+        "peak_mib": 28.8,
+        "working_mib": 18.1
+      },
+      "open": {
+        "seconds": 0.73,
+        "peak_mib": 14.6,
+        "working_mib": 12.3
+      },
+      "heal": {
+        "seconds": 0.86,
+        "peak_mib": 53.7,
+        "working_mib": 42.7
+      },
+      "open_from_parity": {
+        "seconds": 0.95,
+        "peak_mib": 39.6,
+        "working_mib": 28.7
+      }
+    }
+  }
+}

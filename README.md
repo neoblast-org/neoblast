@@ -30,7 +30,9 @@ neoblast heal  'nbl://fv/...' --from ./store   # rebuild them with the verify li
 neoblast open  'nbl://f/...#...' --from ./store --out photo-copy.jpg
 ```
 
-Defaults are 20-of-50 shards over 4 MiB segments. The network (Phase 2),
+Defaults are 20-of-50 shards over 4 MiB segments. `seal`, `open` and `heal`
+work one segment at a time, so their memory use (about 15–33 MiB at the defaults,
+depending on the operation) does not grow with the file size. The network (Phase 2),
 storage swaps and leases (Phase 3) and blind search (Phase 4) are not built yet.
 See [ROADMAP.md](ROADMAP.md) for phases, gates and open questions.
 
