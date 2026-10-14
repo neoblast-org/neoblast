@@ -54,12 +54,12 @@ not hide who published or read it ([`spec/threat-model.md`](spec/threat-model.md
 - `neoblast open` takes the read link as an argument, so it can show in `ps`
   and shell history, and decoded copies of the key are not wiped from memory
   (review S-003).
-- Memory has only been measured on macOS (Apple M5, `bench/results/`). There,
-  `heal`'s working memory grows with the file size: with 1 MiB segments it went
-  from 10.9 to 24.7 MiB between a 256 MiB and a 1 GiB file. At the default
-  4 MiB segments, `heal`'s peak was 53.7 MiB (256 MiB file) and 47.4 MiB
-  (1 GiB file). A fix that reuses the codec's
-  buffers is being measured.
+- Memory has only been measured on macOS (Apple M5, `bench/results/` and
+  `bench/heal-check.sh`). There, `heal`'s working memory grows with the file
+  size: between a 256 MiB and a 1 GiB file it went from about 11 to 20 MiB with
+  1 MiB segments, and from about 36 to 43 MiB with the default 4 MiB segments,
+  above the 32 MiB target. A fix that reuses the codec's buffers lowered the
+  peak by up to 5 MiB but did not stop the growth; it is for a later release.
 - The default segment size is not final (ROADMAP open item 2) and may change.
   Files sealed with any segment size stay readable, because the size is
   recorded in the header.
