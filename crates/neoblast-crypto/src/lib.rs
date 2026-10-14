@@ -13,7 +13,7 @@
 
 use chacha20poly1305::XChaCha20Poly1305;
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
-use nbl_format::Header;
+use neoblast_format::Header;
 use thiserror::Error;
 use zeroize::Zeroizing;
 
@@ -164,7 +164,7 @@ pub fn open_segments(
 }
 
 fn unframe(framed: &[u8]) -> Result<Vec<u8>, CryptoError> {
-    const _: () = assert!(nbl_format::header::LENGTH_PREFIX == 8);
+    const _: () = assert!(neoblast_format::header::LENGTH_PREFIX == 8);
     let (prefix, rest) = framed
         .split_first_chunk::<8>()
         .ok_or(CryptoError::Framing)?;

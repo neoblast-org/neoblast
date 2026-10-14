@@ -1,6 +1,6 @@
 # File header, layout and root (v1)
 
-Implemented in `crates/nbl-format`, `crates/nbl-erasure` and
+Implemented in `crates/neoblast-format`, `crates/neoblast-erasure` and
 `crates/neoblast/src/tree.rs`. Locked by `test-vectors/phase1.json` and, for the
 parity bytes, `test-vectors/erasure-leopard.json`.
 

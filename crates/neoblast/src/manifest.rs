@@ -5,7 +5,7 @@
 //! segment by segment, `n` per segment, 32 bytes each. The manifest is only
 //! accepted if it hashes to the expected file root `H`.
 
-use nbl_format::{HEADER_LEN, Header};
+use neoblast_format::{HEADER_LEN, Header};
 
 use crate::file::Error;
 use crate::tree::{self, Hash};

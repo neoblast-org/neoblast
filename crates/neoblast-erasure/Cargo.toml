@@ -1,13 +1,18 @@
 [package]
-name = "nbl-erasure"
-description = "Neoblast erasure coding behind a swappable trait."
+name = "neoblast-erasure"
+description = "Neoblast erasure coding: Leopard-RS compatible Reed-Solomon over GF(2^16)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
 authors.workspace = true
-publish = false
+# The tests read spec/ and tools/ from the repository, so they stay out of the package.
+exclude = ["tests/"]
+readme = "README.md"
+keywords = ["storage", "erasure-coding", "reed-solomon", "leopard"]
+categories = ["cryptography", "filesystem"]
 
 [dependencies]
 reed-solomon-simd.workspace = true

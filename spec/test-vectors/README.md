@@ -25,7 +25,7 @@ gives `k`, `m` (parity count), `shard_bytes`, the BLAKE3 of all `m` recovery sha
 concatenated, and the first 16 bytes of recovery shard 0. The input data is one
 splitmix64 stream described in the file's `input` field.
 
-`crates/nbl-erasure/tests/leopard_fixtures.rs` checks every case on every test run,
+`crates/neoblast-erasure/tests/leopard_fixtures.rs` checks every case on every test run,
 and also rebuilds the data from Leopard's parity. Regenerate (needs a C++
 compiler and network access) with:
 

@@ -8,6 +8,8 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 authors.workspace = true
+# The tests read spec/ and tools/ from the repository, so they stay out of the package.
+exclude = ["tests/"]
 readme = "../../README.md"
 keywords = ["storage", "p2p", "erasure-coding", "encryption", "censorship"]
 categories = ["cryptography", "filesystem", "command-line-utilities"]
@@ -17,9 +19,9 @@ name = "neoblast"
 path = "src/main.rs"
 
 [dependencies]
-nbl-format.workspace = true
-nbl-crypto.workspace = true
-nbl-erasure.workspace = true
+neoblast-format.workspace = true
+neoblast-crypto.workspace = true
+neoblast-erasure.workspace = true
 blake3.workspace = true
 clap.workspace = true
 thiserror.workspace = true

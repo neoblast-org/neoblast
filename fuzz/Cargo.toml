@@ -9,7 +9,8 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-nbl-format = { path = "../crates/nbl-format" }
+neoblast-format = { path = "../crates/neoblast-format" }
+neoblast-erasure = { path = "../crates/neoblast-erasure" }
 neoblast = { path = "../crates/neoblast" }
 
 [[bin]]
@@ -29,6 +30,20 @@ bench = false
 [[bin]]
 name = "manifest_decode"
 path = "fuzz_targets/manifest_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "open_hostile_shards"
+path = "fuzz_targets/open_hostile_shards.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "erasure_restore"
+path = "fuzz_targets/erasure_restore.rs"
 test = false
 doc = false
 bench = false

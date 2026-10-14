@@ -14,12 +14,13 @@ Read before changing anything:
 
 ## Layout
 
-- `crates/nbl-format`: header, layout rules, capability links. Pure, no I/O, fuzzed.
-- `crates/nbl-crypto`: key derivation and segmented XChaCha20-Poly1305.
-- `crates/nbl-erasure`: Reed-Solomon behind the `ErasureCode` trait.
-- `crates/neoblast`: the published crate and the `neoblast` CLI (`seal` / `open` / `heal`).
+- `crates/neoblast-format`: header, layout rules, capability links. Pure, no I/O, fuzzed.
+- `crates/neoblast-crypto`: key derivation and segmented XChaCha20-Poly1305.
+- `crates/neoblast-erasure`: Reed-Solomon behind the `ErasureCode` trait.
+- `crates/neoblast`: the main crate and the `neoblast` CLI (`seal` / `open` / `heal`).
+  All four crates are published together; see `RELEASING.md` (decision 0008).
 - `spec/test-vectors/`: golden vectors that lock the byte format.
-- `fuzz/`: `cargo-fuzz` targets. `sim/`: durability model.
+- `fuzz/`: `cargo-fuzz` targets, `campaign.sh` and run records in `fuzz/campaigns/`. `sim/`: durability model.
 
 ## Commands
 
@@ -27,7 +28,7 @@ Read before changing anything:
 - `cargo test --all` · `cargo deny check`
 - `NBL_UPDATE_VECTORS=1 cargo test -p neoblast --test golden_vectors`: only for an
   intended format change that has a decision record and a spec update.
-- `cargo +nightly fuzz run <target>` · `python3 sim/durability.py`
+- `cargo +nightly fuzz run <target>` · `fuzz/campaign.sh summary` · `python3 sim/durability.py`
 
 Keep fmt, clippy, tests, `cargo deny` and the golden vectors green.
 

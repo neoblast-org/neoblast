@@ -48,10 +48,10 @@ content from the network, including for the maintainers.
 
 | Path | What |
 | --- | --- |
-| `crates/nbl-format` | Header, layout rules, capability links. Pure, fuzzed |
-| `crates/nbl-crypto` | Key derivation, segmented XChaCha20-Poly1305 |
-| `crates/nbl-erasure` | Reed-Solomon behind a swappable trait |
-| `crates/neoblast` | The published crate and the `neoblast` CLI |
+| `crates/neoblast-format` | Header, layout rules, capability links. Pure, fuzzed |
+| `crates/neoblast-crypto` | Key derivation, segmented XChaCha20-Poly1305 |
+| `crates/neoblast-erasure` | Reed-Solomon behind a swappable trait |
+| `crates/neoblast` | The main crate and the `neoblast` CLI. All four crates are published (see [RELEASING.md](RELEASING.md)) |
 | `spec/` | The format spec and golden test vectors |
 | `decisions/` | Design decision records (MADR) |
 | `fuzz/` | `cargo-fuzz` targets |

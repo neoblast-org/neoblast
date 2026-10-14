@@ -1,8 +1,8 @@
 //! Sealing, opening and healing files (Phase 1, offline).
 
-use nbl_crypto::CryptoError;
-use nbl_erasure::{ErasureError, ReedSolomonSimd};
-use nbl_format::{FileReadCap, FileVerifyCap, Header, HeaderError};
+use neoblast_crypto::CryptoError;
+use neoblast_erasure::{ErasureError, ReedSolomonSimd};
+use neoblast_format::{FileReadCap, FileVerifyCap, Header, HeaderError};
 use thiserror::Error;
 use zeroize::Zeroizing;
 
@@ -98,7 +98,7 @@ pub struct RebuiltShard {
 
 /// Seals `payload` under a fresh random read key.
 pub fn seal(payload: &[u8], params: Params) -> Result<Sealed, Error> {
-    let key = nbl_crypto::random_read_key()?;
+    let key = neoblast_crypto::random_read_key()?;
     seal_with_key(payload, params, &key)
 }
 
@@ -111,14 +111,14 @@ pub fn seal_with_key(payload: &[u8], params: Params, read_key: &[u8; 32]) -> Res
         params.n,
         params.segment_size,
     )?;
-    let ciphertexts = nbl_crypto::seal_segments(read_key, &header, payload)?;
+    let ciphertexts = neoblast_crypto::seal_segments(read_key, &header, payload)?;
     let k = usize::from(header.k());
     let n = usize::from(header.n());
     let mut shards = Vec::with_capacity(ciphertexts.len());
     let mut hashes = Vec::with_capacity(ciphertexts.len());
     for (ct, i) in ciphertexts.iter().zip(0u32..) {
         let shard_len = shard_len(&header, i)?;
-        let segment = nbl_erasure::encode_segment(&ReedSolomonSimd, ct, k, n, shard_len)?;
+        let segment = neoblast_erasure::encode_segment(&ReedSolomonSimd, ct, k, n, shard_len)?;
         hashes.push(segment.iter().map(|s| tree::shard_hash(s)).collect());
         shards.push(segment);
     }
@@ -147,7 +147,7 @@ pub fn open(
     for segment in 0..header.segment_count() {
         let (held, _) = collect_verified(&manifest, segment, source);
         let shard_len = shard_len(&header, segment)?;
-        let data = nbl_erasure::reconstruct_data(
+        let data = neoblast_erasure::reconstruct_data(
             &ReedSolomonSimd,
             k,
             usize::from(header.n()),
@@ -164,7 +164,7 @@ pub fn open(
         ciphertexts.push(ct);
     }
     let key = Zeroizing::new(cap.read_key);
-    Ok(nbl_crypto::open_segments(&key, &header, &ciphertexts)?)
+    Ok(neoblast_crypto::open_segments(&key, &header, &ciphertexts)?)
 }
 
 /// Rebuilds every missing or corrupt shard using only the verify cap.
@@ -187,7 +187,7 @@ pub fn heal(
             continue;
         }
         let shard_len = shard_len(&header, segment)?;
-        let all = nbl_erasure::regenerate(&ReedSolomonSimd, k, n, shard_len, &held)
+        let all = neoblast_erasure::regenerate(&ReedSolomonSimd, k, n, shard_len, &held)
             .map_err(|e| unrecoverable(e, segment, &held, k))?;
         for index in missing {
             let bytes = all

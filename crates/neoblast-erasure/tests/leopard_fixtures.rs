@@ -9,7 +9,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use nbl_erasure::{ReedSolomonSimd, encode_segment, reconstruct_data};
+use neoblast_erasure::{ReedSolomonSimd, encode_segment, reconstruct_data};
 use serde::Deserialize;
 
 #[derive(Deserialize)]

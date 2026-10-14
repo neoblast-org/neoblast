@@ -1,9 +1,9 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/nbl-format",
-    "crates/nbl-crypto",
-    "crates/nbl-erasure",
+    "crates/neoblast-format",
+    "crates/neoblast-crypto",
+    "crates/neoblast-erasure",
     "crates/neoblast",
 ]
 exclude = ["fuzz"]
@@ -32,14 +32,14 @@ hex = "0.4"
 proptest = "1.12"
 # Medium blast radius: use behind our own types.
 data-encoding = "2.11"
-# Small blast radius (8 reverse deps): exact pin, wrapped by nbl-erasure's trait.
+# Small blast radius (8 reverse deps): exact pin, wrapped by neoblast-erasure's trait.
 # Its parity bytes are part of the on-disk format. They match Leopard-RS, checked
-# by nbl-erasure's leopard_fixtures test (decision 0006).
+# by neoblast-erasure's leopard_fixtures test (decision 0006).
 reed-solomon-simd = "=3.1.0"
 
-nbl-format = { path = "crates/nbl-format", version = "0.0.1" }
-nbl-crypto = { path = "crates/nbl-crypto", version = "0.0.1" }
-nbl-erasure = { path = "crates/nbl-erasure", version = "0.0.1" }
+neoblast-format = { path = "crates/neoblast-format", version = "0.0.1" }
+neoblast-crypto = { path = "crates/neoblast-crypto", version = "0.0.1" }
+neoblast-erasure = { path = "crates/neoblast-erasure", version = "0.0.1" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
