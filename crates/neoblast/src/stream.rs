@@ -16,7 +16,7 @@
 use std::io::{self, Read, Write};
 
 use neoblast_crypto::{CryptoError, SegmentCipher};
-use neoblast_erasure::{ErasureError, ReedSolomonSimd};
+use neoblast_erasure::{ErasureCode, ErasureError, ReedSolomonSimdReuse};
 use neoblast_format::header::LENGTH_PREFIX;
 use neoblast_format::{FileReadCap, FileVerifyCap, Header};
 use zeroize::Zeroizing;
@@ -58,6 +58,8 @@ pub fn seal_stream_with_key(
 ) -> Result<(FileReadCap, Manifest), Error> {
     let header = Header::new(payload_len, params.k, params.n, params.segment_size)?;
     let cipher = SegmentCipher::new(read_key, &header);
+    // One codec per operation: its working buffers are reused for every segment.
+    let code = ReedSolomonSimdReuse::default();
     let k = usize::from(header.k());
     let n = usize::from(header.n());
     let mut remaining = payload_len;
@@ -88,7 +90,7 @@ pub fn seal_stream_with_key(
 
         cipher.seal_in_place(segment, &mut buf)?;
         buf.resize(k.saturating_mul(shard_len), 0);
-        let parity = neoblast_erasure::encode_parity(&ReedSolomonSimd, &buf, k, n, shard_len)?;
+        let parity = neoblast_erasure::encode_parity(&code, &buf, k, n, shard_len)?;
 
         let mut segment_hashes = Vec::with_capacity(n);
         let shards = buf
@@ -131,6 +133,8 @@ pub fn open_stream(
     let manifest = Manifest::decode(manifest_bytes, &cap.root)?;
     let header = *manifest.header();
     let cipher = SegmentCipher::new(&cap.read_key, &header);
+    // One codec per operation: its working buffers are reused for every segment.
+    let code = ReedSolomonSimdReuse::default();
     let k = usize::from(header.k());
     let n = usize::from(header.n());
     let mut payload_len = 0u64;
@@ -146,7 +150,7 @@ pub fn open_stream(
         } else {
             // Decode first and free the shards fetched for it before the output
             // buffer is allocated.
-            let data = neoblast_erasure::reconstruct_data(&ReedSolomonSimd, k, n, shard_len, &held)
+            let data = neoblast_erasure::reconstruct_data(&code, k, n, shard_len, &held)
                 .map_err(|e| unrecoverable(e, segment, &held, k))?;
             drop(held);
             data
@@ -207,6 +211,8 @@ pub fn heal_stream(
     let header = *manifest.header();
     let k = usize::from(header.k());
     let n = usize::from(header.n());
+    // One codec per operation: its working buffers are reused for every segment.
+    let code = ReedSolomonSimdReuse::default();
     let mut rebuilt = 0;
     let mut first_failure = None;
     for segment in 0..header.segment_count() {
@@ -215,8 +221,8 @@ pub fn heal_stream(
         if missing.is_empty() {
             continue;
         }
-        let all = match neoblast_erasure::regenerate(&ReedSolomonSimd, k, n, shard_len, &held) {
-            Ok(all) => all,
+        let data = match neoblast_erasure::reconstruct_data(&code, k, n, shard_len, &held) {
+            Ok(data) => data,
             Err(e) => match unrecoverable(e, segment, &held, k) {
                 // Keep repairing the other segments; report this one at the end.
                 failure @ Error::Unrecoverable { .. } => {
@@ -227,10 +233,21 @@ pub fn heal_stream(
             },
         };
         drop(held);
+        // Re-encode parity only when a parity shard is actually missing.
+        let parity = if missing.iter().any(|&i| usize::from(i) >= k) {
+            let refs: Vec<&[u8]> = data.iter().map(Vec::as_slice).collect();
+            code.encode(&refs, n.saturating_sub(k))?
+        } else {
+            Vec::new()
+        };
         for index in missing {
-            let bytes = all
-                .get(usize::from(index))
-                .ok_or(Error::RebuildMismatch { segment, index })?;
+            let i = usize::from(index);
+            let bytes = if i < k {
+                data.get(i)
+            } else {
+                parity.get(i - k)
+            }
+            .ok_or(Error::RebuildMismatch { segment, index })?;
             if manifest.shard_hash(segment, index) != Some(&tree::shard_hash(bytes)) {
                 return Err(Error::RebuildMismatch { segment, index });
             }

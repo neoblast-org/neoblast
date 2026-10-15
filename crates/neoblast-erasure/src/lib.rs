@@ -21,10 +21,13 @@
 //! checked against the manifest's hashes (issue 2).
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 use reed_solomon_simd::engine::DefaultEngine;
-use reed_solomon_simd::rate::{HighRateDecoder, HighRateEncoder, RateDecoder, RateEncoder};
+use reed_solomon_simd::rate::{
+    DecoderWork, EncoderWork, HighRateDecoder, HighRateEncoder, RateDecoder, RateEncoder,
+};
 use thiserror::Error;
 
 /// Shard lengths must be a multiple of this (decision 0006).
@@ -76,62 +79,98 @@ pub trait ErasureCode {
 }
 
 /// Leopard-RS high-rate Reed-Solomon over GF(2^16), provided by
-/// `reed-solomon-simd` 3.1.0.
+/// `reed-solomon-simd` 3.1.0. Allocates fresh working buffers for every call.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ReedSolomonSimd;
+
+/// The same code as [`ReedSolomonSimd`], keeping the codec's working buffers
+/// between calls. For streaming many segments: one encoder buffer and one
+/// decoder buffer are reused instead of a fresh multi-megabyte allocation per
+/// segment, which keeps peak memory flat on allocators that are slow to give
+/// freed memory back (macOS). Produces exactly the same bytes.
+#[derive(Default)]
+pub struct ReedSolomonSimdReuse {
+    encoder_work: RefCell<Option<EncoderWork>>,
+    decoder_work: RefCell<Option<DecoderWork>>,
+}
+
+impl core::fmt::Debug for ReedSolomonSimdReuse {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ReedSolomonSimdReuse")
+            .finish_non_exhaustive()
+    }
+}
 
 fn codec(e: reed_solomon_simd::Error) -> ErasureError {
     ErasureError::Codec(e.to_string())
 }
 
-impl ErasureCode for ReedSolomonSimd {
-    fn encode(
-        &self,
-        original: &[&[u8]],
-        recovery_count: usize,
-    ) -> Result<Vec<Vec<u8>>, ErasureError> {
-        let shard_bytes = original.first().map_or(0, |s| s.len());
-        // Decision 0006 rules hold for direct trait callers too, not only via
-        // `encode_segment`.
-        check_counts(original.len(), recovery_count, shard_bytes)?;
-        let mut encoder = HighRateEncoder::new(
-            original.len(),
-            recovery_count,
-            shard_bytes,
-            DefaultEngine::new(),
-            None,
-        )
-        .map_err(codec)?;
+/// Encodes with the given working buffer (if any) and hands the buffer back
+/// for reuse whenever the encoder was built.
+fn encode_with(
+    work: Option<EncoderWork>,
+    original: &[&[u8]],
+    recovery_count: usize,
+) -> (Result<Vec<Vec<u8>>, ErasureError>, Option<EncoderWork>) {
+    let shard_bytes = original.first().map_or(0, |s| s.len());
+    // Decision 0006 rules hold for direct trait callers too, not only via
+    // `encode_segment`.
+    if let Err(e) = check_counts(original.len(), recovery_count, shard_bytes) {
+        return (Err(e), work);
+    }
+    let mut encoder = match HighRateEncoder::new(
+        original.len(),
+        recovery_count,
+        shard_bytes,
+        DefaultEngine::new(),
+        work,
+    ) {
+        Ok(encoder) => encoder,
+        Err(e) => return (Err(codec(e)), None),
+    };
+    let result = (|| {
         for shard in original {
             encoder.add_original_shard(shard).map_err(codec)?;
         }
         let result = encoder.encode().map_err(codec)?;
         Ok(result.recovery_iter().map(<[u8]>::to_vec).collect())
-    }
+    })();
+    (result, Some(encoder.into_parts().1))
+}
 
-    fn restore(
-        &self,
-        original_count: usize,
-        recovery_count: usize,
-        original: &[(usize, &[u8])],
-        recovery: &[(usize, &[u8])],
-    ) -> Result<BTreeMap<usize, Vec<u8>>, ErasureError> {
-        let shard_bytes = original
-            .first()
-            .or(recovery.first())
-            .map_or(0, |(_, s)| s.len());
-        check_counts(original_count, recovery_count, shard_bytes)?;
-        if original.len() == original_count {
-            return Ok(BTreeMap::new());
-        }
-        let mut decoder = HighRateDecoder::new(
-            original_count,
-            recovery_count,
-            shard_bytes,
-            DefaultEngine::new(),
-            None,
-        )
-        .map_err(codec)?;
+/// Restored original shards by index, or the reason they could not be restored.
+type Restored = Result<BTreeMap<usize, Vec<u8>>, ErasureError>;
+
+/// Restores missing originals with the given working buffer (if any) and hands
+/// the buffer back for reuse whenever the decoder was built.
+fn restore_with(
+    work: Option<DecoderWork>,
+    original_count: usize,
+    recovery_count: usize,
+    original: &[(usize, &[u8])],
+    recovery: &[(usize, &[u8])],
+) -> (Restored, Option<DecoderWork>) {
+    let shard_bytes = original
+        .first()
+        .or(recovery.first())
+        .map_or(0, |(_, s)| s.len());
+    if let Err(e) = check_counts(original_count, recovery_count, shard_bytes) {
+        return (Err(e), work);
+    }
+    if original.len() == original_count {
+        return (Ok(BTreeMap::new()), work);
+    }
+    let mut decoder = match HighRateDecoder::new(
+        original_count,
+        recovery_count,
+        shard_bytes,
+        DefaultEngine::new(),
+        work,
+    ) {
+        Ok(decoder) => decoder,
+        Err(e) => return (Err(codec(e)), None),
+    };
+    let result = (|| {
         for (i, shard) in original {
             decoder.add_original_shard(*i, shard).map_err(codec)?;
         }
@@ -143,6 +182,53 @@ impl ErasureCode for ReedSolomonSimd {
             .restored_original_iter()
             .map(|(i, s)| (i, s.to_vec()))
             .collect())
+    })();
+    (result, Some(decoder.into_parts().1))
+}
+
+impl ErasureCode for ReedSolomonSimd {
+    fn encode(
+        &self,
+        original: &[&[u8]],
+        recovery_count: usize,
+    ) -> Result<Vec<Vec<u8>>, ErasureError> {
+        encode_with(None, original, recovery_count).0
+    }
+
+    fn restore(
+        &self,
+        original_count: usize,
+        recovery_count: usize,
+        original: &[(usize, &[u8])],
+        recovery: &[(usize, &[u8])],
+    ) -> Result<BTreeMap<usize, Vec<u8>>, ErasureError> {
+        restore_with(None, original_count, recovery_count, original, recovery).0
+    }
+}
+
+impl ErasureCode for ReedSolomonSimdReuse {
+    fn encode(
+        &self,
+        original: &[&[u8]],
+        recovery_count: usize,
+    ) -> Result<Vec<Vec<u8>>, ErasureError> {
+        let work = self.encoder_work.take();
+        let (result, work) = encode_with(work, original, recovery_count);
+        self.encoder_work.replace(work);
+        result
+    }
+
+    fn restore(
+        &self,
+        original_count: usize,
+        recovery_count: usize,
+        original: &[(usize, &[u8])],
+        recovery: &[(usize, &[u8])],
+    ) -> Result<BTreeMap<usize, Vec<u8>>, ErasureError> {
+        let work = self.decoder_work.take();
+        let (result, work) = restore_with(work, original_count, recovery_count, original, recovery);
+        self.decoder_work.replace(work);
+        result
     }
 }
 
@@ -335,6 +421,40 @@ mod tests {
             Err(ErasureError::Params)
         );
         assert_eq!(code.encode(&[&a, &a], 2).map(|p| p.len()), Ok(2));
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(32))]
+        /// A reused codec gives the same bytes as a fresh one for any sequence
+        /// of shapes, including after a call that fails.
+        #[test]
+        fn reused_codec_equals_fresh_codec(
+            shapes in proptest::collection::vec((MIN_K..20, 1usize..30, 1usize..6, any::<u8>()), 1..8),
+        ) {
+            let reused = ReedSolomonSimdReuse::default();
+            for (k, m, len64, salt) in shapes {
+                let shard_len = 64 * len64;
+                let data: Vec<u8> =
+                    (0..k * shard_len).map(|i| (i as u8).wrapping_mul(13) ^ salt).collect();
+                let fresh = encode_segment(&ReedSolomonSimd, &data, k, k + m, shard_len).unwrap();
+                let again = encode_segment(&reused, &data, k, k + m, shard_len).unwrap();
+                prop_assert_eq!(&again, &fresh);
+                // Lose min(k, m) data shards and restore with both codecs.
+                let held: Vec<Option<Vec<u8>>> = fresh
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| (i >= m.min(k)).then(|| s.clone()))
+                    .collect();
+                let want = reconstruct_data(&ReedSolomonSimd, k, k + m, shard_len, &held).unwrap();
+                let got = reconstruct_data(&reused, k, k + m, shard_len, &held).unwrap();
+                prop_assert_eq!(got, want);
+                // A failing call must not break the next one.
+                prop_assert!(encode_segment(&reused, &data, k, k + m, shard_len + 2).is_err());
+                prop_assert!(reused.restore(1, 1, &[], &[]).is_err());
+                // A failure inside the codec itself (unequal shard lengths).
+                prop_assert!(reused.encode(&[&data[..64], &data[..128]], 1).is_err());
+            }
+        }
     }
 
     #[test]

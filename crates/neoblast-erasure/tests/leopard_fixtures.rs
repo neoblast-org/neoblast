@@ -9,7 +9,9 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use neoblast_erasure::{ReedSolomonSimd, encode_segment, reconstruct_data};
+use neoblast_erasure::{
+    ErasureCode, ReedSolomonSimd, ReedSolomonSimdReuse, encode_segment, reconstruct_data,
+};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -122,13 +124,33 @@ fn fixtures_match_the_case_list_and_pinned_leopard() {
 
 #[test]
 fn parity_matches_leopard_byte_for_byte() {
-    for case in load().cases {
+    check_all(&ReedSolomonSimd);
+}
+
+/// One reusing codec runs every case in turn, so its working buffers are
+/// resized between very different shapes; the bytes must not change.
+#[test]
+fn reusing_codec_matches_leopard_across_all_cases() {
+    let code = ReedSolomonSimdReuse::default();
+    check_all(&code);
+    // And again in reverse order, starting from the largest buffers.
+    let mut cases = load().cases;
+    cases.reverse();
+    check_cases(&code, cases);
+}
+
+fn check_all(code: &impl ErasureCode) {
+    check_cases(code, load().cases);
+}
+
+fn check_cases(code: &impl ErasureCode, cases: Vec<Case>) {
+    for case in cases {
         let Case {
             k, m, shard_bytes, ..
         } = case;
         let label = format!("{k}/{m} x {shard_bytes} ({})", case.leopard_build);
         let data = originals(k, m, shard_bytes);
-        let shards = encode_segment(&ReedSolomonSimd, &data, k, k + m, shard_bytes).unwrap();
+        let shards = encode_segment(code, &data, k, k + m, shard_bytes).unwrap();
 
         let parity: Vec<u8> = shards[k..].concat();
         assert_eq!(parity.len(), m * shard_bytes, "{label}");
@@ -147,7 +169,7 @@ fn parity_matches_leopard_byte_for_byte() {
             .enumerate()
             .map(|(i, s)| (i >= lost).then_some(s))
             .collect();
-        let rebuilt = reconstruct_data(&ReedSolomonSimd, k, k + m, shard_bytes, &held).unwrap();
+        let rebuilt = reconstruct_data(code, k, k + m, shard_bytes, &held).unwrap();
         assert_eq!(rebuilt.concat(), data, "{label}: restore");
     }
 }
