@@ -1,7 +1,9 @@
 # Security review worklist: S-series
 
 Status: todo. Opened 2026-10-14 by the first security review (empty tree to
-`e24f453`), logged in `docs/logs/security-review-log.md`.
+`e24f453`), logged in `docs/logs/security-review-log.md`. The second review
+(2026-10-15, `e24f453..a9445d9`) added S-005 to S-007, all low and none
+blocking v0.0.1.
 
 IDs are unique across all worklists and continue from the highest S-number used.
 Each item has a status (open / fixed / won't fix) and, once fixed, the commit
@@ -46,7 +48,7 @@ that fixed it.
   changes every target's `code_id` and needs a new 24 h campaign. The
   alternative is to ship v0.0.1 with this listed as a known issue and fix it in
   v0.0.2; that is the maintainer's call.
-- **Status:** fixed in #6 (`fix/hostile-store`). Regression tests: the `s001_*` tests in
+- **Status:** fixed in `9a542da` (#6). Regression tests: the `s001_*` tests in
   `crates/neoblast/tests/review_regressions.rs`, each confirmed to fail on
   `e24f453`.
 
@@ -99,4 +101,68 @@ that fixed it.
 - **Fix:** `cargo install cargo-fuzz --version <exact> --locked`, with
   Dependabot or a manual bump.
 - **Release:** not blocking (CI only; not in `code_id`).
+- **Status:** open.
+
+### S-005 · Low · Rejecting a planted manifest can cost about 3.2 times its size in memory
+
+- **Where:** `crates/neoblast/src/manifest.rs:76-84` (`Manifest::decode`
+  builds a list of hashes per segment before comparing with the link's root at
+  `:85`) and `:92-102` (`compute_root` collects the segment roots and the
+  content-root leaves); reached from `open` and `heal` via `read_manifest`
+  (`crates/neoblast/src/store.rs:86-88`) and `Manifest::decode` at
+  `crates/neoblast/src/stream.rs:131` and `:206`.
+- **Problem:** W-001's cap limits the manifest file to 256 MiB, but decoding
+  allocates per segment before the root check. A store's supplier picks the
+  header, so it can choose the smallest n (3): a sparse
+  `manifest.nbl` just under the cap, a few KiB on disk, made `heal` peak at
+  about 822 MiB before it failed with "manifest does not match the link's root".
+  At the default 20-of-50 and 4 MiB segments the same size costs about 556 MiB.
+  The `MAX_MANIFEST_LEN` doc comment suggests the cap bounds memory at 256 MiB.
+- **Impact:** bounded memory use, under 1 GB whatever the header says, before
+  a clean error. An honest file sealed with the same parameters costs the same,
+  so the store's supplier cannot force more than the largest legitimate file.
+  It matters more once peers send manifests over the network (Phase 2).
+- **Fix:** compute the segment roots and the content root from the raw bytes
+  and compare with the expected root before building any per-segment list, or
+  keep the hashes flat; correct the doc comment; add a regression test.
+- **Verified:** reproduced twice by a fresh agent with the release CLI at
+  `a9445d9`.
+- **Release:** not blocking (a `crates/` change; v0.0.2).
+- **Status:** open.
+
+### S-006 · Low · An unfixed medium finding's exploit details were public before its fix
+
+- **Where:** `plans/todo/security-review-s-series.md`, S-001, published with
+  #5 (`b3c3c63`), about 5.5 hours before the fix in #6 (`9a542da`).
+- **Problem:** the worklist described S-001 step by step while `main` was
+  still vulnerable. `SECURITY.md` asks outside reporters to report privately,
+  but says nothing about the maintainers' own unfixed findings.
+- **Impact:** none on users: nothing had been released. A later finding could
+  be exposed the same way.
+- **Fix:** keep open findings of medium severity or higher out of the public
+  repo, in a private draft advisory, until the fix merges, and land the
+  worklist entry with the fix. Say so in `SECURITY.md` and in the review
+  skill. Low items that are deliberate known issues may stay public.
+- **Verified:** by reading the history.
+- **Release:** not blocking (process and docs).
+- **Status:** open.
+
+### S-007 · Low · GitHub's squash merges replace the project's commit metadata
+
+- **Where:** every squash merge on `main`.
+- **Problem:** GitHub creates the merge commit itself, so it carries the
+  merging account's name, GitHub as committer and signer, and the merger's
+  local time-zone offset instead of UTC. The project's own commits are UTC,
+  `neoblast maintainers` and signed, but those are not the ones on `main`.
+  The offset can reveal a maintainer's time zone, which matters for a
+  censorship-resistance project. The pre-push hook cannot catch it, because
+  the merge never passes through a client.
+- **Impact:** privacy only; no secret or personal email address is exposed.
+- **Fix:** merge so that the project's own commits land on `main` unchanged
+  (for example a fast-forward of a squashed, UTC-stamped commit), or confirm
+  where GitHub takes the offset from and set it to UTC. Rewriting the existing merges would need a force-push
+  to `main`, which is the maintainer's call; copies may already exist.
+- **Verified:** by reading the commit metadata of all merges on `main`.
+- **Release:** not blocking, but decide the merge method before tagging, since
+  the release commit will be one of these merges.
 - **Status:** open.

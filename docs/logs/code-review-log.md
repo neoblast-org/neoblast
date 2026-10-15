@@ -1,6 +1,6 @@
 # Code Review Log
 
-<!-- baseline --> **Next review diffs from:** `e24f4538e88320993d7cd5497239f3bf8a776786` (`main`, recorded 2026-10-14)
+<!-- baseline --> **Next review diffs from:** `a9445d9a32dcafe4a8bd018e4280e03411ce6a12` (`main`, recorded 2026-10-15)
 
 A running record of code-review events: branch/pre-PR reviews, review worklists, and
 remediation programmes. Newest entry first. The baseline marker line above is the
@@ -27,6 +27,58 @@ merge-base fallback). Side-branch pre-PR reviews are logged as entries marked
 "frontier unchanged (side branch)" and never move the line.
 
 ## Entries
+
+### 2026-10-15: `e24f453..a9445d9` (#5, #6, #7)
+
+| | SHA | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `e24f4538e88320993d7cd5497239f3bf8a776786` | 2026-10-14 | feat: streaming seal, open and heal; segment-size benchmark (#4) |
+| Tip | `a9445d9a32dcafe4a8bd018e4280e03411ce6a12` | 2026-10-15 | docs: freeze the v1 format; changelog; first full code and security reviews (#7) |
+
+- **Scope:** 3 commits (`git rev-list --count e24f453..a9445d9`) and 25 files,
+  +942/−80 (`git diff --shortstat e24f453 a9445d9`). The code under review was
+  #6's change to `crates/` (6 files, +335/−40), `bench/heal-check.sh` (#5) and
+  the `vectors` CI job (#7); the rest is docs. Base equals the previous entry's
+  Tip. Only the committed range is covered.
+- **Method:** the `code-review` skill over the range, from eight angles, with
+  duplicates removed. Each of its 10 findings was then checked by one of three
+  fresh agents in separate worktrees: reproduced with release builds of both
+  commits, cut by mutation, or (W-006, W-007, W-010, W-011) confirmed by
+  reading the code. All 10 were confirmed.
+- **Findings:** 10, all low or cleanup; none blocks v0.0.1. Details and
+  remediation in the worklist.
+  - W-003 (low): one failed shard write ends the whole heal
+    (`crates/neoblast/src/stream.rs:237`); pre-existing.
+  - W-004 (low): planted `<path>.<pid>.tmp` names make heal's writes fail
+    (`crates/neoblast/src/store.rs:178`); from #6.
+  - W-005 (low): `seal` reads a whole pipe before refusing a non-empty store
+    (`crates/neoblast/src/main.rs:91`); from #6.
+  - W-006 (low): the library checks the manifest cap only after writing every
+    shard (`crates/neoblast/src/stream.rs:52`); from #6.
+  - W-007 (low): store writes are not synced before rename
+    (`crates/neoblast/src/store.rs:182`); pre-existing. Listed as a known issue
+    in `CHANGELOG.md`.
+  - W-008 (low): the symlinked-segment-directory regression test never reaches
+    `write_shard`'s guard (`crates/neoblast/tests/review_regressions.rs:247`).
+  - W-009 (low): `--k 0` and too many segments give unhelpful errors
+    (`crates/neoblast-format/src/header.rs:110`).
+  - W-010 (cleanup): `write_manifest` encodes before checking the cap
+    (`crates/neoblast/src/store.rs:129-152`).
+  - W-011 (cleanup): a duplicated test helper
+    (`crates/neoblast/tests/review_regressions.rs:171` and `cli.rs:16`).
+  - W-012 (low): `bench/heal-check.sh` fails silently (`bench/heal-check.sh:34,42`).
+- **Checked and clean:** #6's S-001 fix reads only regular files and never
+  writes through a planted symlink; the W-001 cap is checked before a manifest
+  is read and before `seal` touches the store; `--force` keeps the old manifest
+  when the new one would not fit; no `unwrap`, `expect`, `panic` or unchecked
+  indexing outside tests; both v1 vector files are unchanged and pinned by the
+  new `vectors` CI job.
+- **Outcome:** no release blocker. W-003 to W-011 need `crates/` changes, and
+  `fuzz/campaign.sh` takes `code_id` from the whole `crates/` tree, tests
+  included, so they wait for v0.0.2. W-012 can land during the campaign.
+  Worklist: [`plans/todo/code-review-w-series.md`](../../plans/todo/code-review-w-series.md).
+- **Carried-over items:** W-001 fixed in `9a542da` (#6); W-002 fixed in
+  `9a542da` (#6), with its follow-up message in W-009.
 
 ### 2026-10-14: first review, full history (empty tree to `e24f453`)
 

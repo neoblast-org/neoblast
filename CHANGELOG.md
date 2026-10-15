@@ -54,6 +54,11 @@ not hide who published or read it ([`spec/threat-model.md`](spec/threat-model.md
 - `neoblast open` takes the read link as an argument, so it can show in `ps`
   and shell history, and decoded copies of the key are not wiped from memory
   (review S-003).
+- Rejecting a planted manifest near the 256 MiB limit can take up to about
+  820 MiB of memory before the clean error (review S-005).
+- `seal` does not sync the shards or the manifest to disk before it prints the
+  link, so a power loss soon after can leave them empty. Run `sync` before
+  deleting the original (review W-007).
 - Memory has only been measured on macOS (Apple M5, `bench/results/` and
   `bench/heal-check.sh`). There, `heal`'s working memory grows with the file
   size: between a 256 MiB and a 1 GiB file it went from about 11 to 20 MiB with

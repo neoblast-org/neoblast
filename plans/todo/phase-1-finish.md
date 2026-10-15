@@ -71,7 +71,7 @@ until after the tag, because it would reset the fuzz hours.
 | A2 | ~~Memory test on the dev Mac~~ Done: heal grew with the file. The fix is the experiment on `exp/heal-reuse` | Maintainer | 3 min |
 | A3 | ~~On `exp/heal-reuse`: `bench/heal-check.sh` (heal flat at 256 MiB and 1 GiB?), then `bench/segment-size.sh`~~ Done, not flat: see the results below. `segment-size.sh` was not run | Maintainer | 20 min |
 | A4 | ~~Write the segment-size decision (0009) from A3~~ Moved to v0.0.2 | Claude | 30 min |
-| A5 | ~~Code review and security review from the empty tree to `e24f453`~~ Done and logged; 6 findings; S-001, W-001 and W-002 fixed in A0. After A0 merges, run both again (`/review-since`, `/security-review-since`) over the new commits | Claude | 1 h |
+| A5 | ~~Code review and security review from the empty tree to `e24f453`~~ Done and logged; 6 findings; S-001, W-001 and W-002 fixed in A0. ~~After A0 merges, run both again over the new commits~~ Done 2026-10-15 (`e24f453..a9445d9`): W-003 to W-012 and S-005 to S-007, all low or cleanup, none blocking. Before the tag, decide how PRs are merged (S-007) | Claude | 1 h |
 | A6 | Freeze PR: spec wording, CI hash check of the vectors, `CHANGELOG.md`. Drafted; the `vectors` job in `ci.yml` is applied by hand | Claude, then maintainer (CI files are moved in by hand) | 1 h |
 | A7 | GitHub release setup from `RELEASING.md`: `release` environment, `v*` tag ruleset, secret `maintainers` team, crates.io access for the org | Maintainer | 15 min |
 | A8 | crates.io: sign in as `neoblast-dev`, verify the email, prepare a 1-day token | Maintainer | 10 min |

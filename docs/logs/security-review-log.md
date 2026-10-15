@@ -1,6 +1,6 @@
 # Security Review Log
 
-<!-- baseline --> **Next review diffs from:** `e24f4538e88320993d7cd5497239f3bf8a776786` (`main`, recorded 2026-10-14)
+<!-- baseline --> **Next review diffs from:** `a9445d9a32dcafe4a8bd018e4280e03411ce6a12` (`main`, recorded 2026-10-15)
 
 A running record of branch security reviews. Each entry records the exact commit range
 reviewed; the baseline marker line above is the machine-owned frontier the next
@@ -21,6 +21,68 @@ marker line; a frontier-moving entry's Base must equal the previous one's Tip un
 the entry explains why not.
 
 ## Entries
+
+### 2026-10-15 · `e24f453..a9445d9` (#5, #6, #7)
+
+| | Commit | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `e24f4538e88320993d7cd5497239f3bf8a776786` | 2026-10-14T15:39:21Z | feat: streaming seal, open and heal; segment-size benchmark (#4) |
+| Tip | `a9445d9a32dcafe4a8bd018e4280e03411ce6a12` | 2026-10-15T00:34:56Z | docs: freeze the v1 format; changelog; first full code and security reviews (#7) |
+
+- **Scope:** 3 commits (`git rev-list --count e24f453..a9445d9`), 25 files,
+  +942/−80 (`git diff --shortstat e24f453 a9445d9`). Code: #6's change to
+  `crates/` (6 files, +335/−40), `bench/heal-check.sh` (#5) and the `vectors`
+  CI job (#7); the rest is docs. Base equals the previous entry's Tip. Only the
+  committed range is covered; the uncommitted code-review log edits in the
+  working tree are not.
+- **Method:** a fresh agent read the range diff directly against
+  `spec/threat-model.md`, `spec/scenarios.md` and the hostile-store model in
+  `crates/neoblast/src/store.rs`, and ran 10 hostile-store cases against a
+  release build of `a9445d9`. A second fresh agent then checked each finding:
+  S-005 reproduced twice with the release CLI, S-006 and S-007 confirmed from
+  the history and commit metadata.
+- **Findings:** 3 (0 high, 0 medium, 3 low), none blocking v0.0.1, in
+  [`plans/todo/security-review-s-series.md`](../../plans/todo/security-review-s-series.md):
+  - **S-005 (Low, open):** rejecting a planted manifest just under the 256 MiB
+    cap costs about 3.2 times its size in memory (about 822 MiB) before the root
+    check (`crates/neoblast/src/manifest.rs:76-84` and `:92-102`). Bounded, and no worse than
+    an honest file with the same parameters.
+  - **S-006 (Low, open):** S-001's exploit details were public on `main` for
+    about 5.5 hours before its fix. Process gap; no release was affected.
+  - **S-007 (Low, open):** GitHub's squash merges replace the project's UTC,
+    signed commit metadata with the merger's, including a local time-zone
+    offset.
+- **Checked, no finding:**
+  - S-001's fix holds within its model (races excluded): a shard hard-linked
+    to an outside file, a shard path that is a directory, a `seg-*` entry that
+    is a file or a symlink, `manifest.nbl` as a symlink, a dangling symlink or
+    a FIFO, and `seal --force` over planted symlinks and hard links. Nothing
+    outside the store was read, written or truncated, and nothing blocked.
+  - `replace_file` removes its temporary file only after creating it.
+  - `open_regular` refuses symlinks, FIFOs, sockets and devices for both the
+    segment directory and the file; on Windows, junctions are reported as
+    symlinks and refused too.
+  - The W-001 cap is checked before any allocation on every read path, and
+    `read_manifest` is the only place a manifest is read. The remaining cost is
+    S-005, plus W-006 in the library.
+  - `seal --force` validates the parameters and the manifest size before it
+    removes the old manifest.
+  - `Header::new`'s new ordering has no panic path.
+  - The `vectors` CI job: checkout pinned to the same SHA as the other jobs,
+    `contents: read`, `pull_request` trigger, no `${{ }}` in `run:`. It is a
+    tripwire, not a control, since a PR can change a file and its hash
+    together.
+  - New errors show store paths and lengths, never links. The CHANGELOG's
+    security bullets match the code.
+  - Correction to the previous entry: "Manifest size is checked before it is
+    read" held only for a manifest whose size disagreed with its own header
+    (W-001); since #6 it holds in general.
+  - Suggested, not filed: a regression test with a symlink or FIFO at
+    `manifest.nbl` (W-008's area), and a threat-model row for a hostile local
+    store. Races while healing a store others can write to are out of scope.
+- **Carried-over items:** S-001 fixed in `9a542da` (#6); S-002, S-003 and S-004
+  still open, unchanged in the range. The code-review findings W-003 and W-004
+  (a hostile store can stop heal) stay low, with no security ID.
 
 ### 2026-10-14 · Full history (first security review)
 
