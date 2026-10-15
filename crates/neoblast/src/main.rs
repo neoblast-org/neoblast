@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use neoblast::store::DirStore;
-use neoblast::{FileReadCap, FileVerifyCap, Params};
+use neoblast::store::{DirStore, MAX_MANIFEST_LEN, manifest_len};
+use neoblast::{FileReadCap, FileVerifyCap, Header, Params};
 
 /// Censorship-resistant storage. Experimental and not audited.
 #[derive(Parser)]
@@ -83,6 +83,20 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             force,
         } => {
             let mut store = DirStore::new(&out);
+            let params = Params { k, n, segment_size };
+            let mut file = File::open(&input)?;
+            let meta = file.metadata()?;
+            // The header (bound into every segment) needs the length up front.
+            // A regular file is streamed; a pipe or device is read into memory first.
+            let (len, piped) = if meta.is_file() {
+                (meta.len(), None)
+            } else {
+                let mut data = Vec::new();
+                file.read_to_end(&mut data)?;
+                (data.len() as u64, Some(data))
+            };
+            // Everything that can refuse the input runs before the store is touched.
+            check_manifest_fits(len, params)?;
             if !store.is_empty()? {
                 if !force {
                     return Err(format!(
@@ -95,23 +109,9 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 // complete file, even if this seal fails part-way.
                 store.remove_manifest()?;
             }
-            let params = Params { k, n, segment_size };
-            let mut file = File::open(&input)?;
-            let meta = file.metadata()?;
-            // The header (bound into every segment) needs the length up front.
-            // A regular file is streamed; a pipe or device is read into memory first.
-            let (len, (cap, manifest)) = if meta.is_file() {
-                let len = meta.len();
-                let sealed = neoblast::seal_stream(BufReader::new(file), len, params, &mut store)?;
-                (len, sealed)
-            } else {
-                let mut data = Vec::new();
-                file.read_to_end(&mut data)?;
-                let len = data.len() as u64;
-                (
-                    len,
-                    neoblast::seal_stream(&data[..], len, params, &mut store)?,
-                )
+            let (cap, manifest) = match piped {
+                None => neoblast::seal_stream(BufReader::new(file), len, params, &mut store)?,
+                Some(data) => neoblast::seal_stream(&data[..], len, params, &mut store)?,
             };
             store.write_manifest(&manifest)?;
             let h = manifest.header();
@@ -144,6 +144,21 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     Ok(())
+}
+
+/// Refuses, before anything is written, a file whose manifest would be too
+/// large for `open` and `heal` to read back (review W-001).
+fn check_manifest_fits(len: u64, params: Params) -> Result<(), Box<dyn std::error::Error>> {
+    let header = Header::new(len, params.k, params.n, params.segment_size)?;
+    match manifest_len(&header) {
+        Some(bytes) if bytes <= MAX_MANIFEST_LEN => Ok(()),
+        _ => Err(format!(
+            "a {len}-byte file needs a manifest over {} MiB at this segment size; \
+             use a larger --segment-size",
+            MAX_MANIFEST_LEN / (1024 * 1024)
+        )
+        .into()),
+    }
 }
 
 /// Writes to a new hidden file next to `out` (`.<name>.<pid>.partial`) and

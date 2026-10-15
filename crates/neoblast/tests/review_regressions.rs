@@ -160,3 +160,144 @@ fn decision_0006_rules_agree_across_crates() {
         neoblast_erasure::MIN_K
     );
 }
+
+// Findings of the first full code and security reviews (2026-10-14), from the
+// worklists in `plans/`. They use a real directory, because `DirStore` is the fix.
+
+mod dir {
+    use std::fs;
+    use std::path::PathBuf;
+
+    /// A fresh scratch directory under the target directory.
+    pub fn scratch(name: &str) -> PathBuf {
+        let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// Seals 3 KB 2-of-4 into `<dir>/store`; returns the cap, store and manifest.
+    /// Only the unix tests (symlinks, FIFOs) use it.
+    #[cfg(unix)]
+    pub fn sealed(
+        dir: &std::path::Path,
+    ) -> (neoblast::FileReadCap, neoblast::store::DirStore, Vec<u8>) {
+        use neoblast::store::DirStore;
+        use neoblast::{Params, seal_stream};
+        let mut store = DirStore::new(dir.join("store"));
+        let data = vec![7u8; 3000];
+        let params = Params {
+            k: 2,
+            n: 4,
+            segment_size: 1024,
+        };
+        let (cap, manifest) = seal_stream(&data[..], 3000, params, &mut store).unwrap();
+        store.write_manifest(&manifest).unwrap();
+        let manifest = store.read_manifest().unwrap();
+        (cap, store, manifest)
+    }
+}
+
+/// S-001: a symlink planted in place of a shard is replaced by the rebuilt shard;
+/// heal never writes through it, whether its target exists or not.
+#[cfg(unix)]
+#[test]
+fn s001_heal_replaces_planted_symlinks_instead_of_following_them() {
+    use std::os::unix::fs::symlink;
+    let tmp = dir::scratch("s001-symlink");
+    let (cap, store, manifest) = dir::sealed(&tmp);
+    let victim = tmp.join("victim.txt");
+    std::fs::write(&victim, b"must not change").unwrap();
+    let absent = tmp.join("absent.txt");
+    let good = std::fs::read(store.shard_path(0, 0)).unwrap();
+    std::fs::remove_file(store.shard_path(0, 0)).unwrap();
+    symlink(&victim, store.shard_path(0, 0)).unwrap();
+    std::fs::remove_file(store.shard_path(1, 0)).unwrap();
+    symlink(&absent, store.shard_path(1, 0)).unwrap();
+
+    let rebuilt =
+        neoblast::heal_stream(&cap.verify_cap(), &manifest, &store, &mut store.clone()).unwrap();
+    assert_eq!(rebuilt, 2);
+    assert_eq!(std::fs::read(&victim).unwrap(), b"must not change");
+    assert!(!absent.exists());
+    let meta = std::fs::symlink_metadata(store.shard_path(0, 0)).unwrap();
+    assert!(meta.is_file());
+    assert_eq!(std::fs::read(store.shard_path(0, 0)).unwrap(), good);
+}
+
+/// S-001: a segment directory that is a symlink is neither read nor written:
+/// open cannot use the shards behind it, and heal writes nothing there.
+#[cfg(unix)]
+#[test]
+fn s001_heal_refuses_a_symlinked_segment_directory() {
+    use std::os::unix::fs::symlink;
+    let tmp = dir::scratch("s001-segment-dir");
+    let (cap, store, manifest) = dir::sealed(&tmp);
+    // The segment moves outside the store, one shard short, behind a symlink:
+    // heal can read the other three, so it would write the fourth out there.
+    let outside = tmp.join("outside");
+    let segment = store.shard_path(0, 0).parent().unwrap().to_owned();
+    std::fs::rename(&segment, &outside).unwrap();
+    std::fs::remove_file(outside.join("000.shard")).unwrap();
+    symlink(&outside, &segment).unwrap();
+
+    let mut out = Vec::new();
+    assert!(neoblast::open_stream(&cap, &manifest, &store, &mut out).is_err());
+    assert!(
+        neoblast::heal_stream(&cap.verify_cap(), &manifest, &store, &mut store.clone()).is_err()
+    );
+    assert!(!outside.join("000.shard").exists());
+    assert_eq!(std::fs::read_dir(&outside).unwrap().count(), 3);
+}
+
+/// S-001: a FIFO in place of a shard is treated as missing, so heal and open
+/// finish instead of blocking on it.
+#[cfg(unix)]
+#[test]
+fn s001_a_fifo_shard_does_not_hang_heal_or_open() {
+    use std::sync::mpsc;
+    use std::time::Duration;
+    let tmp = dir::scratch("s001-fifo");
+    let (cap, store, manifest) = dir::sealed(&tmp);
+    std::fs::remove_file(store.shard_path(0, 0)).unwrap();
+    let made = std::process::Command::new("mkfifo")
+        .arg(store.shard_path(0, 0))
+        .status()
+        .unwrap();
+    assert!(made.success());
+
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut out = Vec::new();
+        let opened = neoblast::open_stream(&cap, &manifest, &store, &mut out).is_ok();
+        let healed =
+            neoblast::heal_stream(&cap.verify_cap(), &manifest, &store, &mut store.clone());
+        tx.send((opened, out == vec![7u8; 3000], healed.ok()))
+            .unwrap();
+    });
+    let result = rx.recv_timeout(Duration::from_secs(20));
+    assert_eq!(
+        result,
+        Ok((true, true, Some(1))),
+        "heal or open hung on a FIFO"
+    );
+}
+
+/// W-001: a manifest larger than `MAX_MANIFEST_LEN` is refused before it is
+/// read, even when its size matches its own header (a sparse file costs an
+/// attacker nothing).
+#[test]
+fn w001_an_oversized_manifest_is_refused_unread() {
+    use neoblast::store::{DirStore, MANIFEST_FILE, MAX_MANIFEST_LEN, manifest_len};
+    let tmp = dir::scratch("w001-manifest");
+    // 64-byte segments with n = 128: about 4 KiB of hashes per 64 bytes of file.
+    let header = Header::new(5_000_000, 2, 128, 64).unwrap();
+    let len = manifest_len(&header).unwrap();
+    assert!(len > MAX_MANIFEST_LEN);
+    let file = std::fs::File::create(tmp.join(MANIFEST_FILE)).unwrap();
+    std::io::Write::write_all(&mut &file, &header.encode()).unwrap();
+    file.set_len(len).unwrap();
+
+    let err = DirStore::new(&tmp).read_manifest().unwrap_err();
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+}

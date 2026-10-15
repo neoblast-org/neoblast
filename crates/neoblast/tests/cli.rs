@@ -252,6 +252,50 @@ fn oversized_shard_and_manifest_files_are_refused() {
     assert!(dir_store.read_manifest().is_err());
 }
 
+#[test]
+fn seal_refuses_a_file_whose_manifest_open_could_not_read() {
+    // Code-review W-001: open and heal refuse manifests over MAX_MANIFEST_LEN,
+    // so seal refuses to make one, before writing anything.
+    let dir = scratch("cli-manifest-too-large");
+    let input = dir.join("big.bin");
+    fs::write(&input, vec![0u8; 5_000_000]).unwrap();
+    let store = dir.join("store");
+    let out = neoblast(&[
+        "seal",
+        input.to_str().unwrap(),
+        "--out",
+        store.to_str().unwrap(),
+        "--k",
+        "2",
+        "--n",
+        "128",
+        "--segment-size",
+        "64",
+    ]);
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("--segment-size"));
+    assert!(!store.exists());
+
+    // Nor does --force remove an existing store's manifest first.
+    let (_, existing) = sealed_store(&dir);
+    let before = fs::read(existing.join("manifest.nbl")).unwrap();
+    let out = neoblast(&[
+        "seal",
+        input.to_str().unwrap(),
+        "--out",
+        existing.to_str().unwrap(),
+        "--force",
+        "--k",
+        "2",
+        "--n",
+        "128",
+        "--segment-size",
+        "64",
+    ]);
+    assert!(!out.status.success());
+    assert_eq!(fs::read(existing.join("manifest.nbl")).unwrap(), before);
+}
+
 #[cfg(unix)]
 #[test]
 fn seal_reads_a_pipe() {

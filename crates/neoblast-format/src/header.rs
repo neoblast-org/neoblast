@@ -100,8 +100,13 @@ impl Header {
             .checked_add(LENGTH_PREFIX)
             .ok_or(HeaderError::Layout)?;
         let padded_length = layout::padme(framed);
-        let segment_count = layout::segment_count(padded_length, segment_size)
-            .ok_or(HeaderError::SegmentSize(segment_size))?;
+        if !(MIN_SEGMENT_SIZE..=MAX_SEGMENT_SIZE).contains(&segment_size) {
+            return Err(HeaderError::SegmentSize(segment_size));
+        }
+        // An in-range size can still give more segments than fit in a u32
+        // (review W-002): that is a layout error, not a bad segment size.
+        let segment_count =
+            layout::segment_count(padded_length, segment_size).ok_or(HeaderError::Layout)?;
         let shard_size =
             layout::shard_len(u64::from(segment_size), k).ok_or(HeaderError::Layout)?;
         let header = Self {
@@ -286,6 +291,18 @@ mod tests {
     fn round_trip_default_params() {
         let h = Header::new(1_000_000, 20, 50, 4 * 1024 * 1024).unwrap();
         assert_eq!(Header::decode(&h.encode()).unwrap(), h);
+    }
+
+    #[test]
+    fn too_many_segments_is_a_layout_error_not_a_bad_segment_size() {
+        // Code-review W-002: 300 GiB in 64-byte segments needs more than
+        // u32::MAX segments; the in-range segment size is not the problem.
+        let len = 300 * 1024 * 1024 * 1024;
+        assert_eq!(Header::new(len, 2, 3, 64), Err(HeaderError::Layout));
+        assert_eq!(
+            Header::new(1000, 2, 3, 32),
+            Err(HeaderError::SegmentSize(32))
+        );
     }
 
     #[test]
