@@ -1,8 +1,9 @@
 # Code-review worklist (W-series)
 
 Status: todo. Opened 2026-10-14 by the first `/review-since` (empty tree to
-`e24f453`). Neither item blocks v0.0.1: both need a `crates/` change, so they
-land in v0.0.2 after the tag, with the 24 h fuzz campaign that release needs.
+`e24f453`). Neither item blocked v0.0.1 on its own, but both are fixed in the
+pre-release code change that S-001 required (#6), since that change
+restarts the fuzz campaign anyway (`plans/todo/phase-1-finish.md`, A0).
 
 ## Success criteria
 
@@ -10,7 +11,8 @@ land in v0.0.2 after the tag, with the 24 h fuzz campaign that release needs.
    but far larger than any plausible file (for example a sparse 16 TiB
    `manifest.nbl`) makes `neoblast open` and `neoblast heal` fail with a clean
    error. Peak memory stays bounded, not proportional to the declared size. A
-   regression test plants such a file (sparse, so the test stays cheap).
+   regression test plants such a file (sparse, so the test stays cheap). Seal
+   refuses, before writing anything, a file whose manifest would exceed the cap.
 2. W-002: sealing a file whose segment count would not fit in a `u32` reports
    that the file is too large for the chosen segment size. It does not report
    that the segment size is out of range when that size is in range. A unit
@@ -43,7 +45,7 @@ land in v0.0.2 after the tag, with the 24 h fuzz campaign that release needs.
   CLI. A sparse manifest declaring 2 GiB made `heal` peak at 2.5 GB before the
   root check failed; a sparse 15.9 TiB one grew memory by about 0.5 GB/s until
   killed. `Manifest::decode` (`manifest.rs:64-87`) makes a second full copy.
-- Status: open.
+- Status: fixed in #6 (`fix/hostile-store`).
 
 ### W-002 (low): wrong error when a file has too many segments
 
@@ -58,4 +60,4 @@ land in v0.0.2 after the tag, with the 24 h fuzz campaign that release needs.
   `neoblast-format`, whose `HeaderError` is not `#[non_exhaustive]`.
 - Verified (fresh agent, 2026-10-14): confirmed; `seal` of a sparse 300 GiB file
   with `--segment-size 64` printed "segment size 64 outside 64..=67108864".
-- Status: open.
+- Status: fixed in #6 (`fix/hostile-store`).

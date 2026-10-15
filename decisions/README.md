@@ -22,7 +22,7 @@ decision gets a new record that supersedes the old one.
 3. **Check licences** before copying anything. MIT, Apache-2.0, BSD and CC0 code may be used with attribution. GPL, AGPL and TGPPL projects (Tahoe-LAFS, Hyphanet, Storj's server, Peergos) are for ideas only.
 4. **Spike** for at most two evenings in throwaway code that answers one measurable question.
 5. **Decide** using a rule written down *before* the spike's result is known.
-6. **Propagate** to `spec/` and regenerate test vectors if bytes changed.
+6. **Propagate** to `spec/`. If bytes change, that is a new format: a new magic, suite or link version byte and a new vector file, since the v1 vectors are frozen.
 
 ## The blast-radius rule for dependencies
 

@@ -1,7 +1,10 @@
 # Segment-size decision (ROADMAP open item 2)
 
-Status: todo, for v0.0.2. Waiting on the reference run after the heal memory fix
-(branch `perf/heal-memory`), which lands after v0.0.1.
+Status: todo, for v0.0.2. The heal memory fix on `exp/heal-reuse` lowered heal's
+peak but did not stop it growing with the file (`phase-1-finish.md`, A3
+results), so it and this decision are not in v0.0.1. First find what still
+grows. At 4 MiB segments, heal on a 1 GiB file already exceeds the 32 MiB rule,
+with or without that fix.
 
 ## Success criteria
 
@@ -18,7 +21,7 @@ Status: todo, for v0.0.2. Waiting on the reference run after the heal memory fix
    because a long-running process pays it once for all its operations.
 4. Runs at both 256 MiB and 1 GiB show working memory does not grow with the
    file size. (The first reference runs showed heal growing on macOS, from
-   10.9 to 24.7 MiB at 1 MiB segments; that is fixed before the decision.)
+   10.9 to 24.7 MiB at 1 MiB segments; that must be fixed before the decision.)
 
 ## Precedent to match
 

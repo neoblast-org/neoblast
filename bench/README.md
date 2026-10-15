@@ -30,5 +30,18 @@ holds no host name, user name or path. It needs about 4.6× the file size in
 free disk space while it runs (the input, the shards, and one recovered copy);
 everything is deleted afterwards, including after Ctrl-C.
 
+## Heal memory check
+
+```sh
+bench/heal-check.sh                   # 256 and 1024 MiB files; 1 and 4 MiB segments
+```
+
+Seals a random file, deletes n − k = 30 shards in every segment, heals, and
+prints peak memory (and, on macOS, peak memory footprint) for each file and
+segment size. Heal's working memory must not grow with the file size. Prints
+only; it writes no record.
+
+## Reference machine
+
 The reference machine for decisions is the maintainer's Apple Silicon Mac.
 Commit its record together with the decision it supports.

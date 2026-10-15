@@ -46,7 +46,9 @@ that fixed it.
   changes every target's `code_id` and needs a new 24 h campaign. The
   alternative is to ship v0.0.1 with this listed as a known issue and fix it in
   v0.0.2; that is the maintainer's call.
-- **Status:** open.
+- **Status:** fixed in #6 (`fix/hostile-store`). Regression tests: the `s001_*` tests in
+  `crates/neoblast/tests/review_regressions.rs`, each confirmed to fail on
+  `e24f453`.
 
 ## Low
 

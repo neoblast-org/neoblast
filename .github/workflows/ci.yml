@@ -34,6 +34,20 @@ jobs:
       - name: Golden vectors unchanged
         run: git diff --exit-code spec/test-vectors
 
+  vectors:
+    # The v1 vectors were frozen at the Phase 1 gate (spec/test-vectors/README.md).
+    # A format change gets a new magic or suite byte and its own vector file;
+    # these two files never change, so their hashes are pinned here.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Frozen v1 vectors unchanged
+        run: |
+          sha256sum --check --strict <<'EOF'
+          4136f00ec286fbffd127e6ee1a2eb76a1032f2f9c16d627753ac426ee7d9be49  spec/test-vectors/phase1.json
+          1b58fc1a0f3e79e542a007373d215f997f745b9024ff8505d40204b49a978ba6  spec/test-vectors/erasure-leopard.json
+          EOF
+
   deny:
     runs-on: ubuntu-latest
     steps:
