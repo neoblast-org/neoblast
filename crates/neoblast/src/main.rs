@@ -9,7 +9,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use neoblast::store::{DirStore, MAX_MANIFEST_LEN};
-use neoblast::{FileReadCap, FileVerifyCap, Params};
+use neoblast::{FileReadCap, FileVerifyCap, Manifest, Params};
 use neoblast_format::HeaderError;
 
 /// Censorship-resistant storage. Experimental and not audited.
@@ -134,16 +134,18 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         Command::Open { link, from, out } => {
             let cap = FileReadCap::parse(&link)?;
             let store = DirStore::new(&from);
-            let manifest = store.read_manifest()?;
-            let len =
-                write_atomically(&out, |w| neoblast::open_stream(&cap, &manifest, &store, w))?;
+            // Taken over, not copied, so the manifest is in memory once.
+            let manifest = Manifest::decode_owned(store.read_manifest()?, &cap.root)?;
+            let len = write_atomically(&out, |w| {
+                neoblast::open_manifest(&cap, &manifest, &store, w)
+            })?;
             eprintln!("recovered {len} bytes to {}", out.display());
         }
         Command::Heal { link, from } => {
             let cap = FileVerifyCap::parse(&link)?;
             let store = DirStore::new(&from);
-            let manifest = store.read_manifest()?;
-            let rebuilt = neoblast::heal_stream(&cap, &manifest, &store, &mut store.clone())?;
+            let manifest = Manifest::decode_owned(store.read_manifest()?, &cap.root)?;
+            let rebuilt = neoblast::heal_manifest(&cap, &manifest, &store, &mut store.clone())?;
             eprintln!("rebuilt {rebuilt} shard(s) without the read key");
         }
     }

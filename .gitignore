@@ -1,5 +1,7 @@
 /target
 /fuzz/target
+/bench/heal-heap/target
+/bench/heal-heap/dhat-heap.json
 /fuzz/corpus
 /fuzz/artifacts
 /fuzz/logs

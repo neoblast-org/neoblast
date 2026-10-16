@@ -409,6 +409,77 @@ fn open_stream_reads_one_more_shard_per_bad_data_shard() {
     assert_eq!(source.1.get(), 3 * sealed.shards.len() + 1);
 }
 
+/// A manifest decoded on its own works the same as one passed as bytes, and
+/// one that belongs to another file is refused before anything is read.
+#[test]
+fn open_and_heal_from_a_decoded_manifest() {
+    /// Counts reads.
+    struct Counting(MemStore, Cell<usize>);
+    impl ShardSource for Counting {
+        fn get(&self, segment: u32, index: u16, len: usize) -> Option<Vec<u8>> {
+            self.1.set(self.1.get() + 1);
+            self.0.get(segment, index, len)
+        }
+    }
+    /// Counts rebuilt shards (`Collect` expects every shard of a seal in order).
+    #[derive(Default)]
+    struct Count(usize);
+    impl ShardSink for Count {
+        fn put(&mut self, _: u32, _: u16, _: &[u8]) -> io::Result<()> {
+            self.0 += 1;
+            Ok(())
+        }
+    }
+    let params = Params {
+        k: 3,
+        n: 5,
+        segment_size: 256,
+    };
+    let data = payload(1000, 4);
+    let sealed = seal_with_key(&data, params, &KEY).unwrap();
+    let bytes = sealed.manifest.encode();
+    let manifest = Manifest::decode_owned(bytes.clone(), &sealed.cap.root).unwrap();
+    assert_eq!(manifest, sealed.manifest);
+    let mut store = MemStore::from_sealed(&sealed);
+    assert_eq!(manifest.as_bytes(), &bytes[..]);
+
+    let mut out = Vec::new();
+    neoblast::open_manifest(&sealed.cap, &manifest, &store, &mut out).unwrap();
+    assert_eq!(out, data);
+
+    store.0.remove(&(1, 0));
+    let mut rebuilt = Count::default();
+    let healed =
+        neoblast::heal_manifest(&sealed.cap.verify_cap(), &manifest, &store, &mut rebuilt).unwrap();
+    assert_eq!(healed, 1);
+    assert_eq!(
+        heal_stream(
+            &sealed.cap.verify_cap(),
+            &bytes,
+            &store,
+            &mut Count::default()
+        )
+        .unwrap(),
+        1
+    );
+
+    let other = seal_with_key(&data, params, &[8u8; 32]).unwrap();
+    let counting = Counting(store, Cell::new(0));
+    let mut out = Vec::new();
+    let err = neoblast::open_manifest(&other.cap, &manifest, &counting, &mut out).unwrap_err();
+    assert!(matches!(err, Error::RootMismatch), "{err:?}");
+    assert!(out.is_empty());
+    let err = neoblast::heal_manifest(&other.cap.verify_cap(), &manifest, &counting, &mut rebuilt)
+        .unwrap_err();
+    assert!(matches!(err, Error::RootMismatch), "{err:?}");
+    assert_eq!(counting.1.get(), 0, "a shard was read");
+    assert_eq!(rebuilt.0, 1, "a shard was written");
+    assert!(matches!(
+        Manifest::decode_owned(bytes, &other.cap.root),
+        Err(Error::RootMismatch)
+    ));
+}
+
 #[test]
 fn writer_and_sink_errors_surface_as_io_errors() {
     struct Broken;

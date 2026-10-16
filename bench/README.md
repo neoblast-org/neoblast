@@ -41,6 +41,20 @@ prints peak memory (and, on macOS, peak memory footprint) for each file and
 segment size. Heal's working memory must not grow with the file size. Prints
 only; it writes no record.
 
+## Heal heap check
+
+```sh
+bench/heal-heap.sh                    # 256 and 1024 MiB files; 1 and 4 MiB segments
+```
+
+Counts heal's peak live heap exactly, with dhat (`bench/heal-heap/`, a small
+crate outside the workspace, like `fuzz/`), instead of reading the resident set
+size, which varies by several MiB between identical runs. Each file is sealed,
+then healed with n − k = 30 shards of every segment treated as missing; the
+store is only read. For each segment size, heal's growth from the smallest file
+to each larger one must not exceed the manifest's own growth by more than
+64 KiB (`ok` or `GROWS`, and the exit status). Prints only; it writes no record.
+
 ## Reference machine
 
 The reference machine for decisions is the maintainer's Apple Silicon Mac.

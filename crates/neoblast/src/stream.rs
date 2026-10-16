@@ -2,7 +2,10 @@
 //!
 //! Peak memory depends on the segment size and k/n, not on the file size,
 //! apart from the manifest's shard hashes (`n × 32` bytes per segment, about
-//! 0.04% of the file at 4 MiB segments and 20-of-50). The
+//! 0.04% of the file at 4 MiB segments and 20-of-50). [`open_manifest`] and
+//! [`heal_manifest`] hold that manifest once: [`Manifest`] keeps its encoding,
+//! which [`Manifest::decode_owned`] takes over from the caller. [`open_stream`]
+//! and [`heal_stream`] take the manifest's bytes and decode a copy. The
 //! in-memory [`seal`](crate::seal), [`open`](crate::open) and [`heal`](crate::heal)
 //! are thin wrappers over these functions, so both paths produce identical bytes.
 //!
@@ -23,7 +26,7 @@ use zeroize::Zeroizing;
 
 use crate::file::{Error, Params};
 use crate::manifest::Manifest;
-use crate::tree::{self, Hash};
+use crate::tree;
 
 /// Somewhere shards can be written: a directory now, peers in Phase 2.
 pub trait ShardSink {
@@ -31,7 +34,7 @@ pub trait ShardSink {
     fn put(&mut self, segment: u32, index: u16, bytes: &[u8]) -> io::Result<()>;
 
     /// Makes every shard stored so far durable. [`seal_stream`] and
-    /// [`heal_stream`] call it once, after the last `put` of a run that
+    /// [`heal_manifest`] call it once, after the last `put` of a run that
     /// succeeds; a caller using `put` directly calls it too. The default does
     /// nothing.
     fn finish(&mut self) -> io::Result<()> {
@@ -71,8 +74,9 @@ pub fn seal_stream_with_key(
     let k = usize::from(header.k());
     let n = usize::from(header.n());
     let mut remaining = payload_len;
-    // Grows segment by segment; never sized up front from a caller's length.
-    let mut hashes: Vec<Hash> = Vec::new();
+    // The manifest's encoding: grows segment by segment, never sized up front
+    // from a caller's length.
+    let mut manifest = header.encode().to_vec();
     // One buffer holds a segment's plaintext, then its ciphertext, then its k
     // zero-padded data shards. It starts as plaintext, so it is wiped on drop.
     let mut buf = Zeroizing::new(Vec::new());
@@ -104,7 +108,7 @@ pub fn seal_stream_with_key(
             .chunks_exact(shard_len)
             .chain(parity.iter().map(Vec::as_slice));
         for (shard, index) in shards.zip(0u16..) {
-            hashes.push(tree::shard_hash(shard));
+            manifest.extend_from_slice(&tree::shard_hash(shard));
             sink.put(segment, index, shard)?;
         }
     }
@@ -117,7 +121,7 @@ pub fn seal_stream_with_key(
         });
     }
     sink.finish()?;
-    let manifest = Manifest::from_flat(header, hashes)?;
+    let manifest = Manifest::from_encoding(manifest)?;
     let cap = FileReadCap {
         root: manifest.root(),
         read_key: *read_key,
@@ -126,7 +130,8 @@ pub fn seal_stream_with_key(
 }
 
 /// Opens a file segment by segment, writing the payload to `out`. Returns the
-/// payload length.
+/// payload length. Decodes a copy of `manifest_bytes`; [`open_manifest`] with
+/// [`Manifest::decode_owned`] holds the manifest once.
 ///
 /// Fetches shards in index order and stops at the first k that match the
 /// manifest, so an intact file is read from its data shards alone. On error,
@@ -135,9 +140,28 @@ pub fn open_stream(
     cap: &FileReadCap,
     manifest_bytes: &[u8],
     source: &impl crate::ShardSource,
+    out: impl Write,
+) -> Result<u64, Error> {
+    open_manifest(
+        cap,
+        &Manifest::decode(manifest_bytes, &cap.root)?,
+        source,
+        out,
+    )
+}
+
+/// [`open_stream`] with a manifest already decoded, for example by
+/// [`Manifest::decode_owned`] so that it is held only once. Fails with
+/// [`Error::RootMismatch`] if it is not the manifest of `cap`'s file.
+pub fn open_manifest(
+    cap: &FileReadCap,
+    manifest: &Manifest,
+    source: &impl crate::ShardSource,
     mut out: impl Write,
 ) -> Result<u64, Error> {
-    let manifest = Manifest::decode(manifest_bytes, &cap.root)?;
+    if manifest.root() != cap.root {
+        return Err(Error::RootMismatch);
+    }
     let header = *manifest.header();
     let cipher = SegmentCipher::new(&cap.read_key, &header);
     let k = usize::from(header.k());
@@ -147,7 +171,7 @@ pub fn open_stream(
 
     for segment in 0..header.segment_count() {
         let shard_len = shard_len(&header, segment)?;
-        let held = first_k_verified(&manifest, segment, source, k, shard_len);
+        let held = first_k_verified(manifest, segment, source, k, shard_len);
         let cipher_len = segment_len(header.segment_cipher_len(segment))?;
         let data: Vec<Vec<u8>> = if held.iter().take(k).all(Option::is_some) {
             // Every data shard is here: no decoding.
@@ -198,7 +222,8 @@ pub fn open_stream(
 
 /// Rebuilds every missing or corrupt shard using only the verify cap, handing
 /// each rebuilt shard to `sink` as soon as its segment is done. Returns how
-/// many shards were rebuilt.
+/// many shards were rebuilt. Decodes a copy of `manifest_bytes`;
+/// [`heal_manifest`] with [`Manifest::decode_owned`] holds the manifest once.
 ///
 /// A segment with fewer than k good shards is skipped, and so is a shard that
 /// `sink` fails to store (review W-003); everything else is still repaired.
@@ -213,7 +238,26 @@ pub fn heal_stream(
     source: &impl crate::ShardSource,
     sink: &mut impl ShardSink,
 ) -> Result<usize, Error> {
-    let manifest = Manifest::decode(manifest_bytes, &cap.root)?;
+    heal_manifest(
+        cap,
+        &Manifest::decode(manifest_bytes, &cap.root)?,
+        source,
+        sink,
+    )
+}
+
+/// [`heal_stream`] with a manifest already decoded, for example by
+/// [`Manifest::decode_owned`] so that it is held only once. Fails with
+/// [`Error::RootMismatch`] if it is not the manifest of `cap`'s file.
+pub fn heal_manifest(
+    cap: &FileVerifyCap,
+    manifest: &Manifest,
+    source: &impl crate::ShardSource,
+    sink: &mut impl ShardSink,
+) -> Result<usize, Error> {
+    if manifest.root() != cap.root {
+        return Err(Error::RootMismatch);
+    }
     let header = *manifest.header();
     let k = usize::from(header.k());
     let n = usize::from(header.n());
@@ -221,7 +265,7 @@ pub fn heal_stream(
     let mut first_failure = None;
     for segment in 0..header.segment_count() {
         let shard_len = shard_len(&header, segment)?;
-        let (held, missing) = verify_all(&manifest, segment, source, k, shard_len);
+        let (held, missing) = verify_all(manifest, segment, source, k, shard_len);
         if missing.is_empty() {
             continue;
         }

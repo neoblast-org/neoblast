@@ -10,6 +10,10 @@ the frozen v1 byte format).
 
 ### Added
 
+- `Manifest::decode_owned`, and `open_manifest` and `heal_manifest`, which take
+  a decoded manifest, so a caller that read the manifest holds it once. The
+  CLI uses them.
+- `bench/heal-heap.sh` counts heal's peak live heap exactly, with dhat.
 - `Params::header` plans a file's header and refuses parameters whose
   manifest would be larger than a store reads, with the new
   `Error::ManifestTooLarge`.
@@ -37,8 +41,13 @@ the frozen v1 byte format).
 - Rejecting a planted manifest costs little more than its own size: the root
   is computed from the raw bytes and compared before anything else is built.
   A 264 MB manifest that matches no link now peaks `heal` at 267 MB instead of
-  up to 862 MB, and an accepted manifest keeps its hashes in one flat list
-  (review S-005).
+  up to 862 MB (review S-005).
+- `heal` and `open` hold the manifest once, as its encoding, instead of two or
+  three copies. Heal's live heap now grows with the file only by the manifest
+  itself (`n × 32` bytes per segment), measured to the byte. Its peak RSS at
+  4 MiB segments is still above the 32 MiB working-memory target listed under
+  0.0.1's known issues, mostly memory the system allocator keeps; the
+  segment-size decision deals with that.
 - `seal` refuses a non-empty `--out` given without `--force` before it reads
   the input, so a piped input is no longer read into memory first (review
   W-005).

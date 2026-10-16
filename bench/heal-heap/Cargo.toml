@@ -1,0 +1,16 @@
+[package]
+name = "neoblast-heal-heap"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+# Measurement only: counts heal's peak live heap exactly, with dhat. Run it
+# through bench/heal-heap.sh. Outside the workspace, like fuzz/.
+[dependencies]
+dhat = "=0.3.3"
+neoblast = { path = "../../crates/neoblast" }
+
+# The same release settings as the workspace, so the CLI's heal is measured.
+[profile.release]
+lto = "thin"
+codegen-units = 1

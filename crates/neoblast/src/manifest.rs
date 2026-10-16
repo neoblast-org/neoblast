@@ -11,11 +11,14 @@ use crate::file::Error;
 use crate::tree::{self, Hash, TreeBuilder};
 
 /// A verified manifest.
+///
+/// Held as its encoding and nothing else, so a file's manifest is in memory
+/// once, and read in place.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Manifest {
     header: Header,
-    /// Every shard hash, segment by segment, `n` per segment.
-    hashes: Vec<Hash>,
+    /// The encoding: the header, then every shard hash, `n` per segment.
+    bytes: Vec<u8>,
     root: Hash,
 }
 
@@ -27,25 +30,22 @@ impl Manifest {
         {
             return Err(Error::Manifest);
         }
-        let root = compute_root(&header, hashes.iter().map(|s| s.iter().copied()))?;
-        Ok(Self {
-            header,
-            hashes: hashes.concat(),
-            root,
-        })
+        let mut bytes = Vec::with_capacity(encoded_len(&header).ok_or(Error::Manifest)?);
+        bytes.extend_from_slice(&header.encode());
+        hashes
+            .iter()
+            .flatten()
+            .for_each(|h| bytes.extend_from_slice(h));
+        Self::from_encoding(bytes)
     }
 
-    /// [`Manifest::new`] for hashes already listed segment by segment in one
-    /// list, as a streaming seal collects them.
-    pub(crate) fn from_flat(header: Header, hashes: Vec<Hash>) -> Result<Self, Error> {
-        let n = usize::from(header.n());
-        if Some(hashes.len()) != (header.segment_count() as usize).checked_mul(n) || n == 0 {
-            return Err(Error::Manifest);
-        }
-        let root = compute_root(&header, hashes.chunks_exact(n).map(|s| s.iter().copied()))?;
+    /// A manifest from its encoding, as a streaming seal builds it: the root
+    /// is computed, not checked.
+    pub(crate) fn from_encoding(bytes: Vec<u8>) -> Result<Self, Error> {
+        let (header, root) = parse(&bytes)?;
         Ok(Self {
             header,
-            hashes,
+            bytes,
             root,
         })
     }
@@ -69,19 +69,20 @@ impl Manifest {
         let at = usize::try_from(segment)
             .ok()?
             .checked_mul(n)?
-            .checked_add(usize::from(index))?;
-        self.hashes.get(at)
+            .checked_add(usize::from(index))?
+            .checked_mul(32)?
+            .checked_add(HEADER_LEN)?;
+        self.bytes.get(at..at.checked_add(32)?)?.try_into().ok()
     }
 
-    /// Encodes the manifest.
+    /// The manifest's encoding, as stored and as hashed into the root.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    /// Encodes the manifest: a copy of [`Manifest::as_bytes`].
     pub fn encode(&self) -> Vec<u8> {
-        let mut out =
-            Vec::with_capacity(HEADER_LEN.saturating_add(self.hashes.len().saturating_mul(32)));
-        out.extend_from_slice(&self.header.encode());
-        for h in &self.hashes {
-            out.extend_from_slice(h);
-        }
-        out
+        self.bytes.clone()
     }
 
     /// Decodes a manifest and checks it against the expected root.
@@ -90,33 +91,61 @@ impl Manifest {
     /// The root is computed from `bytes` as they are, one segment at a time,
     /// and compared before anything the size of the manifest is allocated, so
     /// rejecting a planted manifest costs little beyond `bytes` (review S-005).
+    /// [`Manifest::decode_owned`] keeps the bytes it is given instead of a copy.
     pub fn decode(bytes: &[u8], expected_root: &Hash) -> Result<Self, Error> {
-        let (head, rest) = bytes.split_at_checked(HEADER_LEN).ok_or(Error::Manifest)?;
-        let header = Header::decode(head).map_err(|_| Error::Manifest)?;
-        let n = usize::from(header.n());
-        let segments = usize::try_from(header.segment_count()).map_err(|_| Error::Manifest)?;
-        let want = n
-            .checked_mul(segments)
-            .and_then(|c| c.checked_mul(32))
-            .ok_or(Error::Manifest)?;
-        if rest.len() != want {
-            return Err(Error::Manifest);
-        }
-        let root = compute_root(
-            &header,
-            rest.chunks_exact(n.saturating_mul(32))
-                .map(|segment| segment.chunks_exact(32).map(to_hash)),
-        )?;
+        let (header, root) = parse(bytes)?;
         if &root != expected_root {
             return Err(Error::RootMismatch);
         }
         note_built();
         Ok(Self {
             header,
-            hashes: rest.chunks_exact(32).map(to_hash).collect(),
+            bytes: bytes.to_vec(),
             root,
         })
     }
+
+    /// [`Manifest::decode`] that takes `bytes` over as the manifest instead of
+    /// copying them, so a caller that read the manifest holds it only once.
+    /// Nothing the manifest's size is allocated, whether it is accepted or not.
+    pub fn decode_owned(bytes: Vec<u8>, expected_root: &Hash) -> Result<Self, Error> {
+        let (header, root) = parse(&bytes)?;
+        if &root != expected_root {
+            return Err(Error::RootMismatch);
+        }
+        Ok(Self {
+            header,
+            bytes,
+            root,
+        })
+    }
+}
+
+/// The encoded length for `header`: the header, then `n` hashes per segment.
+fn encoded_len(header: &Header) -> Option<usize> {
+    usize::try_from(header.segment_count())
+        .ok()?
+        .checked_mul(usize::from(header.n()))?
+        .checked_mul(32)?
+        .checked_add(HEADER_LEN)
+}
+
+/// Checks an encoding's header and length and computes its root, one segment
+/// at a time, without allocating anything its size.
+fn parse(bytes: &[u8]) -> Result<(Header, Hash), Error> {
+    let head = bytes.get(..HEADER_LEN).ok_or(Error::Manifest)?;
+    let header = Header::decode(head).map_err(|_| Error::Manifest)?;
+    if Some(bytes.len()) != encoded_len(&header) {
+        return Err(Error::Manifest);
+    }
+    let n = usize::from(header.n());
+    let rest = bytes.get(HEADER_LEN..).ok_or(Error::Manifest)?;
+    let root = compute_root(
+        &header,
+        rest.chunks_exact(n.saturating_mul(32))
+            .map(|segment| segment.chunks_exact(32).map(to_hash)),
+    )?;
+    Ok((header, root))
 }
 
 fn to_hash(bytes: &[u8]) -> Hash {
@@ -141,11 +170,11 @@ where
 
 #[cfg(test)]
 thread_local! {
-    /// How many decoded manifests built their list of hashes on this thread.
+    /// How many times [`Manifest::decode`] copied its input on this thread.
     static BUILT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
-/// Counts a built list of hashes for the tests below; does nothing outside tests.
+/// Counts a copy of the input for the tests below; does nothing outside tests.
 fn note_built() {
     #[cfg(test)]
     BUILT.set(BUILT.get() + 1);
@@ -157,12 +186,12 @@ mod tests {
     use crate::{Params, seal_with_key};
 
     /// S-005: a manifest that does not match the link's root is rejected
-    /// before its hashes are copied into a list, so a planted one near the
-    /// size cap costs little more than its own bytes. This marks only the hash
-    /// list; that nothing else sized by the manifest is built first is
-    /// measured, not tested (the peak memory in the S-005 status line).
+    /// before its bytes are copied, so a planted one near the size cap costs
+    /// little more than its own bytes. This marks only the copy; that nothing
+    /// else the manifest's size is allocated first is tested exactly in
+    /// `bench/heal-heap/tests/`.
     #[test]
-    fn s005_the_root_is_compared_before_the_hashes_are_listed() {
+    fn s005_the_root_is_compared_before_the_bytes_are_copied() {
         let params = Params {
             k: 2,
             n: 3,
@@ -181,6 +210,25 @@ mod tests {
         assert_eq!(BUILT.get(), 1);
         assert_eq!(decoded, sealed.manifest);
         assert_eq!(decoded.encode(), bytes);
+    }
+
+    /// `decode_owned` keeps the caller's buffer as the manifest: no copy, so
+    /// the CLI holds the manifest once.
+    #[test]
+    fn decode_owned_keeps_the_callers_bytes() {
+        let params = Params {
+            k: 2,
+            n: 3,
+            segment_size: 64,
+        };
+        let sealed = seal_with_key(&[5u8; 1000], params, &[1u8; 32]).unwrap();
+        let bytes = sealed.manifest.encode();
+        let at = bytes.as_ptr();
+        BUILT.set(0);
+        let decoded = Manifest::decode_owned(bytes, &sealed.cap.root).unwrap();
+        assert_eq!(decoded.as_bytes().as_ptr(), at);
+        assert_eq!(BUILT.get(), 0);
+        assert_eq!(decoded, sealed.manifest);
     }
 
     #[test]

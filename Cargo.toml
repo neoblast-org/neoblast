@@ -6,7 +6,7 @@ members = [
     "crates/neoblast-erasure",
     "crates/neoblast",
 ]
-exclude = ["fuzz"]
+exclude = ["fuzz", "bench/heal-heap"]
 
 [workspace.package]
 version = "0.0.1"

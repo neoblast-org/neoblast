@@ -3,8 +3,13 @@
 Status: todo, for v0.0.2 (step 6 of `plans/todo/v0.0.2.md`). The heal memory fix
 on `exp/heal-reuse` lowered heal's peak but did not stop it growing with the
 file (`plans/completed/phase-1-finish.md`, A3 results), so it and this decision
-are not in v0.0.1. First find what still grows. At 4 MiB segments, heal on a 1
-GiB file already exceeds the 32 MiB rule, with or without that fix.
+are not in v0.0.1. At 4 MiB segments, heal on a 1 GiB file already exceeds the
+32 MiB rule, with or without that fix.
+
+2026-10-16: what grew is found and fixed (#15, #16): heal now grows with the
+file only by its manifest, to the byte (`bench/heal-heap.sh`; Step 5 results
+in `plans/todo/v0.0.2.md`). Its working memory by RSS is still high at 4 MiB
+segments, mostly memory the system allocator keeps after blocks are freed.
 
 ## Success criteria
 
@@ -20,7 +25,9 @@ GiB file already exceeds the 32 MiB rule, with or without that fix.
    open from parity. The fixed ~11 MiB (program and codec tables) is excluded
    because a long-running process pays it once for all its operations.
 4. Runs at both 256 MiB and 1 GiB show working memory does not grow with the
-   file size. (The first reference runs showed heal growing on macOS, from
+   file size. (Heal's live heap grows only by the manifest, shown exactly by
+   `bench/heal-heap.sh` in #16; the step 6 RSS run must still confirm this
+   for every operation.) (The first reference runs showed heal growing on macOS, from
    10.9 to 24.7 MiB at 1 MiB segments; that must be fixed before the decision.)
 
 ## Precedent to match

@@ -140,13 +140,13 @@ impl DirStore {
             }
         }
         unsynced.sync()?;
-        self.write_manifest_bytes(&sealed.manifest.encode())
+        self.write_manifest_bytes(sealed.manifest.as_bytes())
     }
 
     /// Writes the verify manifest. Streaming seals call this after all shards.
     pub fn write_manifest(&self, manifest: &Manifest) -> io::Result<()> {
         check_len(manifest.header())?;
-        self.write_manifest_bytes(&manifest.encode())
+        self.write_manifest_bytes(manifest.as_bytes())
     }
 
     fn write_manifest_bytes(&self, bytes: &[u8]) -> io::Result<()> {

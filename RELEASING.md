@@ -8,12 +8,14 @@ All four crates (`neoblast`, `neoblast-format`, `neoblast-crypto`,
 1. **Bump the version** through a pull request:
    - In `Cargo.toml`, set `version` under `[workspace.package]` and the three
      `version = "..."` entries under `[workspace.dependencies]`.
-   - Update both lock files and commit them with the bump. Release builds use
-     `--locked`, and the fuzzing script refuses a stale `fuzz/Cargo.lock`.
+   - Update the three lock files and commit them with the bump. Release
+     builds use `--locked`, the fuzzing script refuses a stale
+     `fuzz/Cargo.lock`, and `bench/heal-heap.sh` builds with `--locked`.
 
      ```sh
      cargo update -w
      cargo update -w --manifest-path fuzz/Cargo.toml
+     cargo update -w --manifest-path bench/heal-heap/Cargo.toml
      ```
 
 2. **Tag** the merged commit on `main` with a signed tag, and push it:
