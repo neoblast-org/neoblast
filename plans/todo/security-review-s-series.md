@@ -3,7 +3,8 @@
 Status: todo. Opened 2026-10-14 by the first security review (empty tree to
 `e24f453`), logged in `docs/logs/security-review-log.md`. The second review
 (2026-10-15, `e24f453..a9445d9`) added S-005 to S-007, all low and none
-blocking v0.0.1.
+blocking v0.0.1. The third review (2026-10-16, `a9445d9..5393f67`) added S-008
+and S-009.
 
 IDs are unique across all worklists and continue from the highest S-number used.
 Each item has a status (open / fixed / won't fix) and, once fixed, the commit
@@ -157,7 +158,8 @@ that fixed it.
   The offset can reveal a maintainer's time zone, which matters for a
   censorship-resistance project. The pre-push hook cannot catch it, because
   the merge never passes through a client.
-- **Impact:** privacy only; no secret or personal email address is exposed.
+- **Impact:** privacy. It also let a maintainer's personal account into
+  commit metadata; see S-008.
 - **Fix:** merge so that the project's own commits land on `main` unchanged
   (for example a fast-forward of a squashed, UTC-stamped commit), or confirm
   where GitHub takes the offset from and set it to UTC. Rewriting the existing merges would need a force-push
@@ -165,4 +167,41 @@ that fixed it.
 - **Verified:** by reading the commit metadata of all merges on `main`.
 - **Release:** not blocking, but decide the merge method before tagging, since
   the release commit will be one of these merges.
-- **Status:** open.
+- **Status:** open. #9 and #10 were re-made on `main` with the project's
+  identity (`36cb370`, `5393f67`); the merges up to #8 keep GitHub's metadata.
+  Merging by fast-forward avoids it from #11 on.
+
+### S-008 · Medium · A maintainer's personal account reached public history
+
+- **Where:** GitHub-side merge and branch-update commits made during the
+  release.
+- **Problem:** the GitHub CLI on the maintainer's machine was logged in to a
+  personal account. Actions taken through it on GitHub put that account's name
+  and address into commit metadata on `main` and onto GitHub's own records.
+- **Impact:** it links a maintainer's identity to the project, which the
+  threat model treats as sensitive (an author can be ordered or pressed).
+- **Fix:** on 2026-10-16 the maintainer re-made the affected commits on
+  `main` with the project's identity, moved the `v0.0.1` tag, re-created the
+  release as `neoblast-dev`, and deleted the merged branches. Still to do:
+  remove the remaining GitHub-side copies, and add a CI check that refuses any
+  commit identity other than the project's (the pre-push hook cannot see
+  merges made on GitHub).
+- **Verified:** by reading the commit metadata and the remote refs.
+- **Release:** v0.0.1 is tagged on the corrected commit.
+- **Status:** fixed on `main`; open until the GitHub-side copies are removed
+  and the CI check lands.
+
+### S-009 · Low · The 0.0.1 changelog left out that a hostile store can stop `heal`
+
+- **Where:** `CHANGELOG.md`, 0.0.1, Security and Known issues.
+- **Problem:** the Security section says a store directory is treated as
+  hostile, but the known issues omitted W-003 and W-004 (one planted path
+  ends the whole heal), W-005, and that `heal` also skips the disk sync
+  (W-007).
+- **Fix:** two known issues added (W-003 and W-004 together, and W-005) and
+  W-007's widened to `heal`, in the Phase 1 closing PR; the GitHub release
+  notes updated to match.
+- **Verified:** by comparing the changelog with the worklists and
+  `crates/neoblast/src/stream.rs`.
+- **Release:** not blocking (docs).
+- **Status:** fixed in the Phase 1 closing PR.

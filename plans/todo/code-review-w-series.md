@@ -3,13 +3,16 @@
 Status: todo. Opened 2026-10-14 by the first `/review-since` (empty tree to
 `e24f453`). Neither item blocked v0.0.1 on its own, but both are fixed in the
 pre-release code change that S-001 required (#6), since that change
-restarts the fuzz campaign anyway (`plans/todo/phase-1-finish.md`, A0).
+restarts the fuzz campaign anyway (`plans/completed/phase-1-finish.md`, A0).
 
 2026-10-15: the second `/review-since` (`e24f453..a9445d9`) added W-003 to
 W-012, all low or cleanup, none blocking v0.0.1. Every one except W-012 needs a
 change under `crates/`, and `fuzz/campaign.sh` takes the `code_id` from the
 whole `crates/` tree, tests included, so they wait for v0.0.2. W-012 is in
 `bench/` and can land during the campaign.
+
+2026-10-16: the third `/review-since` (`a9445d9..5393f67`, #8 to #10) added
+W-013 and W-014, both outside `crates/`; its CHANGELOG findings are S-009.
 
 ## Success criteria
 
@@ -229,4 +232,41 @@ by mutation, or (W-006, W-007, W-010, W-011) confirmed by reading the code.
 - Remediation: follow `segment-size.sh` (`|| { cat …; exit 1; }`).
 - Verified: reproduced with a stub binary.
 - Status: fixed in #10 (seal and heal errors are printed; a missing
-  `/usr/bin/time` or an unsupported OS is reported).
+  `/usr/bin/time` or an unsupported OS is reported). Checked by forcing a seal
+  failure and with a stub binary; `bench/` has no test harness, so criterion
+  3's regression test applies to fixes under `crates/` only.
+
+## Third review (2026-10-16, `a9445d9..5393f67`)
+
+Each finding below was checked by a fresh agent at `5393f67`.
+
+### W-013 (cleanup): `bench/heal-check.sh` assumes the default 20-of-50
+
+- Where: `bench/heal-check.sh:42` (seal without `--k`/`--n`) and `:51`
+  (deletes `range(30)` shards).
+- What: the script seals with the default parameters but deletes a fixed
+  n − k = 30 shards. `bench/segment-size.sh` pins `k=20 n=50` and derives the
+  deletions from them. The two scripts also repeat the same OS check, time
+  check, build step and RSS parsing.
+- Impact: if the defaults change, heal-check fails, or tests less than the
+  worst case.
+- Remediation: pass `--k 20 --n 50` and derive the deletions; optionally move
+  the shared steps into a sourced `bench/lib.sh`.
+- Verified: confirmed by reading. From #5.
+- Status: open.
+
+### W-014 (low): `fuzz/campaign.sh summary` counts overlapping runs twice
+
+- Where: `fuzz/campaign.sh:49` (sums `seconds_run` over every clean or stopped
+  record with the same `code_id`).
+- What: two stopped campaigns that ran at the same time on 2026-10-15 overlap
+  by about 1.3 h per target, and `summary` adds both. It shows 27.2 h where
+  about 25.9 h of wall-clock time ran. Nothing stops two campaigns starting at
+  once.
+- Impact: the hours shown can overstate the fuzzing done. The v0.0.1 gate is
+  unaffected, since each target's clean 24 h run meets it alone.
+- Remediation: merge overlapping intervals per target (or count only clean
+  runs toward the gate), say which in `fuzz/README.md`, and refuse to start a
+  second campaign while one is running.
+- Verified: confirmed against the records and `campaign.sh`.
+- Status: open.

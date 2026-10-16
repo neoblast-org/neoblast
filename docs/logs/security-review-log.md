@@ -1,6 +1,6 @@
 # Security Review Log
 
-<!-- baseline --> **Next review diffs from:** `a9445d9a32dcafe4a8bd018e4280e03411ce6a12` (`main`, recorded 2026-10-15)
+<!-- baseline --> **Next review diffs from:** `5393f6704b5059c4c8ecfbb6adc01718c13c4455` (`main`, recorded 2026-10-16)
 
 A running record of branch security reviews. Each entry records the exact commit range
 reviewed; the baseline marker line above is the machine-owned frontier the next
@@ -21,6 +21,50 @@ marker line; a frontier-moving entry's Base must equal the previous one's Tip un
 the entry explains why not.
 
 ## Entries
+
+### 2026-10-16 · `a9445d9..5393f67` (#8, #9, #10)
+
+| | Commit | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `a9445d9a32dcafe4a8bd018e4280e03411ce6a12` | 2026-10-15T00:34:56Z | docs: freeze the v1 format; changelog; first full code and security reviews (#7) |
+| Tip | `5393f6704b5059c4c8ecfbb6adc01718c13c4455` | 2026-10-16T06:38:16Z | docs: release v0.0.1 on 2026-10-16 (#10) |
+
+- **Scope:** 3 commits (`git rev-list --count a9445d9..5393f67`) and 24 files,
+  +783/−20 (`git diff --shortstat a9445d9 5393f67`): #8 (review logs and
+  worklists), #9 (15 fuzz records) and #10 (CHANGELOG date, decision 0004,
+  `bench/heal-check.sh`, plan). Nothing under `crates/`, the Cargo files, the
+  fuzz targets or `.github/`. Base equals the previous entry's Tip. Only the
+  committed range is covered.
+- **Method:** a fresh agent read the range against `spec/threat-model.md`,
+  `SECURITY.md` and CLAUDE.md, recomputed every fuzz record's `code_id`, and
+  checked the commit metadata and remote refs. A second fresh agent
+  confirmed both findings.
+- **Findings:** 2 (0 high, 1 medium, 1 low), in
+  [`plans/todo/security-review-s-series.md`](../../plans/todo/security-review-s-series.md):
+  - **S-008 (Medium):** a maintainer's personal account reached commit
+    metadata through GitHub-side actions during the release. Fixed on `main`
+    the same day; the remaining GitHub-side copies are being removed.
+  - **S-009 (Low):** the 0.0.1 known issues omitted that a hostile store can
+    stop `heal` (W-003, W-004). Fixed in the closing PR.
+- **Checked, no finding:**
+  - Within the range, no open medium-or-higher issue is described in public.
+  - The fuzz records hold no host, user or path data, and all are UTC.
+    Every record's `code_id` matches the release commit. Each target has a
+    clean 24 h run with no artifacts; the overlap in the stopped runs is
+    W-014.
+  - `bench/heal-check.sh`: `mktemp -d` with an exit trap, quoted paths. It
+    prints seal's and heal's stderr, which never contains the read link:
+    `seal` prints the read link on stdout only, and heal gets only the
+    verify link.
+  - The CHANGELOG's S-001, W-001, S-005 and fuzz claims, and decision
+    0004's new status, match the code and `spec/caps.md`.
+- **History note:** while the review ran, the last two commits of the range
+  were re-made on `main` with the project's identity and the same files
+  (S-007, S-008). The review read the earlier commits; their trees equal
+  `36cb370` and `5393f67`, so the Tip and the baseline name `5393f67`.
+- **Carried-over items:** S-002, S-003, S-004 and S-006 open and unchanged;
+  S-005 open, now listed in the CHANGELOG; S-007 open, with the last two
+  commits re-made with the project's identity.
 
 ### 2026-10-15 · `e24f453..a9445d9` (#5, #6, #7)
 

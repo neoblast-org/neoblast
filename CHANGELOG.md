@@ -58,9 +58,15 @@ not hide who published or read it ([`spec/threat-model.md`](spec/threat-model.md
   (review S-003).
 - Rejecting a planted manifest near the 256 MiB limit can take up to about
   820 MiB of memory before the clean error (review S-005).
-- `seal` does not sync the shards or the manifest to disk before it prints the
-  link, so a power loss soon after can leave them empty. Run `sync` before
-  deleting the original (review W-007).
+- A store directory from someone else can stop `heal` part-way: one planted
+  directory, or planted temporary-file names, at a shard's path ends the run,
+  so later segments are not repaired. No shard is lost, and `open` still works
+  from any k good shards (reviews W-003, W-004 and S-009).
+- `seal` reads a whole piped input into memory before it refuses a non-empty
+  `--out` given without `--force` (review W-005).
+- `seal` and `heal` do not sync shards or the manifest to disk before they
+  report success, so a power loss soon after can leave them empty. Run `sync`
+  before deleting the original or other copies (review W-007).
 - Memory has only been measured on macOS (Apple M5, `bench/results/` and
   `bench/heal-check.sh`). There, `heal`'s working memory grows with the file
   size: between a 256 MiB and a 1 GiB file it went from about 11 to 20 MiB with

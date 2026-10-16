@@ -7,8 +7,8 @@ stretches them.
 | Phase | What | Estimate | Gate |
 | --- | --- | --- | --- |
 | 0 · Spec and foundations | Threat model, reconciled spec, capability format, repo, CI | 2–3 weeks | Every format question resolved in `spec/` |
-| **1 · Crypto core** (current) | Committed header, segmented AEAD, erasure coding, offline `seal` / `open` / `heal` | 4–6 weeks | Golden vectors frozen; drop-any-(n−k) property tests pass; 24 h fuzzing per target with no crash, recorded in `fuzz/campaigns/` |
-| 2 · Publish and fetch (MVP) | P2P swarm on its own protocol IDs, NAT traversal, placement across providers, channel records on the Mainline DHT, donors and `neoblast pin` | 6–8 weeks | 20 nodes on 3+ networks; a file still fetches with n − k of its holders offline |
+| 1 · Crypto core (done: v0.0.1, 2026-10-16) | Committed header, segmented AEAD, erasure coding, offline `seal` / `open` / `heal` | 4–6 weeks | Golden vectors frozen; drop-any-(n−k) property tests pass; 24 h fuzzing per target with no crash, recorded in `fuzz/campaigns/` |
+| **2 · Publish and fetch (MVP)** (current) | P2P swarm on its own protocol IDs, NAT traversal, placement across providers, channel records on the Mainline DHT, donors and `neoblast pin` | 6–8 weeks | 20 nodes on 3+ networks; a file still fetches with n − k of its holders offline |
 | 3 · Healing and fair storage | Storage swaps with claims, chunk challenges, lazy repair, leases, per-node denylist | 6–8 weeks | A week-long churn test keeps every file above k + margin; repair bandwidth measured |
 | 4 · Blind search and collections | Unicode `NFKC_Casefold`, keyed-BLAKE3 trapdoors, salted manifests, collection caps | 4–6 weeks | Multi-script normalisation suite passes; written leakage analysis |
 | 5 · Reach | Browser WASM and Python first; Go, Swift and Kotlin on demand; public testnet; outside crypto review | Ongoing | All bindings pass the golden vectors |

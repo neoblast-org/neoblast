@@ -1,6 +1,6 @@
 # Code Review Log
 
-<!-- baseline --> **Next review diffs from:** `a9445d9a32dcafe4a8bd018e4280e03411ce6a12` (`main`, recorded 2026-10-15)
+<!-- baseline --> **Next review diffs from:** `5393f6704b5059c4c8ecfbb6adc01718c13c4455` (`main`, recorded 2026-10-16)
 
 A running record of code-review events: branch/pre-PR reviews, review worklists, and
 remediation programmes. Newest entry first. The baseline marker line above is the
@@ -27,6 +27,46 @@ merge-base fallback). Side-branch pre-PR reviews are logged as entries marked
 "frontier unchanged (side branch)" and never move the line.
 
 ## Entries
+
+### 2026-10-16: `a9445d9..5393f67` (#8, #9, #10)
+
+| | SHA | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `a9445d9a32dcafe4a8bd018e4280e03411ce6a12` | 2026-10-15 | docs: freeze the v1 format; changelog; first full code and security reviews (#7) |
+| Tip | `5393f6704b5059c4c8ecfbb6adc01718c13c4455` | 2026-10-16 | docs: release v0.0.1 on 2026-10-16 (#10) |
+
+- **Scope:** 3 commits (`git rev-list --count a9445d9..5393f67`) and 24 files,
+  +783/−20 (`git diff --shortstat a9445d9 5393f67`): #8 (review logs and
+  worklists), #9 (15 fuzz records) and #10 (CHANGELOG date, decision 0004,
+  `bench/heal-check.sh`, plan). Nothing under `crates/`, the Cargo files, the
+  fuzz targets or `.github/`. Base equals the previous entry's Tip. Only the
+  committed range is covered.
+- **Method:** the `code-review` skill over the range. A fresh agent then
+  checked each of its 10 findings at `5393f67`: 9 confirmed, 1 rejected (the
+  heal-check unsupported-OS exit is not a regression; it matches
+  `segment-size.sh`).
+- **Findings:** 9 confirmed: W-013 and W-014 are new; the rest are logged as
+  S-007, S-008 and S-009, or fixed in the closing PR. None is in shipped code,
+  so v0.0.1 is unaffected.
+  - W-013 (cleanup): `bench/heal-check.sh` assumes the default 20-of-50 and
+    repeats `segment-size.sh`'s steps; its time-format parse fails loudly.
+  - W-014 (low): `fuzz/campaign.sh summary` counts overlapping runs twice
+    (27.2 h shown for about 25.9 h); the gate is unaffected.
+  - The CHANGELOG omissions (W-003, W-004, W-005, and `heal` in W-007) are
+    logged as S-009 and fixed in the closing PR.
+  - GitHub's merge metadata on the range's commits is S-007 and S-008.
+  - W-012 has no regression test because `bench/` has no harness; its
+    status now says so.
+  - The Phase 1 plan's merge-method and tag records are corrected in the
+    closing PR.
+- **History note:** while the review ran, the last two commits of the range
+  were re-made on `main` with the project's identity and the same files
+  (S-007, S-008). The review read the earlier commits; their trees equal
+  `36cb370` and `5393f67`, so the Tip and the baseline name `5393f67`.
+- **Outcome:** no blocker. Worklist:
+  [`plans/todo/code-review-w-series.md`](../../plans/todo/code-review-w-series.md).
+- **Carried-over items:** W-003 to W-011 still open (no `crates/` change in
+  the range); W-012 fixed in #10.
 
 ### 2026-10-15: `e24f453..a9445d9` (#5, #6, #7)
 

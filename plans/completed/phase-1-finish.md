@@ -1,6 +1,8 @@
 # Finish Phase 1 and release v0.0.1
 
-Status: in progress (started 2026-10-14). Owner: maintainer, with Claude doing the code and docs.
+Status: completed 2026-10-16. v0.0.1 is released: the four crates are on
+crates.io, the signed tag `v0.0.1` is on `5393f67`, and the GitHub release is
+published. Owner: maintainer, with Claude doing the code and docs.
 
 **2026-10-14, maintainer's calls:** first, v0.0.1 was to be the fuzzed `e24f453`,
 with the heal memory fix held for v0.0.2. Then the reviews (A5) found S-001, a
@@ -11,6 +13,12 @@ separate experiment on `exp/heal-reuse`, kept for measurement and not part of
 that PR. A3 then showed that it lowers heal's peak but does not stop the growth,
 so the maintainer left it out of v0.0.1. The segment-size decision moves to
 v0.0.2 with it, as ROADMAP item 2's rule says.
+
+**2026-10-16, release:** GitHub-side actions during the release put a
+maintainer's personal account into commit metadata. The maintainer re-made the
+last two commits on `main` with the project's identity and the same files
+(`36cb370` and `5393f67`), moved the tag and re-created the release
+(S-007, S-008).
 
 ## The gate (ROADMAP.md, Phase 1)
 
@@ -71,10 +79,10 @@ until after the tag, because it would reset the fuzz hours.
 | A2 | ~~Memory test on the dev Mac~~ Done: heal grew with the file. The fix is the experiment on `exp/heal-reuse` | Maintainer | 3 min |
 | A3 | ~~On `exp/heal-reuse`: `bench/heal-check.sh` (heal flat at 256 MiB and 1 GiB?), then `bench/segment-size.sh`~~ Done, not flat: see the results below. `segment-size.sh` was not run | Maintainer | 20 min |
 | A4 | ~~Write the segment-size decision (0009) from A3~~ Moved to v0.0.2 | Claude | 30 min |
-| A5 | ~~Code review and security review from the empty tree to `e24f453`~~ Done and logged; 6 findings; S-001, W-001 and W-002 fixed in A0. ~~After A0 merges, run both again over the new commits~~ Done 2026-10-15 (`e24f453..a9445d9`): W-003 to W-012 and S-005 to S-007, all low or cleanup, none blocking. Merge method (S-007): the maintainer kept squash merges for v0.0.1; S-007 stays open | Claude | 1 h |
+| A5 | ~~Code review and security review from the empty tree to `e24f453`~~ Done and logged; 6 findings; S-001, W-001 and W-002 fixed in A0. ~~After A0 merges, run both again over the new commits~~ Done 2026-10-15 (`e24f453..a9445d9`): W-003 to W-012 and S-005 to S-007, all low or cleanup, none blocking. Done again 2026-10-16 (`a9445d9..5393f67`, #8 to #10): W-013, W-014, S-008 and S-009, none in `crates/`. Merge method (S-007): squash merges up to #8, then re-made commits; fast-forward merges from #11 on | Claude | 1 h |
 | A6 | ~~Freeze PR: spec wording, CI hash check of the vectors, `CHANGELOG.md`~~ Done in #7, with the `vectors` job | Claude, then maintainer (CI files are moved in by hand) | 1 h |
-| A7 | GitHub release setup from `RELEASING.md`: `release` environment, `v*` tag ruleset, secret `maintainers` team, crates.io access for the org | Maintainer | 15 min |
-| A8 | crates.io: sign in as `neoblast-dev`, verify the email, prepare a 1-day token | Maintainer | 10 min |
+| A7 | ~~GitHub release setup from `RELEASING.md`: `release` environment, `v*` tag ruleset, secret `maintainers` team, crates.io access for the org~~ Done 2026-10-16; the environment has no admin bypass | Maintainer | 15 min |
+| A8 | ~~crates.io: sign in as `neoblast-dev`, verify the email, prepare a 1-day token~~ Done 2026-10-16 | Maintainer | 10 min |
 
 If a review finds something that must be fixed in `crates/` before release, the
 fix lands, the affected targets are fuzzed again for 24 h, and the tag moves to
@@ -105,11 +113,11 @@ file is about 39 MiB with the fix and 43 MiB without it, above ROADMAP item 2's
 | # | Step | Who |
 | --- | --- | --- |
 | B1 | ~~Copy the M1 records from `fuzz/runs/` into `fuzz/campaigns/`, PR, merge. `summary` shows `met` ×5~~ Done in #9 | Maintainer |
-| B2 | ~~Check that `main`'s `code_id` still equals the fuzzed one (`fuzz/campaign.sh summary` on `main`)~~ Done on `59f7f0e`: `met` ×5 | Maintainer |
-| B3 | ~~Check that `CHANGELOG.md`'s claims hold (the `vectors` CI job is on `main` and green; `summary` shows `met` ×5), then set its release date (docs only)~~ Done in #10: dated 2026-10-16, with decision 0004 accepted for files and W-012 fixed. Tag `v0.0.1` (signed) on #10's merge commit; manual first publish (`RELEASING.md` "first release") | Maintainer |
-| B4 | Trusted publishing and team owner on each crate; revoke the token; reject the Release workflow's v0.0.1 run | Maintainer |
-| B5 | GitHub release with notes from `CHANGELOG.md` | Claude drafts, maintainer publishes |
-| B6 | Close the phase: ROADMAP update, this plan to `completed/` | Claude |
+| B2 | ~~Check that `main`'s `code_id` still equals the fuzzed one (`fuzz/campaign.sh summary` on `main`)~~ Done on #9 (now `36cb370`): `met` ×5 | Maintainer |
+| B3 | ~~Check that `CHANGELOG.md`'s claims hold (the `vectors` CI job is on `main` and green; `summary` shows `met` ×5), then set its release date (docs only); tag `v0.0.1` (signed); manual first publish (`RELEASING.md` "first release")~~ Done 2026-10-16: dated in #10; the crates were published from #10's first merge, whose files equal `5393f67`; the signed tag is on `5393f67` | Maintainer |
+| B4 | ~~Trusted publishing and team owner on each crate~~ Done 2026-10-16 on all four crates. ~~Reject the Release workflow's v0.0.1 run~~ Done (all three runs rejected). ~~Revoke the one-time token~~ Done 2026-10-16 | Maintainer |
+| B5 | ~~GitHub release with notes from `CHANGELOG.md`~~ Done 2026-10-16, published as `neoblast-dev` | Claude drafts, maintainer publishes |
+| B6 | ~~Close the phase: ROADMAP update, this plan to `completed/`~~ Done in the closing PR | Claude |
 
 ### If the campaign finds a crash
 
@@ -121,7 +129,10 @@ file is about 39 MiB with the fix and 43 MiB without it, above ROADMAP item 2's
 
 ## After v0.0.1 (v0.0.2, not part of this gate)
 
-- The open low findings: S-002, S-003 and S-004.
+- The open findings: S-002 to S-007, S-008's remaining parts (GitHub-side
+  copies, a CI identity check)
+  (`plans/todo/security-review-s-series.md`), and W-003 to W-011, W-013 and
+  W-014 (`plans/todo/code-review-w-series.md`).
 - Heal's memory growth: find what still grows (A3 results), then the
   segment-size decision (0009) and any change of default it calls for. The
   module doc of `crates/neoblast/src/stream.rs` says peak memory grows only by
@@ -131,3 +142,24 @@ file is about 39 MiB with the fix and 43 MiB without it, above ROADMAP item 2's
 - Phase 2 prerequisites:
   - accept decision 0004 for channels and the keyring, and 0005;
   - the libp2p vs iroh spike (open item 6), which needs a small VPS.
+
+## Results
+
+- **Gate met.** The golden vectors are frozen, and the `vectors` CI job pins
+  both files by hash. The drop-any-(n−k) tests pass. Each of the five fuzz
+  targets ran 24 h without a crash on `a9445d9` (records in
+  `fuzz/campaigns/`). `fuzz/campaign.sh summary` shows `met` for all five on
+  the release commit.
+- **Released 2026-10-16.** `neoblast`, `neoblast-format`, `neoblast-crypto` and
+  `neoblast-erasure` 0.0.1 are on crates.io. Each is owned by `neoblast-dev` and
+  the `maintainers` team, with trusted publishing for `release.yml` in the
+  `release` environment, and the one-time token is revoked. The signed tag
+  `v0.0.1` is on `5393f67`, and the GitHub release is published.
+  A fresh `cargo install neoblast --locked` sealed, healed and opened a
+  300 KB file byte for byte.
+- **Reviews.** Three code and three security reviews cover everything up to the
+  release commit. Their only medium findings are S-001, fixed in #6, and S-008,
+  fixed on `main` with GitHub-side copies still to be removed. Every other open
+  item is low or cleanup.
+- **Moved to v0.0.2:** the heal memory fix and the segment-size decision (A3,
+  A4), and the open findings listed above.
