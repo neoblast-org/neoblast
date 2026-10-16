@@ -72,7 +72,7 @@ pub fn seal_stream_with_key(
     let n = usize::from(header.n());
     let mut remaining = payload_len;
     // Grows segment by segment; never sized up front from a caller's length.
-    let mut hashes: Vec<Vec<Hash>> = Vec::new();
+    let mut hashes: Vec<Hash> = Vec::new();
     // One buffer holds a segment's plaintext, then its ciphertext, then its k
     // zero-padded data shards. It starts as plaintext, so it is wiped on drop.
     let mut buf = Zeroizing::new(Vec::new());
@@ -100,15 +100,13 @@ pub fn seal_stream_with_key(
         buf.resize(k.saturating_mul(shard_len), 0);
         let parity = neoblast_erasure::encode_parity(&ReedSolomonSimd, &buf, k, n, shard_len)?;
 
-        let mut segment_hashes = Vec::with_capacity(n);
         let shards = buf
             .chunks_exact(shard_len)
             .chain(parity.iter().map(Vec::as_slice));
         for (shard, index) in shards.zip(0u16..) {
-            segment_hashes.push(tree::shard_hash(shard));
+            hashes.push(tree::shard_hash(shard));
             sink.put(segment, index, shard)?;
         }
-        hashes.push(segment_hashes);
     }
 
     // The input must end exactly at `payload_len`.
@@ -119,7 +117,7 @@ pub fn seal_stream_with_key(
         });
     }
     sink.finish()?;
-    let manifest = Manifest::new(header, hashes)?;
+    let manifest = Manifest::from_flat(header, hashes)?;
     let cap = FileReadCap {
         root: manifest.root(),
         read_key: *read_key,

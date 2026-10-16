@@ -34,6 +34,11 @@ the frozen v1 byte format).
 
 ### Fixed
 
+- Rejecting a planted manifest costs little more than its own size: the root
+  is computed from the raw bytes and compared before anything else is built.
+  A 264 MB manifest that matches no link now peaks `heal` at 267 MB instead of
+  up to 862 MB, and an accepted manifest keeps its hashes in one flat list
+  (review S-005).
 - `seal` refuses a non-empty `--out` given without `--force` before it reads
   the input, so a piped input is no longer read into memory first (review
   W-005).

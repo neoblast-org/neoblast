@@ -130,7 +130,16 @@ that fixed it.
 - **Verified:** reproduced twice by a fresh agent with the release CLI at
   `a9445d9`.
 - **Release:** not blocking (a `crates/` change; v0.0.2).
-- **Status:** open.
+- **Status:** fixed in #15. `Manifest::decode` computes the root from the
+  raw bytes, one segment at a time and one tree node per level, and compares
+  it before listing any hash; a manifest that passes keeps its hashes in one
+  flat list, and `read_manifest` reserves exactly the declared size. On the
+  reference Mac the planted manifest above (264 MB) now peaks `heal` at
+  267 MB, 1.01 times its size, against 630 to 862 MB before (3 runs each).
+  Regression test: `manifest::tests::s005_the_root_is_compared_before_the_hashes_are_listed`
+  (it marks the hash list; the peak above covers everything else);
+  `tree::tests::builder_matches_level_by_level_pairing` checks the new tree
+  builder against the old pairing, and the golden vectors are unchanged.
 
 ### S-006 · Low · An unfixed medium finding's exploit details were public before its fix
 

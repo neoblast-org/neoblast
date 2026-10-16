@@ -35,7 +35,9 @@ pub const MANIFEST_FILE: &str = "manifest.nbl";
 /// makes ([`Params::header`](crate::Params::header)): 256 MiB, enough for files
 /// of about 640 GiB at the default parameters. The manifest is read into memory
 /// before it can be checked against the root, so a larger one is refused
-/// unread (review W-001).
+/// unread (review W-001). Checking one costs little more than its own size:
+/// the root is compared before anything else that size is built (review
+/// S-005).
 pub const MAX_MANIFEST_LEN: u64 = 256 * 1024 * 1024;
 
 /// The size in bytes of the manifest for `header`: the header, then one 32-byte
@@ -94,7 +96,11 @@ impl DirStore {
         if file.metadata()?.len() != expected {
             return Err(invalid("has the wrong size"));
         }
-        let mut bytes = header.to_vec();
+        // Exactly the declared size, so reading never doubles the buffer.
+        let mut bytes = Vec::with_capacity(
+            usize::try_from(expected).map_err(|_| invalid("is larger than this store reads"))?,
+        );
+        bytes.extend_from_slice(&header);
         file.take(expected - HEADER_LEN as u64 + 1)
             .read_to_end(&mut bytes)?;
         if bytes.len() as u64 != expected {
