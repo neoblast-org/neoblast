@@ -33,7 +33,7 @@ summary() {
   for t in $(all_targets); do ids="$ids $t=$(code_id "$t")"; done
   # shellcheck disable=SC2086
   python3 - "$here" $ids <<'PY'
-import json, pathlib, sys
+import datetime, json, pathlib, sys
 here = pathlib.Path(sys.argv[1])
 current = dict(arg.split("=", 1) for arg in sys.argv[2:])
 files = {}
@@ -42,12 +42,30 @@ for folder in ("campaigns", "runs"):  # committed records, then this machine's n
         files.setdefault(p.name, p)
 runs = [json.loads(p.read_text()) for p in files.values()]
 counted = ("clean", "stopped")
+
+def hours(runs):
+    # Wall-clock hours covered by the runs. Runs of one target that overlap in
+    # time (two campaigns at once) count once.
+    spans = []
+    for r in runs:
+        if r["result"] in counted:
+            start = datetime.datetime.strptime(r["started_utc"], "%Y-%m-%dT%H:%M:%SZ")
+            start = start.replace(tzinfo=datetime.timezone.utc).timestamp()
+            spans.append((start, start + r["seconds_run"]))
+    total, end = 0.0, None
+    for s, e in sorted(spans):
+        if end is None or s >= end:
+            total, end = total + e - s, e
+        elif e > end:
+            total, end = total + e - end, e
+    return total / 3600
+
 print(f"{'target':22} {'h, current code':>16} {'h, all':>7} {'crashes':>8}  gate (24 h, no crash)")
 for target, cid in current.items():
     mine = [r for r in runs if r["target"] == target]
     now = [r for r in mine if r["code_id"] == cid]
-    hours_now = sum(r["seconds_run"] for r in now if r["result"] in counted) / 3600
-    hours_all = sum(r["seconds_run"] for r in mine if r["result"] in counted) / 3600
+    hours_now = hours(now)
+    hours_all = hours(mine)
     crashes = sum(1 for r in mine if r["result"] == "crash")
     met = hours_now >= 24 and not any(r["result"] in ("crash", "error") for r in now)
     print(f"{target:22} {hours_now:16.1f} {hours_all:7.1f} {crashes:8d}  {'met' if met else '-'}")
@@ -136,6 +154,19 @@ if [ -n "$dirty" ]; then
   exit 1
 fi
 commit=$(git -C "$root" rev-parse HEAD)
+
+# One campaign at a time: two at once would share the corpora and their hours
+# would overlap.
+mkdir -p runs
+lock="runs/.campaign.pid"
+if ! (set -C; echo $$ >"$lock") 2>/dev/null; then
+  if kill -0 "$(cat "$lock" 2>/dev/null)" 2>/dev/null; then
+    echo "another campaign is running (pid $(cat "$lock")); stop it first" >&2
+    exit 1
+  fi
+  echo $$ >"$lock" # left by a campaign that was killed
+fi
+trap '[ "$(cat "$lock" 2>/dev/null)" = "$$" ] && rm -f "$lock"' EXIT
 
 # Keep the machine awake on macOS until this script exits.
 if command -v caffeinate >/dev/null; then

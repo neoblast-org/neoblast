@@ -253,7 +253,8 @@ Each finding below was checked by a fresh agent at `5393f67`.
 - Remediation: pass `--k 20 --n 50` and derive the deletions; optionally move
   the shared steps into a sourced `bench/lib.sh`.
 - Verified: confirmed by reading. From #5.
-- Status: open.
+- Status: fixed in #12 (20-of-50 pinned and the deletions derived from it;
+  the shared steps stay duplicated, as in `segment-size.sh`).
 
 ### W-014 (low): `fuzz/campaign.sh summary` counts overlapping runs twice
 
@@ -269,4 +270,5 @@ Each finding below was checked by a fresh agent at `5393f67`.
   runs toward the gate), say which in `fuzz/README.md`, and refuse to start a
   second campaign while one is running.
 - Verified: confirmed against the records and `campaign.sh`.
-- Status: open.
+- Status: fixed in #12 (overlapping runs count once, 25.9 h for v0.0.1; a
+  second campaign on the same clone is refused).

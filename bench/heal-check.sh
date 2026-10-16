@@ -5,15 +5,17 @@
 #   bench/heal-check.sh                  # 256 and 1024 MiB files; 1 and 4 MiB segments
 #   bench/heal-check.sh "256 1024" "1 4"
 #
-# Each run seals a random file, deletes n - k = 30 shards in every segment, and
-# heals. Prints peak RSS and, on macOS, peak memory footprint. Works with the
-# bash 3.2 that ships with macOS.
+# Each run seals a random file at 20-of-50, deletes n - k = 30 shards in every
+# segment, and heals. Prints peak RSS and, on macOS, peak memory footprint.
+# Works with the bash 3.2 that ships with macOS.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/.." && pwd)"
 files="${1:-256 1024}"
 segments="${2:-1 4}"
+k=20
+n=50
 case "$(uname -s)" in
   Darwin) flag=-l ;;
   Linux) flag=-v ;;
@@ -39,16 +41,16 @@ for f in 0 $files; do
   else head -c "$((f * 1024 * 1024))" /dev/urandom >"$work/in.bin"; label="$f MiB"; fi
   for s in $segments; do
     rm -rf "$work/s"
-    link=$("$bin" seal "$work/in.bin" --out "$work/s" --segment-size "$((s * 1024 * 1024))" 2>"$work/t.txt") || {
+    link=$("$bin" seal "$work/in.bin" --out "$work/s" --k "$k" --n "$n" --segment-size "$((s * 1024 * 1024))" 2>"$work/t.txt") || {
       echo "seal failed ($label, $s MiB segments):" >&2
       cat "$work/t.txt" >&2
       exit 1
     }
     verify=$(printf '%s' "$link" | sed 's|^nbl://f/|nbl://fv/|; s|#.*||')
-    python3 - "$work/s" <<'PY'
+    python3 - "$work/s" "$((n - k))" <<'PY'
 import pathlib, sys
 for seg in pathlib.Path(sys.argv[1]).glob("seg-*"):
-    for i in range(30):
+    for i in range(int(sys.argv[2])):
         (seg / f"{i:03d}.shard").unlink(missing_ok=True)
 PY
     /usr/bin/time "$flag" "$bin" heal "$verify" --from "$work/s" 2>"$work/t.txt" >/dev/null || {

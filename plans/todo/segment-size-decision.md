@@ -1,10 +1,10 @@
 # Segment-size decision (ROADMAP open item 2)
 
-Status: todo, for v0.0.2. The heal memory fix on `exp/heal-reuse` lowered heal's
-peak but did not stop it growing with the file
-(`plans/completed/phase-1-finish.md`, A3 results), so it and this decision are
-not in v0.0.1. First find what still grows. At 4 MiB segments, heal on a 1 GiB
-file already exceeds the 32 MiB rule, with or without that fix.
+Status: todo, for v0.0.2 (step 6 of `plans/todo/v0.0.2.md`). The heal memory fix
+on `exp/heal-reuse` lowered heal's peak but did not stop it growing with the
+file (`plans/completed/phase-1-finish.md`, A3 results), so it and this decision
+are not in v0.0.1. First find what still grows. At 4 MiB segments, heal on a 1
+GiB file already exceeds the 32 MiB rule, with or without that fix.
 
 ## Success criteria
 

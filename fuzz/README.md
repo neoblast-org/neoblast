@@ -45,7 +45,12 @@ fuzz/campaign.sh summary         # hours per target, and whether the gate is met
   test is the same. Each record has a `code_id`: a hash of `crates/`, both
   `Cargo.toml` files, both `Cargo.lock` files and the target's source. The
   summary counts runs in `fuzz/campaigns/` and `fuzz/runs/` whose `code_id`
-  matches the current checkout.
+  matches the current checkout. Hours are wall-clock time: runs of one target
+  that overlapped count once.
+- **One campaign at a time.** The script refuses to start while another
+  campaign is running on the same clone. If a campaign was killed and the
+  refusal names a process that is not a campaign, delete
+  `fuzz/runs/.campaign.pid`.
 - **Ctrl-C stops early**, and the hours so far are recorded as `stopped`.
 - The script refuses to run with uncommitted changes in `crates/`, `fuzz/`,
   `Cargo.toml` or `Cargo.lock`, so every record matches a real commit.
@@ -63,7 +68,7 @@ xcode-select --install                                   # compiler and git
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 rustup toolchain install nightly
-cargo +nightly install cargo-fuzz --locked
+cargo +nightly install cargo-fuzz --version 0.13.2 --locked
 git clone https://github.com/neoblast-org/neoblast.git ~/neoblast-fuzz
 ```
 

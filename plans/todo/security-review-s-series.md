@@ -102,7 +102,8 @@ that fixed it.
 - **Fix:** `cargo install cargo-fuzz --version <exact> --locked`, with
   Dependabot or a manual bump.
 - **Release:** not blocking (CI only; not in `code_id`).
-- **Status:** open.
+- **Status:** fixed in #12: `cargo-fuzz` 0.13.2 and `nightly-2026-10-14`, the
+  compiler of the v0.0.1 campaign.
 
 ### S-005 · Low · Rejecting a planted manifest can cost about 3.2 times its size in memory
 
@@ -183,13 +184,13 @@ that fixed it.
 - **Fix:** on 2026-10-16 the maintainer re-made the affected commits on
   `main` with the project's identity, moved the `v0.0.1` tag, re-created the
   release as `neoblast-dev`, and deleted the merged branches. Still to do:
-  remove the remaining GitHub-side copies, and add a CI check that refuses any
-  commit identity other than the project's (the pre-push hook cannot see
-  merges made on GitHub).
+  remove the remaining GitHub-side copies. A CI step (#12) now refuses any
+  commit after `5393f67` whose author, committer, co-author or sign-off is not
+  the project, in UTC; the pre-push hook cannot see merges made on GitHub.
 - **Verified:** by reading the commit metadata and the remote refs.
 - **Release:** v0.0.1 is tagged on the corrected commit.
-- **Status:** fixed on `main`; open until the GitHub-side copies are removed
-  and the CI check lands.
+- **Status:** fixed on `main`, and the CI check landed in #12; open until the
+  GitHub-side copies are removed.
 
 ### S-009 · Low · The 0.0.1 changelog left out that a hostile store can stop `heal`
 
