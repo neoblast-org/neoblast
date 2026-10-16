@@ -1,0 +1,26 @@
+{
+  "target": "header_decode",
+  "result": "stopped",
+  "exit_code": 72,
+  "started_utc": "2026-10-15T00:54:49Z",
+  "ended_utc": "2026-10-15T02:47:11Z",
+  "seconds_planned": 86400,
+  "seconds_run": 6742,
+  "code_id": "d05bacdaff078879",
+  "commit": "a9445d9a32dcafe4a8bd018e4280e03411ce6a12",
+  "executions": 3823600681,
+  "execs_per_sec": 567131,
+  "peak_rss_mb": 475,
+  "coverage": {
+    "cov": 116,
+    "ft": 131
+  },
+  "corpus_entries": 19,
+  "new_artifacts": [],
+  "toolchain": "rustc 1.101.0-nightly (822182db4 2026-10-13)",
+  "machine": {
+    "os": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M1 Pro"
+  }
+}
