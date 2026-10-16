@@ -404,3 +404,30 @@ fn w003_a_lost_segment_outranks_a_failed_write() {
         "{err}"
     );
 }
+
+/// W-006: `seal_stream` refuses parameters whose manifest a store could not
+/// read back before it hands out a single shard, not after writing them all.
+#[test]
+fn w006_seal_stream_refuses_an_oversized_manifest_before_any_shard() {
+    use std::io::Read;
+    /// Fails on the first shard, so a regression fails fast.
+    struct NoShards;
+    impl neoblast::ShardSink for NoShards {
+        fn put(&mut self, _: u32, _: u16, _: &[u8]) -> std::io::Result<()> {
+            Err(std::io::Error::other("a shard was written"))
+        }
+    }
+    // 64-byte segments with n = 128: about 4 KiB of hashes per 64 bytes of file.
+    let params = Params {
+        k: 2,
+        n: 128,
+        segment_size: 64,
+    };
+    let input = std::io::repeat(0).take(5_000_000);
+    let err = neoblast::seal_stream(input, 5_000_000, params, &mut NoShards).unwrap_err();
+    assert!(matches!(err, Error::ManifestTooLarge), "{err}");
+    assert!(matches!(
+        params.header(5_000_000),
+        Err(Error::ManifestTooLarge)
+    ));
+}

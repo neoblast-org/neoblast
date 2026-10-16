@@ -1,8 +1,9 @@
 # Code-review worklist (W-series)
 
-Status: todo. Opened 2026-10-14 by the first `/review-since` (empty tree to
-`e24f453`). Neither item blocked v0.0.1 on its own, but both are fixed in the
-pre-release code change that S-001 required (#6), since that change
+Status: completed 2026-10-16: every item is fixed, the last in #14 (W-005,
+W-006, W-009 and W-010). Opened 2026-10-14 by the first `/review-since` (empty
+tree to `e24f453`). Neither item blocked v0.0.1 on its own, but both are fixed
+in the pre-release code change that S-001 required (#6), since that change
 restarts the fuzz campaign anyway (`plans/completed/phase-1-finish.md`, A0).
 
 2026-10-15: the second `/review-since` (`e24f453..a9445d9`) added W-003 to
@@ -140,7 +141,9 @@ by mutation, or (W-006, W-007, W-010, W-011) confirmed by reading the code.
 - Remediation: refuse a non-empty store without `--force` first, then read and
   run `check_manifest_fits`, then `remove_manifest`.
 - Verified: reproduced on both commits. Introduced in #6.
-- Status: open (v0.0.2).
+- Status: fixed in #14: a non-empty `--out` without `--force` is refused
+  before the input is opened. Regression test (Unix, an open and empty pipe):
+  `seal_refuses_a_non_empty_store_before_reading_a_pipe` in `tests/cli.rs`.
 
 ### W-006 (low): the library checks the manifest cap only after writing every shard
 
@@ -155,7 +158,10 @@ by mutation, or (W-006, W-007, W-010, W-011) confirmed by reading the code.
 - Remediation: refuse in `seal_stream` (or a public `Params` check) before the
   first shard.
 - Verified: confirmed by reading; `write_sealed` already checks first. New in #6.
-- Status: open (v0.0.2).
+- Status: fixed in #14: the public `Params::header` refuses with the new
+  `Error::ManifestTooLarge`, and `seal_stream` calls it before the first shard;
+  the CLI uses it too. Regression test:
+  `w006_seal_stream_refuses_an_oversized_manifest_before_any_shard`.
 
 ### W-007 (low): store writes are not synced before rename
 
@@ -206,7 +212,11 @@ by mutation, or (W-006, W-007, W-010, W-011) confirmed by reading the code.
 - Remediation: in `main.rs`, check k/n before `Header::new` and map
   `HeaderError::Layout` to the hint.
 - Verified: reproduced with the release CLI on both commits.
-- Status: open (v0.0.2).
+- Status: fixed in #14: `Header::new` checks k/n before the layout, and the
+  CLI gives the `--segment-size` hint for a layout error as for an oversized
+  manifest. Tests: `bad_k_or_n_is_reported_before_the_layout` (format crate),
+  `seal_reports_bad_parameters_plainly` and
+  `seal_hints_at_the_segment_size_when_segments_overflow` (`tests/cli.rs`).
 
 ### W-010 (cleanup): `write_manifest` encodes before checking the cap
 
@@ -218,7 +228,10 @@ by mutation, or (W-006, W-007, W-010, W-011) confirmed by reading the code.
 - Remediation: check `manifest_len(header)` before encoding.
 - Verified: confirmed by reading; `encode` is exactly `manifest_len` bytes.
   Introduced in #6.
-- Status: open (v0.0.2).
+- Status: fixed in #14: `check_len` measures `manifest_len(header)` before
+  anything is encoded. No test: nothing observable changes. Since every seal
+  now refuses first (W-006), `check_len` is defence in depth that no test
+  reaches; reaching it would take a hand-built manifest of about 270 MB.
 
 ### W-011 (cleanup): duplicated test helper
 

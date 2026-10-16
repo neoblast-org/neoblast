@@ -31,8 +31,9 @@ use crate::stream::ShardSink;
 /// File name of the verify manifest inside a store directory.
 pub const MANIFEST_FILE: &str = "manifest.nbl";
 
-/// The largest manifest a store reads or writes: 256 MiB, enough for files of
-/// about 640 GiB at the default parameters. The manifest is read into memory
+/// The largest manifest a store reads or writes, and so the largest any seal
+/// makes ([`Params::header`](crate::Params::header)): 256 MiB, enough for files
+/// of about 640 GiB at the default parameters. The manifest is read into memory
 /// before it can be checked against the root, so a larger one is refused
 /// unread (review W-001).
 pub const MAX_MANIFEST_LEN: u64 = 256 * 1024 * 1024;
@@ -123,7 +124,7 @@ impl DirStore {
     /// Writes a sealed file: every shard, then the manifest. A manifest too
     /// large to read back is refused before anything is written.
     pub fn write_sealed(&self, sealed: &Sealed) -> io::Result<()> {
-        let manifest = checked_len(sealed.manifest.encode())?;
+        check_len(sealed.manifest.header())?;
         let mut unsynced = Unsynced::default();
         for (segment, shards) in (0u32..).zip(&sealed.shards) {
             for (index, bytes) in (0u16..).zip(shards) {
@@ -133,12 +134,13 @@ impl DirStore {
             }
         }
         unsynced.sync()?;
-        self.write_manifest_bytes(&manifest)
+        self.write_manifest_bytes(&sealed.manifest.encode())
     }
 
     /// Writes the verify manifest. Streaming seals call this after all shards.
     pub fn write_manifest(&self, manifest: &Manifest) -> io::Result<()> {
-        self.write_manifest_bytes(&checked_len(manifest.encode())?)
+        check_len(manifest.header())?;
+        self.write_manifest_bytes(&manifest.encode())
     }
 
     fn write_manifest_bytes(&self, bytes: &[u8]) -> io::Result<()> {
@@ -191,14 +193,15 @@ impl Unsynced {
 }
 
 /// Refuses a manifest that `read_manifest` would refuse to read back.
-fn checked_len(manifest: Vec<u8>) -> io::Result<Vec<u8>> {
-    if manifest.len() as u64 > MAX_MANIFEST_LEN {
+/// Measured from the header, before the manifest is encoded (review W-010).
+fn check_len(header: &Header) -> io::Result<()> {
+    if manifest_len(header).is_none_or(|len| len > MAX_MANIFEST_LEN) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "manifest is larger than a store reads",
         ));
     }
-    Ok(manifest)
+    Ok(())
 }
 
 /// Writes one shard; the caller syncs its directory. Errors name the shard's

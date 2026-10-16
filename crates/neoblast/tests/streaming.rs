@@ -447,13 +447,14 @@ fn writer_and_sink_errors_surface_as_io_errors() {
 }
 
 /// A huge declared length fails on the first short read; nothing is
-/// allocated from the declared size.
+/// allocated from the declared size. With 64-byte segments its manifest would
+/// be 6 GiB, so it is refused before anything is read (review W-006).
 #[test]
 fn huge_declared_length_is_an_error_not_an_abort() {
     let params = Params {
         k: 2,
         n: 3,
-        segment_size: 64,
+        segment_size: 1024 * 1024,
     };
     let err =
         seal_stream_with_key(&[][..], 1 << 37, params, &KEY, &mut Collect::default()).unwrap_err();
@@ -461,6 +462,13 @@ fn huge_declared_length_is_an_error_not_an_abort() {
         matches!(err, Error::InputLength { expected } if expected == 1 << 37),
         "{err:?}"
     );
+    let params = Params {
+        segment_size: 64,
+        ..params
+    };
+    let err =
+        seal_stream_with_key(&[][..], 1 << 37, params, &KEY, &mut Collect::default()).unwrap_err();
+    assert!(matches!(err, Error::ManifestTooLarge), "{err:?}");
 }
 
 /// Builds a one-segment file whose framed plaintext is exactly `framed`,

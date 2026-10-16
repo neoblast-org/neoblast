@@ -44,7 +44,9 @@ pub trait ShardSink {
 ///
 /// Returns the read capability and the verify manifest; store the manifest
 /// after all shards. Fails with [`Error::InputLength`] if `input` yields more or
-/// fewer than `payload_len` bytes.
+/// fewer than `payload_len` bytes, and refuses parameters whose manifest a
+/// store could not read back ([`Params::header`]) before handing `sink` any
+/// shard.
 pub fn seal_stream(
     input: impl Read,
     payload_len: u64,
@@ -64,7 +66,7 @@ pub fn seal_stream_with_key(
     read_key: &[u8; 32],
     sink: &mut impl ShardSink,
 ) -> Result<(FileReadCap, Manifest), Error> {
-    let header = Header::new(payload_len, params.k, params.n, params.segment_size)?;
+    let header = params.header(payload_len)?;
     let cipher = SegmentCipher::new(read_key, &header);
     let k = usize::from(header.k());
     let n = usize::from(header.n());

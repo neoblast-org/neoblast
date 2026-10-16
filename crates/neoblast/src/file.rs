@@ -4,10 +4,11 @@ use std::io;
 
 use neoblast_crypto::CryptoError;
 use neoblast_erasure::ErasureError;
-use neoblast_format::{FileReadCap, FileVerifyCap, HeaderError};
+use neoblast_format::{FileReadCap, FileVerifyCap, Header, HeaderError};
 use thiserror::Error;
 
 use crate::manifest::Manifest;
+use crate::store::{MAX_MANIFEST_LEN, manifest_len};
 use crate::stream::{self, ShardSink};
 
 /// Errors from sealing, opening or healing.
@@ -16,6 +17,10 @@ pub enum Error {
     /// Bad parameters for a new file.
     #[error("invalid parameters: {0}")]
     Params(#[from] HeaderError),
+    /// The file's manifest would be larger than [`MAX_MANIFEST_LEN`], so a
+    /// store could not read it back. Larger segments make it smaller.
+    #[error("the manifest would be larger than {} MiB; use larger segments", MAX_MANIFEST_LEN >> 20)]
+    ManifestTooLarge,
     /// Encryption or decryption failed.
     #[error(transparent)]
     Crypto(#[from] CryptoError),
@@ -66,6 +71,21 @@ pub struct Params {
     pub n: u16,
     /// Plaintext bytes per segment.
     pub segment_size: u32,
+}
+
+impl Params {
+    /// Plans the header for a `payload_len`-byte file with these parameters.
+    /// Fails with [`Error::Params`] for parameters outside the v1 limits, and
+    /// with [`Error::ManifestTooLarge`] if the manifest would be larger than
+    /// [`MAX_MANIFEST_LEN`], so every seal can refuse before it writes anything
+    /// (review W-006).
+    pub fn header(&self, payload_len: u64) -> Result<Header, Error> {
+        let header = Header::new(payload_len, self.k, self.n, self.segment_size)?;
+        match manifest_len(&header) {
+            Some(len) if len <= MAX_MANIFEST_LEN => Ok(header),
+            _ => Err(Error::ManifestTooLarge),
+        }
+    }
 }
 
 impl Default for Params {
@@ -121,6 +141,8 @@ pub fn seal(payload: &[u8], params: Params) -> Result<Sealed, Error> {
 
 /// Seals `payload` under a caller-chosen read key. Deterministic, so it is what
 /// the golden vectors use. Never reuse a read key for two different payloads.
+/// Like every seal, refuses parameters whose manifest is over
+/// [`MAX_MANIFEST_LEN`] ([`Params::header`]).
 pub fn seal_with_key(payload: &[u8], params: Params, read_key: &[u8; 32]) -> Result<Sealed, Error> {
     let mut shards = MemShards::default();
     let (cap, manifest) =

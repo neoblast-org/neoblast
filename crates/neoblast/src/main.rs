@@ -8,8 +8,9 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use neoblast::store::{DirStore, MAX_MANIFEST_LEN, manifest_len};
-use neoblast::{FileReadCap, FileVerifyCap, Header, Params};
+use neoblast::store::{DirStore, MAX_MANIFEST_LEN};
+use neoblast::{FileReadCap, FileVerifyCap, Params};
+use neoblast_format::HeaderError;
 
 /// Censorship-resistant storage. Experimental and not audited.
 #[derive(Parser)]
@@ -84,6 +85,16 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         } => {
             let mut store = DirStore::new(&out);
             let params = Params { k, n, segment_size };
+            // Refused before any input is read, so an endless pipe is never
+            // buffered (review W-005).
+            let replacing = !store.is_empty()?;
+            if replacing && !force {
+                return Err(format!(
+                    "{} is not empty; use --force to overwrite what is there",
+                    out.display()
+                )
+                .into());
+            }
             let mut file = File::open(&input)?;
             let meta = file.metadata()?;
             // The header (bound into every segment) needs the length up front.
@@ -96,15 +107,8 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 (data.len() as u64, Some(data))
             };
             // Everything that can refuse the input runs before the store is touched.
-            check_manifest_fits(len, params)?;
-            if !store.is_empty()? {
-                if !force {
-                    return Err(format!(
-                        "{} is not empty; use --force to overwrite what is there",
-                        out.display()
-                    )
-                    .into());
-                }
+            check_params(len, params)?;
+            if replacing {
                 // Without a manifest the directory no longer claims to hold a
                 // complete file, even if this seal fails part-way.
                 store.remove_manifest()?;
@@ -146,18 +150,22 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Refuses, before anything is written, a file whose manifest would be too
-/// large for `open` and `heal` to read back (review W-001).
-fn check_manifest_fits(len: u64, params: Params) -> Result<(), Box<dyn std::error::Error>> {
-    let header = Header::new(len, params.k, params.n, params.segment_size)?;
-    match manifest_len(&header) {
-        Some(bytes) if bytes <= MAX_MANIFEST_LEN => Ok(()),
-        _ => Err(format!(
-            "a {len}-byte file needs a manifest over {} MiB at this segment size; \
-             use a larger --segment-size",
-            MAX_MANIFEST_LEN / (1024 * 1024)
-        )
-        .into()),
+/// Refuses, before anything is written, bad parameters and a file whose
+/// manifest would be too large for `open` and `heal` to read back (review
+/// W-001). Too many segments, or too many shards, whether for the manifest or
+/// for the header, gets the same hint (review W-009).
+fn check_params(len: u64, params: Params) -> Result<(), Box<dyn std::error::Error>> {
+    match params.header(len) {
+        Ok(_) => Ok(()),
+        Err(neoblast::Error::ManifestTooLarge | neoblast::Error::Params(HeaderError::Layout)) => {
+            Err(format!(
+                "a {len}-byte file needs too many shards at these parameters \
+                 (a manifest over {} MiB); use a larger --segment-size or a smaller --n",
+                MAX_MANIFEST_LEN >> 20
+            )
+            .into())
+        }
+        Err(e) => Err(e.into()),
     }
 }
 

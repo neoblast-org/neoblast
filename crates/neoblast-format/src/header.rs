@@ -79,6 +79,14 @@ pub enum HeaderError {
     Reserved,
 }
 
+/// Checks k and n against the v1 limits.
+fn check_k_n(k: u16, n: u16) -> Result<(), HeaderError> {
+    if !(MIN_K..=MAX_K).contains(&k) || n <= k || n > MAX_N {
+        return Err(HeaderError::Params { k, n });
+    }
+    Ok(())
+}
+
 /// A validated file header.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Header {
@@ -96,6 +104,9 @@ impl Header {
     /// The framed plaintext is an 8-byte big-endian length prefix, the payload,
     /// then zero padding up to the Padmé length (see [`layout::padme`]).
     pub fn new(payload_len: u64, k: u16, n: u16, segment_size: u32) -> Result<Self, HeaderError> {
+        // Bad k or n is reported as such, not as the layout error that
+        // planning with it would give (review W-009).
+        check_k_n(k, n)?;
         let framed = payload_len
             .checked_add(LENGTH_PREFIX)
             .ok_or(HeaderError::Layout)?;
@@ -123,12 +134,7 @@ impl Header {
 
     /// Checks every field and the relationships between them.
     pub fn validate(&self) -> Result<(), HeaderError> {
-        if self.k < MIN_K || self.k > MAX_K || self.n <= self.k || self.n > MAX_N {
-            return Err(HeaderError::Params {
-                k: self.k,
-                n: self.n,
-            });
-        }
+        check_k_n(self.k, self.n)?;
         if !(MIN_SEGMENT_SIZE..=MAX_SEGMENT_SIZE).contains(&self.segment_size) {
             return Err(HeaderError::SegmentSize(self.segment_size));
         }
@@ -323,6 +329,18 @@ mod tests {
             Header::new(100, 1, 4, 1024),
             Err(HeaderError::Params { .. })
         ));
+    }
+
+    #[test]
+    fn bad_k_or_n_is_reported_before_the_layout() {
+        // Code-review W-009: k = 0 made shard_len fail first, so it was
+        // reported as an inconsistent layout.
+        for (k, n) in [(0, 3), (4, 4), (2, 129), (65, 128)] {
+            assert_eq!(
+                Header::new(100, k, n, 1024),
+                Err(HeaderError::Params { k, n })
+            );
+        }
     }
 
     #[test]

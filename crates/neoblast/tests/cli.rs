@@ -292,6 +292,92 @@ fn seal_refuses_a_file_whose_manifest_open_could_not_read() {
     assert_eq!(fs::read(existing.join("manifest.nbl")).unwrap(), before);
 }
 
+#[test]
+fn seal_reports_bad_parameters_plainly() {
+    // Code-review W-009: k = 0 was reported as an inconsistent layout.
+    let dir = scratch("cli-bad-params");
+    let input = dir.join("in.bin");
+    fs::write(&input, b"data").unwrap();
+    let store = dir.join("store");
+    let out = neoblast(&[
+        "seal",
+        input.to_str().unwrap(),
+        "--out",
+        store.to_str().unwrap(),
+        "--k",
+        "0",
+    ]);
+    assert!(!out.status.success());
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("invalid k/n"), "{err}");
+    assert!(!store.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn seal_hints_at_the_segment_size_when_segments_overflow() {
+    // Code-review W-009: more segments than the header can count (300 GiB in
+    // 64-byte segments) gets the same `--segment-size` hint as an oversized
+    // manifest. The input is a sparse file, so this needs Unix.
+    let dir = scratch("cli-segment-overflow");
+    let input = dir.join("huge.bin");
+    fs::File::create(&input)
+        .unwrap()
+        .set_len(300 * 1024 * 1024 * 1024)
+        .unwrap();
+    let store = dir.join("store");
+    let out = neoblast(&[
+        "seal",
+        input.to_str().unwrap(),
+        "--out",
+        store.to_str().unwrap(),
+        "--segment-size",
+        "64",
+    ]);
+    assert!(!out.status.success());
+    // Sparse, but tools that copy target/ may not know that.
+    fs::remove_file(&input).unwrap();
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("--segment-size"), "{err}");
+    assert!(!store.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn seal_refuses_a_non_empty_store_before_reading_a_pipe() {
+    // Code-review W-005: a non-empty store without `--force` is refused before
+    // the input is read, so a pipe that never ends is not buffered first.
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+    let dir = scratch("cli-pipe-refused");
+    let (_, store) = sealed_store(&dir);
+    let mut child = Command::new(env!("CARGO_BIN_EXE_neoblast"))
+        .args(["seal", "/dev/stdin", "--out", store.to_str().unwrap()])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    // The pipe stays open and empty: reading it would block until the timeout.
+    let _stdin = child.stdin.take().unwrap();
+    let start = Instant::now();
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break Some(status);
+        }
+        if start.elapsed() > Duration::from_secs(20) {
+            child.kill().unwrap();
+            break None;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    let status = status.expect("seal read the pipe before refusing the store");
+    assert!(!status.success());
+    let mut err = String::new();
+    std::io::Read::read_to_string(&mut child.stderr.take().unwrap(), &mut err).unwrap();
+    assert!(err.contains("not empty"), "{err}");
+}
+
 #[cfg(unix)]
 #[test]
 fn seal_reads_a_pipe() {

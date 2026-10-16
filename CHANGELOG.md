@@ -10,12 +10,22 @@ the frozen v1 byte format).
 
 ### Added
 
+- `Params::header` plans a file's header and refuses parameters whose
+  manifest would be larger than a store reads, with the new
+  `Error::ManifestTooLarge`.
 - `ShardSink::finish`, called once after the last shard of a successful run;
   the default does nothing. `DirStore` uses it to sync the last segment
   directory, so a caller that uses `put` directly calls it too.
 
 ### Changed
 
+- `seal`, `seal_with_key` and `seal_stream` refuse parameters whose manifest
+  would be larger than 256 MiB (`MAX_MANIFEST_LEN`) before they write a shard,
+  whatever the sink. Before, `seal_stream` into a `DirStore` wrote every shard
+  and then left the store with no manifest (review W-006).
+- `Header::new` reports bad k or n as `HeaderError::Params` even when the
+  segment size or layout would also fail; the bytes of valid headers are
+  unchanged.
 - `heal_stream` no longer stops at a shard its sink cannot store: it goes on,
   then returns the first unrecoverable segment or, failing that, the first
   write error.
@@ -24,6 +34,12 @@ the frozen v1 byte format).
 
 ### Fixed
 
+- `seal` refuses a non-empty `--out` given without `--force` before it reads
+  the input, so a piped input is no longer read into memory first (review
+  W-005).
+- `seal --k 0` reports invalid k/n, and a file that needs too many segments
+  gets the hint to use a larger `--segment-size` or a smaller `--n` (review
+  W-009).
 - A store directory from someone else can no longer stop `heal` part-way. A
   shard that cannot be written is skipped, every other one is still rebuilt,
   and `heal` then fails naming the path. Temporary files get random names, so
