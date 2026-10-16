@@ -30,3 +30,27 @@ jobs:
           if [ -n "$bad" ]; then
             echo "::error::Maintainer commits must use UTC timestamps:"; echo "$bad"; exit 1
           fi
+      - name: Commits carry only the project's identity
+        # Every commit after 5393f67, when this rule began, must be authored and
+        # committed as the project in UTC, and any Co-authored-by or
+        # Signed-off-by trailer must name the project too (S-008). Merge commits
+        # count. A pull request is checked at its own head, which leaves out the
+        # test merge GitHub makes. Only hashes are printed, so a failure never
+        # repeats a name in the public log. Dependabot's commits fail by design:
+        # re-make the change as a project commit.
+        shell: bash
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          start=5393f6704b5059c4c8ecfbb6adc01718c13c4455
+          git rev-parse --verify --quiet "$HEAD_SHA^{commit}" >/dev/null
+          bad=$(git log --date=format:%z "$start..$HEAD_SHA" \
+              --format='%h%x09%an <%ae>%x09%cn <%ce>%x09%ad%x09%cd%x09%(trailers:key=Co-authored-by,key=Signed-off-by,valueonly,unfold,separator=%x3B)' \
+            | awk -F'\t' -v me='neoblast maintainers <dev@neoblast.dev>' '
+                $1 !~ /^[0-9a-f]+$/ || NF != 6 { print "(unparsable line)"; next }
+                { tr = $6; gsub(/neoblast maintainers <dev@neoblast\.dev>/, "", tr); gsub(/[; ]/, "", tr) }
+                $2 != me || $3 != me || $4 != "+0000" || $5 != "+0000" || tr != "" { print $1 }')
+          if [ -n "$bad" ]; then
+            echo "::error::Only neoblast maintainers <dev@neoblast.dev>, in UTC, may author, commit, co-author or sign off. Re-make these commits:"
+            echo "$bad"; exit 1
+          fi
