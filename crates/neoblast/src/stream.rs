@@ -29,6 +29,14 @@ use crate::tree::{self, Hash};
 pub trait ShardSink {
     /// Stores one shard. Calls arrive in segment order.
     fn put(&mut self, segment: u32, index: u16, bytes: &[u8]) -> io::Result<()>;
+
+    /// Makes every shard stored so far durable. [`seal_stream`] and
+    /// [`heal_stream`] call it once, after the last `put` of a run that
+    /// succeeds; a caller using `put` directly calls it too. The default does
+    /// nothing.
+    fn finish(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 /// Seals `payload_len` bytes read from `input` under a fresh random read key,
@@ -108,6 +116,7 @@ pub fn seal_stream_with_key(
             expected: payload_len,
         });
     }
+    sink.finish()?;
     let manifest = Manifest::new(header, hashes)?;
     let cap = FileReadCap {
         root: manifest.root(),
@@ -191,9 +200,10 @@ pub fn open_stream(
 /// each rebuilt shard to `sink` as soon as its segment is done. Returns how
 /// many shards were rebuilt.
 ///
-/// A segment with fewer than k good shards is skipped and the others are still
-/// repaired; the first such segment is then reported as
-/// [`Error::Unrecoverable`].
+/// A segment with fewer than k good shards is skipped, and so is a shard that
+/// `sink` fails to store (review W-003); everything else is still repaired.
+/// Then the first unrecoverable segment is returned as [`Error::Unrecoverable`],
+/// since it means the file is lost; failing that, the sink's first error.
 ///
 /// Shards that fail their hash check are ignored rather than aborting the heal
 /// (code-review issue 2), so one bad peer cannot block repair.
@@ -220,7 +230,9 @@ pub fn heal_stream(
             Err(e) => match unrecoverable(e, segment, &held, k) {
                 // Keep repairing the other segments; report this one at the end.
                 failure @ Error::Unrecoverable { .. } => {
-                    first_failure.get_or_insert(failure);
+                    if !matches!(first_failure, Some(Error::Unrecoverable { .. })) {
+                        first_failure = Some(failure);
+                    }
                     continue;
                 }
                 other => return Err(other),
@@ -234,9 +246,17 @@ pub fn heal_stream(
             if manifest.shard_hash(segment, index) != Some(&tree::shard_hash(bytes)) {
                 return Err(Error::RebuildMismatch { segment, index });
             }
-            sink.put(segment, index, bytes)?;
-            rebuilt += 1;
+            match sink.put(segment, index, bytes) {
+                Ok(()) => rebuilt += 1,
+                // Keep writing the other shards; report this one at the end.
+                Err(e) => {
+                    first_failure.get_or_insert(Error::Io(e));
+                }
+            }
         }
+    }
+    if let Err(e) = sink.finish() {
+        first_failure.get_or_insert(Error::Io(e));
     }
     match first_failure {
         Some(failure) => Err(failure),

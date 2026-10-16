@@ -165,20 +165,9 @@ fn decision_0006_rules_agree_across_crates() {
 // worklists in `plans/`. They use a real directory, because `DirStore` is the fix.
 
 mod dir {
-    use std::fs;
-    use std::path::PathBuf;
-
-    /// A fresh scratch directory under the target directory.
-    pub fn scratch(name: &str) -> PathBuf {
-        let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        dir
-    }
+    pub use super::common::scratch;
 
     /// Seals 3 KB 2-of-4 into `<dir>/store`; returns the cap, store and manifest.
-    /// Only the unix tests (symlinks, FIFOs) use it.
-    #[cfg(unix)]
     pub fn sealed(
         dir: &std::path::Path,
     ) -> (neoblast::FileReadCap, neoblast::store::DirStore, Vec<u8>) {
@@ -233,8 +222,9 @@ fn s001_heal_refuses_a_symlinked_segment_directory() {
     use std::os::unix::fs::symlink;
     let tmp = dir::scratch("s001-segment-dir");
     let (cap, store, manifest) = dir::sealed(&tmp);
-    // The segment moves outside the store, one shard short, behind a symlink:
-    // heal can read the other three, so it would write the fourth out there.
+    // The segment moves outside the store, one shard short, behind a symlink.
+    // Reads refuse the symlinked directory, so heal finds the segment
+    // unrecoverable and never writes; the write guard has its own test (W-008).
     let outside = tmp.join("outside");
     let segment = store.shard_path(0, 0).parent().unwrap().to_owned();
     std::fs::rename(&segment, &outside).unwrap();
@@ -300,4 +290,117 @@ fn w001_an_oversized_manifest_is_refused_unread() {
 
     let err = DirStore::new(&tmp).read_manifest().unwrap_err();
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+}
+
+/// W-003: a shard heal cannot write, here because a directory was planted at
+/// its path, is skipped. Every other missing shard, in every segment, is still
+/// rebuilt, and the error names the path.
+#[test]
+fn w003_an_unwritable_shard_does_not_stop_heal() {
+    let tmp = dir::scratch("w003-unwritable");
+    let (cap, store, manifest) = dir::sealed(&tmp);
+    let segments = neoblast::Manifest::decode(&manifest, &cap.root)
+        .unwrap()
+        .header()
+        .segment_count();
+    assert!(segments > 1);
+    let mut lost = Vec::new();
+    for segment in 0..segments {
+        for index in [0, 1] {
+            let path = store.shard_path(segment, index);
+            lost.push((std::fs::read(&path).unwrap(), path.clone()));
+            std::fs::remove_file(&path).unwrap();
+        }
+    }
+    let planted = store.shard_path(0, 0);
+    std::fs::create_dir(&planted).unwrap();
+    std::fs::write(planted.join("keep"), b"not a shard").unwrap();
+
+    let err = neoblast::heal_stream(&cap.verify_cap(), &manifest, &store, &mut store.clone())
+        .unwrap_err();
+    assert!(matches!(err, Error::Io(_)), "{err}");
+    assert!(
+        err.to_string().contains(&planted.display().to_string()),
+        "{err}"
+    );
+    for (bytes, path) in lost.iter().filter(|(_, path)| *path != planted) {
+        assert_eq!(&std::fs::read(path).unwrap(), bytes, "{}", path.display());
+    }
+    assert!(std::fs::symlink_metadata(&planted).unwrap().is_dir());
+}
+
+/// W-004: a file planted at the temporary name heal used to write first
+/// (`<shard>.<pid>.tmp`) no longer makes the write fail. Temporary names are
+/// now random, and none is left behind.
+#[test]
+fn w004_planted_temporary_names_do_not_stop_heal() {
+    let tmp = dir::scratch("w004-tmp-names");
+    let (cap, store, manifest) = dir::sealed(&tmp);
+    let path = store.shard_path(0, 0);
+    let good = std::fs::read(&path).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    let mut planted = path.clone().into_os_string();
+    planted.push(format!(".{}.tmp", std::process::id()));
+    std::fs::write(&planted, b"planted").unwrap();
+
+    let rebuilt =
+        neoblast::heal_stream(&cap.verify_cap(), &manifest, &store, &mut store.clone()).unwrap();
+    assert_eq!(rebuilt, 1);
+    assert_eq!(std::fs::read(&path).unwrap(), good);
+    assert_eq!(std::fs::read(&planted).unwrap(), b"planted");
+    let segment = path.parent().unwrap();
+    assert_eq!(std::fs::read_dir(segment).unwrap().count(), 4 + 1);
+}
+
+/// W-008: no shard is written into a segment directory that is a symlink. A
+/// seal into a store with one planted reaches `write_shard`'s own guard, which
+/// the S-001 heal test above does not: without it, shards land outside.
+#[cfg(unix)]
+#[test]
+fn w008_seal_never_writes_through_a_symlinked_segment_directory() {
+    use std::os::unix::fs::symlink;
+    let tmp = dir::scratch("w008-segment-dir");
+    let outside = tmp.join("outside");
+    std::fs::create_dir(&outside).unwrap();
+    let root = tmp.join("store");
+    std::fs::create_dir(&root).unwrap();
+    symlink(&outside, root.join("seg-000000")).unwrap();
+    let mut store = neoblast::store::DirStore::new(&root);
+    let params = Params {
+        k: 2,
+        n: 4,
+        segment_size: 1024,
+    };
+
+    let err = neoblast::seal_stream(&[7u8; 3000][..], 3000, params, &mut store).unwrap_err();
+    assert!(err.to_string().contains("seg-000000"), "{err}");
+    assert_eq!(std::fs::read_dir(&outside).unwrap().count(), 0);
+}
+
+/// W-003: since heal now goes on past a shard it cannot write, a segment that
+/// cannot be recovered later on is still the error reported: it means the file
+/// is lost, which a failed write alone does not.
+#[test]
+fn w003_a_lost_segment_outranks_a_failed_write() {
+    let tmp = dir::scratch("w003-lost-segment");
+    let (cap, store, manifest) = dir::sealed(&tmp);
+    std::fs::remove_file(store.shard_path(0, 0)).unwrap();
+    std::fs::create_dir(store.shard_path(0, 0)).unwrap();
+    for index in 0..3 {
+        std::fs::remove_file(store.shard_path(2, index)).unwrap();
+    }
+
+    let err = neoblast::heal_stream(&cap.verify_cap(), &manifest, &store, &mut store.clone())
+        .unwrap_err();
+    assert!(
+        matches!(
+            err,
+            Error::Unrecoverable {
+                segment: 2,
+                have: 1,
+                need: 2
+            }
+        ),
+        "{err}"
+    );
 }

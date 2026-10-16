@@ -1,23 +1,19 @@
 //! The `neoblast` command line: streaming seal, heal and open on real files.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+mod common;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+
+use common::scratch;
 
 fn neoblast(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_neoblast"))
         .args(args)
         .output()
         .unwrap()
-}
-
-/// A fresh scratch directory under the target directory, removed at the start.
-fn scratch(name: &str) -> PathBuf {
-    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).unwrap();
-    dir
 }
 
 fn shard(store: &Path, segment: u32, index: u16) -> PathBuf {

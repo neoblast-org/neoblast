@@ -24,6 +24,7 @@ neoblast-crypto.workspace = true
 neoblast-erasure.workspace = true
 blake3.workspace = true
 clap.workspace = true
+getrandom.workspace = true
 thiserror.workspace = true
 zeroize.workspace = true
 

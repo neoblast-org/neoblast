@@ -8,6 +8,31 @@ the frozen v1 byte format).
 
 ## [Unreleased]
 
+### Added
+
+- `ShardSink::finish`, called once after the last shard of a successful run;
+  the default does nothing. `DirStore` uses it to sync the last segment
+  directory, so a caller that uses `put` directly calls it too.
+
+### Changed
+
+- `heal_stream` no longer stops at a shard its sink cannot store: it goes on,
+  then returns the first unrecoverable segment or, failing that, the first
+  write error.
+- `DirStore::write_sealed` writes the shards before the manifest, as a
+  streaming seal does.
+
+### Fixed
+
+- A store directory from someone else can no longer stop `heal` part-way. A
+  shard that cannot be written is skipped, every other one is still rebuilt,
+  and `heal` then fails naming the path. Temporary files get random names, so
+  names planted in advance no longer block a write (reviews W-003 and W-004).
+- `seal` and `heal` sync every shard and the manifest before renaming them into
+  place, and on Unix the directories after, so what they report as written
+  survives a power loss. On macOS each shard costs a full flush: sealing
+  256 MiB took about 14.5 s on an Apple M5, up from 2–4 s (review W-007).
+
 ## [0.0.1] - 2026-10-16
 
 The offline core (Phase 1). Experimental and **not audited**: do not rely on it

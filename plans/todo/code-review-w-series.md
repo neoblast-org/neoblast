@@ -109,7 +109,10 @@ by mutation, or (W-006, W-007, W-010, W-011) confirmed by reading the code.
   for reads; put the path in the error.
 - Verified: reproduced with the release CLI. Pre-existing (`e24f453` has the
   same `?`).
-- Status: open (v0.0.2).
+- Status: fixed in #13: a failed write is recorded and heal moves on, and the
+  error names the path; a segment found unrecoverable later still outranks it.
+  Regression tests: `w003_an_unwritable_shard_does_not_stop_heal` and
+  `w003_a_lost_segment_outranks_a_failed_write`.
 
 ### W-004 (low): planted temporary-file names make heal's writes fail
 
@@ -122,7 +125,8 @@ by mutation, or (W-006, W-007, W-010, W-011) confirmed by reading the code.
 - Remediation: a random suffix with a retry on `AlreadyExists`; W-003's fix
   also stops it ending the heal.
 - Verified: reproduced with the release CLI. Introduced in #6.
-- Status: open (v0.0.2).
+- Status: fixed in #13: temporary names carry a random 64-bit suffix, retried
+  on `AlreadyExists`. Regression test: `w004_planted_temporary_names_do_not_stop_heal`.
 
 ### W-005 (low): seal reads a whole pipe before refusing a non-empty store
 
@@ -164,7 +168,11 @@ by mutation, or (W-006, W-007, W-010, W-011) confirmed by reading the code.
 - Remediation: sync the temporary file before renaming, and the store root and
   segment directories after; until then, `CHANGELOG.md` lists it as a known issue.
 - Verified: confirmed by reading. Pre-existing (`e24f453` used `fs::write`).
-- Status: open (v0.0.2).
+- Status: fixed in #13: each file is synced before its rename, each segment
+  directory once after its last write (`ShardSink::finish`), and each new
+  directory into its parent. Test: `store::tests::w007_every_write_is_synced`.
+  Sealing 256 MiB on the reference Mac went from about 2-4 s to 14.5 s, almost
+  all of it one full flush (`F_FULLFSYNC`) per shard.
 
 ### W-008 (low): the symlinked-segment-directory test never reaches the write guard
 
@@ -181,7 +189,8 @@ by mutation, or (W-006, W-007, W-010, W-011) confirmed by reading the code.
 - Remediation: a regression test through `seal_stream` or a separate sink; fix
   the comment.
 - Verified: mutation run. Test gap only; the code is correct.
-- Status: open (v0.0.2).
+- Status: fixed in #13: `w008_seal_never_writes_through_a_symlinked_segment_directory`
+  fails with the guard removed, and the S-001 test's comment is corrected.
 
 ### W-009 (low): unhelpful errors for `--k 0` and too many segments
 
@@ -221,7 +230,7 @@ by mutation, or (W-006, W-007, W-010, W-011) confirmed by reading the code.
 - Verified: confirmed by reading. Introduced in #6.
 - Remediation: move it to `tests/common/mod.rs` and add `mod common;` to
   `cli.rs`.
-- Status: open (v0.0.2).
+- Status: fixed in #13: `scratch` lives in `tests/common/mod.rs`.
 
 ### W-012 (low): `bench/heal-check.sh` fails silently
 

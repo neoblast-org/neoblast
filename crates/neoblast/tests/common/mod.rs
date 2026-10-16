@@ -1,8 +1,18 @@
 #![allow(dead_code, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
 
 use neoblast::{Sealed, ShardSource};
+
+/// A fresh scratch directory under the target directory, removed at the start.
+pub fn scratch(name: &str) -> PathBuf {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    dir
+}
 
 /// In-memory shard source for tests.
 #[derive(Default, Clone)]
