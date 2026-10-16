@@ -1,6 +1,6 @@
 # 0004: Capability model
 
-- Status: proposed (files implemented in Phase 1; channels in Phase 2)
+- Status: accepted for files on 2026-10-16 (file links are frozen with v1, `spec/caps.md`); channels and the keyring still proposed (Phase 2)
 - Date: 2026-10-13
 
 ## Context and problem statement

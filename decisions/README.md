@@ -9,7 +9,7 @@ decision gets a new record that supersedes the old one.
 | [0001](0001-rust-only-mvp.md) | Rust-only MVP | Accepted |
 | [0002](0002-root-commits-to-everything.md) | The file root commits to every parameter | Accepted |
 | [0003](0003-threat-model.md) | Threat model: four adversaries, no anonymity in v1 | Accepted |
-| [0004](0004-capability-model.md) | Capability model: verify ⊂ read ⊂ write | Proposed |
+| [0004](0004-capability-model.md) | Capability model: verify ⊂ read ⊂ write | Accepted for files; channels and keyring proposed |
 | [0005](0005-storage-reciprocity.md) | Why strangers store your shards: swaps, pins, donors, leases | Proposed |
 | [0006](0006-erasure-code.md) | Erasure code: Leopard-RS high-rate, checked against Leopard | Accepted |
 | [0007](0007-no-multiformats-cids.md) | Links keep their own version byte, not multiformats CIDs | Accepted |
