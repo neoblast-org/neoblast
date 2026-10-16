@@ -6,7 +6,9 @@ All four crates (`neoblast`, `neoblast-format`, `neoblast-crypto`,
 [Semantic Versioning](https://semver.org/) (0.0.x: anything may change except
 the frozen v1 byte format).
 
-## [0.0.1] - unreleased
+## [Unreleased]
+
+## [0.0.1] - 2026-10-16
 
 The offline core (Phase 1). Experimental and **not audited**: do not rely on it
 to protect anything yet. It keeps content unreadable to storage hosts; it does
@@ -69,4 +71,5 @@ not hide who published or read it ([`spec/threat-model.md`](spec/threat-model.md
   Files sealed with any segment size stay readable, because the size is
   recorded in the header.
 
+[Unreleased]: https://github.com/neoblast-org/neoblast/compare/v0.0.1...HEAD
 [0.0.1]: https://github.com/neoblast-org/neoblast/releases/tag/v0.0.1

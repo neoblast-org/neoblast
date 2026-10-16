@@ -228,4 +228,5 @@ by mutation, or (W-006, W-007, W-010, W-011) confirmed by reading the code.
   prints the captured output and a message.
 - Remediation: follow `segment-size.sh` (`|| { cat …; exit 1; }`).
 - Verified: reproduced with a stub binary.
-- Status: open; can land during the campaign (outside `crates/`).
+- Status: fixed in #10 (seal and heal errors are printed; a missing
+  `/usr/bin/time` or an unsupported OS is reported).
