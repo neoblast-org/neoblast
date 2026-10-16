@@ -48,6 +48,17 @@ jobs:
           1b58fc1a0f3e79e542a007373d215f997f745b9024ff8505d40204b49a978ba6  spec/test-vectors/erasure-leopard.json
           EOF
 
+  heal-heap:
+    # Counts the manifest's copies exactly (bench/heal-heap/, outside the
+    # workspace, so `cargo test --all` does not reach it).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
+        with:
+          toolchain: "1.97.0"
+      - run: cargo test --locked --manifest-path bench/heal-heap/Cargo.toml
+
   deny:
     runs-on: ubuntu-latest
     steps:
