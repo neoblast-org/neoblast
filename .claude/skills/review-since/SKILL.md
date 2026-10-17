@@ -138,6 +138,15 @@ Side-branch reviews are the exception: see step 5.
   every item is fixed or accepted with its reasoning recorded; it then moves to
   `plans/completed/`, and the move is noted in the next entry, never by editing the
   old entry's link.
+- **Findings of medium severity or higher stay private until fixed**
+  (`SECURITY.md`, "Our own findings"; S-006). Once committed, the log and the
+  worklists are public, so for such a finding the entry names only its ID, its
+  severity and whether it blocks the release, never where it is or how to
+  trigger it. Hand its details to the user for a private draft advisory
+  instead; its worklist entry follows once the fix is on `main`. To re-check
+  it in step 4, ask the user for the advisory's details. Its ID counts as used
+  for the ID rule below, though so far it appears only in a log. Low findings
+  may be public before they are fixed.
 - Worklist format: once a worklist of the same kind exists under `plans/`, follow
   the closest one. Until then: security worklists group findings by severity, each
   with file:line and a remediation-status line naming the fixing commit; code

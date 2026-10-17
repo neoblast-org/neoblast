@@ -103,4 +103,5 @@ working there.
    before the fix is merged.
 3. Fix it and add a regression test (`crates/neoblast/tests/review_regressions.rs`).
    The fix changes the `code_id`, so the 24-hour count for that target restarts.
-4. Commit the run's record anyway: a `crash` record is part of the history.
+4. Commit the run's record anyway, with or after the fix: a `crash` record is
+   part of the history, but it names the target and commit.

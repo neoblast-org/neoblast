@@ -6,7 +6,9 @@ Status: todo. Opened 2026-10-14 by the first security review (empty tree to
 blocking v0.0.1. The third review (2026-10-16, `a9445d9..5393f67`) added S-008
 and S-009.
 
-IDs are unique across all worklists and continue from the highest S-number used.
+IDs are unique across all worklists and continue from the highest S-number used,
+including one that so far appears only in a review log (`SECURITY.md`, "Our own
+findings").
 Each item has a status (open / fixed / won't fix) and, once fixed, the commit
 that fixed it.
 
@@ -156,7 +158,12 @@ that fixed it.
   skill. Low items that are deliberate known issues may stay public.
 - **Verified:** by reading the history.
 - **Release:** not blocking (process and docs).
-- **Status:** open.
+- **Status:** fixed in the v0.0.2 version-bump PR: `SECURITY.md` ("Our own
+  findings") and the `review-since` skill's notes, which the security review
+  follows too. One change from the fix above: the worklist entry follows the
+  fix's merge instead of landing with it, because every change is first a
+  public pull request; that pull request says what changed, not how to
+  exploit it.
 
 ### S-007 · Low · GitHub's squash merges replace the project's commit metadata
 

@@ -420,7 +420,7 @@ checksum = "c505b3e17ed6b70a7ed2e67fbb2c560ee327353556120d6e72f5232b6880d536"
 
 [[package]]
 name = "neoblast"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "blake3",
  "clap",
@@ -435,7 +435,7 @@ dependencies = [
 
 [[package]]
 name = "neoblast-crypto"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "blake3",
  "chacha20poly1305",
@@ -447,7 +447,7 @@ dependencies = [
 
 [[package]]
 name = "neoblast-erasure"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "reed-solomon-simd",
  "thiserror",
@@ -455,7 +455,7 @@ dependencies = [
 
 [[package]]
 name = "neoblast-format"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "data-encoding",
  "thiserror",
