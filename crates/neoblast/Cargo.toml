@@ -28,6 +28,9 @@ getrandom.workspace = true
 thiserror.workspace = true
 zeroize.workspace = true
 
+[target.'cfg(target_vendor = "apple")'.dependencies]
+rustix.workspace = true
+
 [dev-dependencies]
 proptest.workspace = true
 serde.workspace = true

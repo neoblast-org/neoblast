@@ -24,6 +24,8 @@ chacha20poly1305 = "0.11"
 zeroize = { version = "1.9", features = ["derive"] }
 subtle = "2.6"
 getrandom = "0.4"
+# Apple only: a plain fsync per file, as std's sync_all is a full flush there (see store.rs).
+rustix = { version = "1.1", default-features = false, features = ["fs", "std"] }
 thiserror = "2.0"
 clap = { version = "4.6", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }

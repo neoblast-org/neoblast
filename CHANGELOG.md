@@ -23,6 +23,8 @@ the frozen v1 byte format).
 
 ### Changed
 
+- `neoblast` depends on `rustix` on Apple systems, for the plain `fsync` that
+  std does not offer there (its `sync_all` is always a full flush).
 - The default segment size is 1 MiB instead of 4 MiB (decision 0009). On a
   1 GiB file at 4 MiB, `heal` and opening from parity used more than the
   32 MiB of working memory that ROADMAP item 2 allows; at 1 MiB every
@@ -68,8 +70,13 @@ the frozen v1 byte format).
   names planted in advance no longer block a write (reviews W-003 and W-004).
 - `seal` and `heal` sync every shard and the manifest before renaming them into
   place, and on Unix the directories after, so what they report as written
-  survives a power loss. On macOS each shard costs a full flush: sealing
-  256 MiB took about 14.5 s on an Apple M5, up from 2–4 s (review W-007).
+  survives a power loss (review W-007), except on a file system that cannot
+  sync directories, which is accepted as it is. On macOS a file gets a plain
+  `fsync` and its directory one full sync (`F_FULLFSYNC`) after its last
+  write, which flushes the drive's cache for every file before it, so a
+  segment pays for one full flush instead of one per shard. At 1 MiB
+  segments on an Apple M5, sealing 1 GiB takes about 33 s and healing it
+  about 24 s, against about 260 s and 165 s with a full flush per shard.
 
 ## [0.0.1] - 2026-10-16
 

@@ -16,7 +16,16 @@
 //!
 //! Every file is synced before it is renamed into place, and each directory
 //! once after its last write, so what a seal or heal reports as written survives
-//! a power loss (review W-007). Directories can only be synced on Unix.
+//! a power loss (review W-007). Directories can only be synced on Unix, and a
+//! file system that cannot sync them is accepted as it is (see `sync_dir`).
+//!
+//! On Apple systems a file gets a plain `fsync`, which leaves its data in the
+//! drive's write cache, and its directory a full sync (`F_FULLFSYNC`), which
+//! flushes that whole cache, taking every file on the same drive synced
+//! before it along. So each segment pays for one full flush instead of one
+//! per shard, and a file is durable once its directory has been synced. A file
+//! and its directory are always on the same drive here. Elsewhere `fsync` is
+//! all there is, and both get it.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -33,11 +42,11 @@ pub const MANIFEST_FILE: &str = "manifest.nbl";
 
 /// The largest manifest a store reads or writes, and so the largest any seal
 /// makes ([`Params::header`](crate::Params::header)): 256 MiB, enough for files
-/// of about 640 GiB at the default parameters. The manifest is read into memory
-/// before it can be checked against the root, so a larger one is refused
-/// unread (review W-001). Checking one costs little more than its own size:
-/// the root is compared before anything else that size is built (review
-/// S-005).
+/// of about 162 GiB at the default parameters (decision 0009). The manifest is
+/// read into memory before it can be checked against the root, so a larger one
+/// is refused unread (review W-001). Checking one costs little more than its
+/// own size: the root is compared before anything else that size is built
+/// (review S-005).
 pub const MAX_MANIFEST_LEN: u64 = 256 * 1024 * 1024;
 
 /// The size in bytes of the manifest for `header`: the header, then one 32-byte
@@ -294,17 +303,25 @@ fn parent_dir(path: &Path) -> &Path {
     }
 }
 
-/// Syncs the temporary file that will become `path`.
+/// Syncs the temporary file that will become `path`. On Apple systems this is
+/// a plain `fsync`, retried if a signal interrupts it as `sync_all` is; the
+/// data reaches stable storage with the full sync of its directory, which
+/// every write is followed by (see the module docs).
 fn sync_file(file: &File, path: &Path) -> io::Result<()> {
+    #[cfg(target_vendor = "apple")]
+    rustix::io::retry_on_intr(|| rustix::fs::fsync(file))?;
+    #[cfg(not(target_vendor = "apple"))]
     file.sync_all()?;
     note_synced(path);
     Ok(())
 }
 
-/// Syncs a directory, so the entries renamed or created in it survive a power
-/// loss. Only Unix can open a directory to sync it; elsewhere this does nothing.
+/// Syncs a directory fully, so the entries renamed or created in it, and the
+/// data of every file synced before it, survive a power loss. Only Unix can
+/// open a directory to sync it; elsewhere this does nothing.
 /// A file system that cannot sync directories at all (some network and FUSE
-/// file systems) is accepted as it is, rather than making every write fail.
+/// file systems) is accepted as it is, rather than making every write fail;
+/// on Apple systems, files there get only their plain `fsync`.
 fn sync_dir(dir: &Path) -> io::Result<()> {
     #[cfg(unix)]
     match File::open(dir)?.sync_all() {
@@ -389,11 +406,11 @@ mod tests {
         SYNCED.with_borrow_mut(std::mem::take)
     }
 
-    /// True if `path` was synced and its directory was synced after it.
+    /// True if `path` was synced and its directory was synced after its last sync.
     fn durable(log: &[PathBuf], path: &Path) -> bool {
         let dir = parent_dir(path);
         log.iter()
-            .position(|p| p == path)
+            .rposition(|p| p == path)
             .and_then(|at| log.get(at..))
             .is_some_and(|after| after.iter().any(|p| p == dir))
     }

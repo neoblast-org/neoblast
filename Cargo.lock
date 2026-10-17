@@ -456,6 +456,7 @@ dependencies = [
  "neoblast-erasure",
  "neoblast-format",
  "proptest",
+ "rustix",
  "serde",
  "serde_json",
  "thiserror",
