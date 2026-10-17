@@ -45,7 +45,7 @@ def needed_uptime(k: int, n: int, segments: int, target: float) -> float:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--file-mib", type=float, default=1024, help="file size in MiB (default 1 GiB)")
-    ap.add_argument("--segment-mib", type=float, default=4, help="segment size in MiB (default 4)")
+    ap.add_argument("--segment-mib", type=float, default=1, help="segment size in MiB (default 1)")
     ap.add_argument("--target", type=float, default=0.999, help="required probability the whole file is readable")
     args = ap.parse_args()
     segments = max(1, round(args.file_mib / args.segment_mib))

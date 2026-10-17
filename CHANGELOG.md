@@ -23,6 +23,14 @@ the frozen v1 byte format).
 
 ### Changed
 
+- The default segment size is 1 MiB instead of 4 MiB (decision 0009). On a
+  1 GiB file at 4 MiB, `heal` and opening from parity used more than the
+  32 MiB of working memory that ROADMAP item 2 allows; at 1 MiB every
+  operation stays within it. A file keeps the segment size it was sealed
+  with, so existing stores open and heal as before, and `--segment-size`
+  still chooses another. With the defaults, the largest file `seal` accepts
+  falls from about 648 GiB to about 162 GiB, because the manifest is four
+  times larger.
 - `seal`, `seal_with_key` and `seal_stream` refuse parameters whose manifest
   would be larger than 256 MiB (`MAX_MANIFEST_LEN`) before they write a shard,
   whatever the sink. Before, `seal_stream` into a `DirStore` wrote every shard
@@ -46,8 +54,8 @@ the frozen v1 byte format).
   three copies. Heal's live heap now grows with the file only by the manifest
   itself (`n × 32` bytes per segment), measured to the byte. Its peak RSS at
   4 MiB segments is still above the 32 MiB working-memory target listed under
-  0.0.1's known issues, mostly memory the system allocator keeps; the
-  segment-size decision deals with that.
+  0.0.1's known issues, mostly memory the system allocator keeps; the new
+  1 MiB default (see Changed) stays within it.
 - `seal` refuses a non-empty `--out` given without `--force` before it reads
   the input, so a piped input is no longer read into memory first (review
   W-005).

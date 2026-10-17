@@ -87,7 +87,17 @@ fn build() -> VectorFile {
                 segment_size: 256,
             },
         ),
-        ("default-20of50", "mod251:100000", Params::default()),
+        // The default when v1 was frozen; pinned, so changing the default
+        // (decision 0009) cannot change this vector.
+        (
+            "default-20of50",
+            "mod251:100000",
+            Params {
+                k: 20,
+                n: 50,
+                segment_size: 4 * 1024 * 1024,
+            },
+        ),
     ];
     let vectors = cases
         .iter()

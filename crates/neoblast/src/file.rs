@@ -89,12 +89,13 @@ impl Params {
 }
 
 impl Default for Params {
-    /// 20-of-50 with 4 MiB segments: the current leaning from the durability check.
+    /// 20-of-50 (the durability check's current leaning) with 1 MiB segments
+    /// (decision 0009).
     fn default() -> Self {
         Self {
             k: 20,
             n: 50,
-            segment_size: 4 * 1024 * 1024,
+            segment_size: 1024 * 1024,
         }
     }
 }

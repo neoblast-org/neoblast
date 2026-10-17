@@ -2,12 +2,13 @@
 //!
 //! Peak memory depends on the segment size and k/n, not on the file size,
 //! apart from the manifest's shard hashes (`n × 32` bytes per segment, about
-//! 0.04% of the file at 4 MiB segments and 20-of-50). [`open_manifest`] and
-//! [`heal_manifest`] hold that manifest once: [`Manifest`] keeps its encoding,
-//! which [`Manifest::decode_owned`] takes over from the caller. [`open_stream`]
-//! and [`heal_stream`] take the manifest's bytes and decode a copy. The
-//! in-memory [`seal`](crate::seal), [`open`](crate::open) and [`heal`](crate::heal)
-//! are thin wrappers over these functions, so both paths produce identical bytes.
+//! 0.16% of the file at the defaults, 20-of-50 and 1 MiB segments).
+//! [`open_manifest`] and [`heal_manifest`] hold that manifest once:
+//! [`Manifest`] keeps its encoding, which [`Manifest::decode_owned`] takes
+//! over from the caller. [`open_stream`] and [`heal_stream`] take the
+//! manifest's bytes and decode a copy. The in-memory [`seal`](crate::seal),
+//! [`open`](crate::open) and [`heal`](crate::heal) are thin wrappers over
+//! these functions, so both paths produce identical bytes.
 //!
 //! [`open_stream`] writes each segment as soon as it is verified and decrypted.
 //! Every segment is authenticated on its own (AEAD with the header as associated

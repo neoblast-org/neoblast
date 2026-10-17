@@ -30,9 +30,10 @@ neoblast heal  'nbl://fv/...' --from ./store   # rebuild them with the verify li
 neoblast open  'nbl://f/...#...' --from ./store --out photo-copy.jpg
 ```
 
-Defaults are 20-of-50 shards over 4 MiB segments. `seal`, `open` and `heal`
-work one segment at a time, so their memory use is meant not to grow with the
-file size. Measured on macOS, `heal`'s still does; see [CHANGELOG.md](CHANGELOG.md).
+Defaults are 20-of-50 shards over 1 MiB segments ([decision
+0009](decisions/0009-segment-size.md)). `seal`, `open` and `heal` work one
+segment at a time, so their memory use does not grow with the file size, apart
+from the manifest's shard hashes (about 0.16% of the file).
 The network (Phase 2), storage swaps and leases (Phase 3) and blind search
 (Phase 4) are not built yet.
 See [ROADMAP.md](ROADMAP.md) for phases, gates and open questions.

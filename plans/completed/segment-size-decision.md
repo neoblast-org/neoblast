@@ -1,6 +1,13 @@
 # Segment-size decision (ROADMAP open item 2)
 
-Status: todo, for v0.0.2 (step 6 of `plans/todo/v0.0.2.md`). The heal memory fix
+Status: completed 2026-10-17: decision 0009 applies the rule to runs at
+1 GiB and 256 MiB and sets the default to 1 MiB, the only size within it.
+Criterion 4: seal, open and open from parity grow by at most about the
+manifest; heal's RSS steps up 5 MiB between 256 MiB and 1 GiB and no further
+at 2 GiB, while its live heap grows only by the manifest (decision 0009,
+finding 2).
+
+Opened for v0.0.2 (step 6 of `plans/todo/v0.0.2.md`). The heal memory fix
 on `exp/heal-reuse` lowered heal's peak but did not stop it growing with the
 file (`plans/completed/phase-1-finish.md`, A3 results), so it and this decision
 are not in v0.0.1. At 4 MiB segments, heal on a 1 GiB file already exceeds the

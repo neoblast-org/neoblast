@@ -1,0 +1,176 @@
+{
+  "benchmark": "segment-size",
+  "started_utc": "2026-10-16T23:07:15Z",
+  "commit": "d56d51ae17aa4960816ed95582ab182c7d36ff3f",
+  "uncommitted_changes": false,
+  "file_mib": 1024,
+  "k": 20,
+  "n": 50,
+  "machine": {
+    "os": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M5"
+  },
+  "segment_mib": {
+    "1": {
+      "fixed": {
+        "seal": {
+          "seconds": 0.45,
+          "peak_mib": 10.8
+        },
+        "open": {
+          "seconds": 0.0,
+          "peak_mib": 2.2
+        },
+        "heal": {
+          "seconds": 0.13,
+          "peak_mib": 11.0
+        },
+        "open_from_parity": {
+          "seconds": 0.0,
+          "peak_mib": 10.9
+        }
+      },
+      "seal": {
+        "seconds": 256.67,
+        "peak_mib": 19.4,
+        "working_mib": 8.6
+      },
+      "open": {
+        "seconds": 10.83,
+        "peak_mib": 7.3,
+        "working_mib": 5.1
+      },
+      "heal": {
+        "seconds": 191.39,
+        "peak_mib": 34.0,
+        "working_mib": 23.0
+      },
+      "open_from_parity": {
+        "seconds": 15.55,
+        "peak_mib": 22.2,
+        "working_mib": 11.2
+      }
+    },
+    "4": {
+      "fixed": {
+        "seal": {
+          "seconds": 0.81,
+          "peak_mib": 10.6
+        },
+        "open": {
+          "seconds": 0.01,
+          "peak_mib": 2.2
+        },
+        "heal": {
+          "seconds": 0.17,
+          "peak_mib": 11.0
+        },
+        "open_from_parity": {
+          "seconds": 0.04,
+          "peak_mib": 11.0
+        }
+      },
+      "seal": {
+        "seconds": 172.83,
+        "peak_mib": 27.2,
+        "working_mib": 16.6
+      },
+      "open": {
+        "seconds": 10.07,
+        "peak_mib": 16.2,
+        "working_mib": 14.0
+      },
+      "heal": {
+        "seconds": 74.98,
+        "peak_mib": 52.8,
+        "working_mib": 41.8
+      },
+      "open_from_parity": {
+        "seconds": 8.3,
+        "peak_mib": 44.9,
+        "working_mib": 34.0
+      }
+    },
+    "8": {
+      "fixed": {
+        "seal": {
+          "seconds": 0.41,
+          "peak_mib": 10.8
+        },
+        "open": {
+          "seconds": 0.01,
+          "peak_mib": 2.3
+        },
+        "heal": {
+          "seconds": 0.27,
+          "peak_mib": 11.0
+        },
+        "open_from_parity": {
+          "seconds": 0.02,
+          "peak_mib": 10.9
+        }
+      },
+      "seal": {
+        "seconds": 55.72,
+        "peak_mib": 52.3,
+        "working_mib": 41.5
+      },
+      "open": {
+        "seconds": 6.72,
+        "peak_mib": 28.3,
+        "working_mib": 26.0
+      },
+      "heal": {
+        "seconds": 41.93,
+        "peak_mib": 82.4,
+        "working_mib": 71.4
+      },
+      "open_from_parity": {
+        "seconds": 7.02,
+        "peak_mib": 78.0,
+        "working_mib": 67.1
+      }
+    },
+    "16": {
+      "fixed": {
+        "seal": {
+          "seconds": 0.38,
+          "peak_mib": 10.7
+        },
+        "open": {
+          "seconds": 0.01,
+          "peak_mib": 2.2
+        },
+        "heal": {
+          "seconds": 0.18,
+          "peak_mib": 11.0
+        },
+        "open_from_parity": {
+          "seconds": 0.01,
+          "peak_mib": 11.0
+        }
+      },
+      "seal": {
+        "seconds": 30.24,
+        "peak_mib": 96.0,
+        "working_mib": 85.3
+      },
+      "open": {
+        "seconds": 5.36,
+        "peak_mib": 47.0,
+        "working_mib": 44.8
+      },
+      "heal": {
+        "seconds": 16.7,
+        "peak_mib": 160.3,
+        "working_mib": 149.3
+      },
+      "open_from_parity": {
+        "seconds": 9.97,
+        "peak_mib": 131.8,
+        "working_mib": 120.8
+      }
+    }
+  }
+}

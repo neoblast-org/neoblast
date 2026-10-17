@@ -1,7 +1,7 @@
 # Streaming seal, open and heal
 
 Status: completed 2026-10-14. Prerequisite for ROADMAP open item 2 (see
-`plans/todo/segment-size-decision.md`).
+`plans/completed/segment-size-decision.md`).
 
 ## Why
 
