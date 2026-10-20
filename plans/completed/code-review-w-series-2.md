@@ -1,7 +1,8 @@
 # Code-review worklist (W-series, part 2)
 
-Status: todo. Opened 2026-10-20 by the fourth `/review-since`
-(`5393f67..9bf18dc`, the v0.0.2 candidate), logged in
+Status: completed 2026-10-20: every item is fixed, the last in the
+campaign-lock PR after #21 (W-020, W-021). Opened 2026-10-20 by the fourth
+`/review-since` (`5393f67..9bf18dc`, the v0.0.2 candidate), logged in
 `docs/logs/code-review-log.md`. Part 1, W-001 to W-014, is closed
 (`plans/completed/code-review-w-series.md`). All items are low or cleanup;
 none blocks v0.0.2. Those under `crates/` are fixed before the v0.0.2
@@ -38,7 +39,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   against the first shard. v0.0.1 sealed there.
 - Remediation: a parent outside the store that cannot be read is not synced.
 - Verified: by a fresh agent, from the code.
-- Status: fixed in the v0.0.2 review-fix PR. Regression tests:
+- Status: fixed in #20. Regression tests:
   `w015_seal_into_an_unreadable_parent`, and
   `w015_an_unreadable_store_directory_is_not_skipped` for the store's own.
 
@@ -54,7 +55,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Remediation: a directory that new directories were made in is synced once,
   at the end of the run.
 - Verified: by a fresh agent, from the code.
-- Status: fixed in the v0.0.2 review-fix PR. Regression test: the count in
+- Status: fixed in #20. Regression test: the count in
   `store::tests::w007_every_write_is_synced`.
 
 ### W-017 (cleanup): `finish` did not run on every failed heal
@@ -70,7 +71,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   an error that means a bug (not a bad store) has no test, as no store can
   cause it.
 - Verified: by a fresh agent, from the code.
-- Status: fixed in the v0.0.2 review-fix PR. Regression test: the `finish`
+- Status: fixed in #20. Regression test: the `finish`
   check in `s011_an_inconsistent_segment_does_not_stop_heal`.
 
 ### W-018 (cleanup): a failed directory sync was reported as "cannot write"
@@ -82,7 +83,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Remediation: such errors read `cannot create <dir>` or `cannot sync <dir>`.
 - Verified: by a fresh agent (partly: the segment directory's own sync was
   already named).
-- Status: fixed in the v0.0.2 review-fix PR. Regression test:
+- Status: fixed in #20. Regression test:
   `w018_a_directory_that_cannot_be_made_is_named`.
 
 ### W-019 (cleanup): `tree::segment_root` overflowed its shard index
@@ -93,7 +94,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   shards, so only an outside caller of the public function could reach it.
 - Remediation: `None` beyond 65,536 hashes.
 - Verified: by a fresh agent, with a test program.
-- Status: fixed in the v0.0.2 review-fix PR. Regression test:
+- Status: fixed in #20. Regression test:
   `tree::tests::w019_too_many_shard_hashes_have_no_root`.
 
 ### W-020 (low): `campaign.sh` can run two campaigns after a stale lock
@@ -107,8 +108,16 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Remediation: remove a stale lock and retry the atomic create; refuse to
   start while a fuzzer for the same targets is running.
 - Verified: by a fresh agent, from the script.
-- Status: open; not needed for the v0.0.2 campaign, which one person starts
-  once.
+- Status: fixed in the campaign-lock PR after #21, before the v0.0.2
+  campaign. The lock is now a `flock` on a descriptor the fuzzers inherit, so
+  it is taken atomically, held until the last fuzzer exits even if the script
+  is killed, and freed with nothing to delete. The build and the other
+  commands that could leave a server running (git, rustc) run without the
+  descriptor. Tested on the lock alone, with a child process in place of a
+  fuzzer, on macOS (bash 3.2) and, by a fresh agent, on Linux (bash 5.2): a
+  second start, and one after a SIGKILL while the child still ran, were
+  refused; once it exited, a start worked; of 20 starts at once, one ran. The
+  whole script is checked on the fuzzing Mac before the 24 h run.
 
 ### W-021 (cleanup): `code_id` does not cover the compiler
 
@@ -119,8 +128,12 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Remediation: have `summary` warn when the counted records name different
   compilers, and record `cargo-fuzz`'s version.
 - Verified: by a fresh agent.
-- Status: open. For the v0.0.2 campaign: do not update the nightly while it
-  runs; step 7d pins CI to the compiler its records name.
+- Status: fixed in the campaign-lock PR after #21: records name the
+  `cargo-fuzz` version and the compiler, both read once after the build, and
+  `summary` warns, per target, when the counted
+  runs on the current code name more than one compiler. The hours still add
+  up; the nightly is still left alone while a campaign runs, and step 7d pins
+  CI to the compiler the records name.
 
 ### W-022 (cleanup): the CHANGELOG's new timings had no record
 
@@ -128,7 +141,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - What: sealing 1 GiB in about 33 s and healing it in about 24 s came from the
   measurements in #18's description, not a committed record.
 - Remediation: the entry says where they come from.
-- Status: fixed in the v0.0.2 review-fix PR.
+- Status: fixed in #20.
 
 ### W-023 (cleanup): the README said memory does not grow with the file
 
@@ -137,4 +150,4 @@ IDs are unique across all worklists and continue from the highest W-number used.
   peak steps up about 5 MiB between a 256 MiB and a 1 GiB file (decision 0009,
   finding 2).
 - Remediation: say "the memory they allocate" and mention the step.
-- Status: fixed in the v0.0.2 review-fix PR.
+- Status: fixed in #20.

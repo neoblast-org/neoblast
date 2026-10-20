@@ -243,7 +243,7 @@ that fixed it.
   accepted by name.
 - **Verified:** by a fresh agent, which reproduced the error kind on devfs.
 - **Release:** fixed before the v0.0.2 campaign.
-- **Status:** fixed in the v0.0.2 review-fix PR. Regression test:
+- **Status:** fixed in #20. Regression test:
   `store::tests::s010_a_directory_without_full_sync_is_accepted`.
 
 ### S-011 · Low · A publisher's inconsistent segment still stopped `heal` part-way
@@ -262,7 +262,7 @@ that fixed it.
   unrecoverable one.
 - **Verified:** by a fresh agent, which ran a proof of concept.
 - **Release:** fixed before the v0.0.2 campaign. S-002 itself stays open.
-- **Status:** fixed in the v0.0.2 review-fix PR. Regression test:
+- **Status:** fixed in #20. Regression test:
   `s011_an_inconsistent_segment_does_not_stop_heal`.
 
 ### S-012 · Low · The hygiene job can print more than hashes
@@ -278,7 +278,7 @@ that fixed it.
 - **Fix:** print only hashes in both steps.
 - **Verified:** by a fresh agent, from the workflow.
 - **Release:** in step 7d, applied by hand.
-- **Status:** fixed in the hygiene PR after #20: every step prints only
+- **Status:** fixed in #21: every step prints only
   hashes or tag names, and the UTC step runs with `pipefail`, so it fails
   closed.
 
@@ -295,7 +295,7 @@ that fixed it.
   the project, printing only hashes.
 - **Verified:** by a fresh agent, in a scratch repository.
 - **Release:** in step 7d, applied by hand.
-- **Status:** fixed in the hygiene PR after #20: a new step fails any
+- **Status:** fixed in #21: a new step fails any
   `<key>-by:` line, anywhere in a message after `5393f67`, that does not name
   the project. Lines git does not read as trailers either (quoted, bulleted,
   `Reviewed by:`) are not checked.
@@ -311,10 +311,11 @@ that fixed it.
 - **Verified:** by a fresh agent, from GitHub's documented behaviour; the
   repository's settings could not be seen.
 - **Release:** in step 7d (maintainer, settings).
-- **Status:** open until the maintainer adds the ruleset. The review found
-  `main`'s ruleset already requires the check, but organisation admins may
-  bypass it, so a `[skip ci]` push by an admin is not stopped. Fix: a second
-  ruleset that only requires the check, with no bypass.
+- **Status:** fixed 2026-10-20, in the settings. The review found `main`'s
+  ruleset already requires the check, but organisation admins may bypass it,
+  so a `[skip ci]` push by an admin was not stopped. A second ruleset,
+  `hygiene-required`, now requires only the `hygiene` check from GitHub
+  Actions on the default branch, with no bypass; read back through the API.
 
 ### S-015 · Low · Tags are not checked for the project's identity
 
@@ -325,7 +326,7 @@ that fixed it.
 - **Fix:** check them in the hygiene job on tag pushes, printing only the tag.
 - **Verified:** by a fresh agent.
 - **Release:** in step 7d, applied by hand, before `v0.0.2` is tagged.
-- **Status:** fixed in the hygiene PR after #20: the hygiene job checks
+- **Status:** fixed in #21: the hygiene job checks
   every tag, and the Release workflow the tag it publishes, before anything
   is published; `RELEASING.md` tags in UTC and checks the tag before pushing
   it.

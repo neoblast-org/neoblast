@@ -32,8 +32,9 @@ frozen and v0.0.1 is published. CI's nightly job only runs 10 minutes per target
 which git ignores. Copying a record into `fuzz/campaigns/` and committing it
 makes it part of the history. A record holds the target, result (`clean`, `stopped`,
 `crash` or `error`), start and end times in UTC, hours run, executions,
-coverage, corpus size, the commit and toolchain, and the OS, architecture and CPU
-model. It holds no host name, user name or file path.
+coverage, corpus size, the commit, the compiler and `cargo-fuzz` version, and
+the OS, architecture and CPU model. It holds no host name, user name or file
+path.
 
 ```sh
 fuzz/campaign.sh all 24          # all targets in parallel for 24 hours
@@ -46,11 +47,13 @@ fuzz/campaign.sh summary         # hours per target, and whether the gate is met
   `Cargo.toml` files, both `Cargo.lock` files and the target's source. The
   summary counts runs in `fuzz/campaigns/` and `fuzz/runs/` whose `code_id`
   matches the current checkout. Hours are wall-clock time: runs of one target
-  that overlapped count once.
+  that overlapped count once. The `code_id` does not cover the compiler, so
+  the summary warns when the hours it counts come from more than one; keep
+  the nightly unchanged while a campaign runs.
 - **One campaign at a time.** The script refuses to start while another
-  campaign is running on the same clone. If a campaign was killed and the
-  refusal names a process that is not a campaign, delete
-  `fuzz/runs/.campaign.pid`.
+  campaign, or a fuzzer left running by one that was killed, is running on
+  the same clone. `lsof fuzz/runs/.campaign.lock` lists them; once they have
+  exited, the next start works.
 - **Ctrl-C stops early**, and the hours so far are recorded as `stopped`.
 - The script refuses to run with uncommitted changes in `crates/`, `fuzz/`,
   `Cargo.toml` or `Cargo.lock`, so every record matches a real commit.

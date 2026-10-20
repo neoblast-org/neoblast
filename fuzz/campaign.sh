@@ -61,6 +61,7 @@ def hours(runs):
     return total / 3600
 
 print(f"{'target':22} {'h, current code':>16} {'h, all':>7} {'crashes':>8}  gate (24 h, no crash)")
+mixed = []
 for target, cid in current.items():
     mine = [r for r in runs if r["target"] == target]
     now = [r for r in mine if r["code_id"] == cid]
@@ -69,14 +70,21 @@ for target, cid in current.items():
     crashes = sum(1 for r in mine if r["result"] == "crash")
     met = hours_now >= 24 and not any(r["result"] in ("crash", "error") for r in now)
     print(f"{target:22} {hours_now:16.1f} {hours_all:7.1f} {crashes:8d}  {'met' if met else '-'}")
+    # code_id does not cover the compiler, so hours from different ones add up.
+    compilers = sorted({r.get("toolchain", "") for r in now if r["result"] in counted})
+    if len(compilers) > 1:
+        mixed.append(f"  {target}: " + "; ".join(c or "(not recorded)" for c in compilers))
+if mixed:
+    print("\nwarning: these hours on the current code come from more than one compiler:")
+    print("\n".join(mixed))
 PY
 }
 
 # Writes fuzz/runs/<start>-<target>.json for one finished run.
-record() { # target started_utc start_epoch exit_code log artifacts_before planned code_id commit
+record() { # target started_utc start_epoch exit_code log artifacts_before planned code_id commit toolchain cargo_fuzz
   python3 - "$@" <<'PY'
 import datetime, json, os, pathlib, platform, re, subprocess, sys
-t, started, start_epoch, rc, log, before, planned, cid, commit = sys.argv[1:]
+t, started, start_epoch, rc, log, before, planned, cid, commit, toolchain, cargo_fuzz = sys.argv[1:]
 text = pathlib.Path(log).read_text(errors="replace")
 
 def run(*cmd):
@@ -121,7 +129,8 @@ record = {
     "coverage": {"cov": cov, "ft": ft},
     "corpus_entries": corp,
     "new_artifacts": new,
-    "toolchain": run("rustc", "+nightly", "-V"),
+    "toolchain": toolchain,
+    "cargo_fuzz": cargo_fuzz,
     "machine": {"os": platform.system().lower(), "arch": platform.machine(), "cpu": cpu},
 }
 out = pathlib.Path("runs") / (started.replace(":", "").replace("-", "") + f"-{t}.json")
@@ -156,21 +165,33 @@ fi
 commit=$(git -C "$root" rev-parse HEAD)
 
 # One campaign at a time: two at once would share the corpora and their hours
-# would overlap.
+# would overlap. The lock is a flock on fd 9, which the fuzzers inherit, so it
+# is held until the last of them exits, even if this script is killed. Nothing
+# else long-lived may inherit fd 9.
 mkdir -p runs
-lock="runs/.campaign.pid"
-if ! (set -C; echo $$ >"$lock") 2>/dev/null; then
-  if kill -0 "$(cat "$lock" 2>/dev/null)" 2>/dev/null; then
-    echo "another campaign is running (pid $(cat "$lock")); stop it first" >&2
-    exit 1
-  fi
-  echo $$ >"$lock" # left by a campaign that was killed
+exec 9>>runs/.campaign.lock
+locked=0
+python3 - <<'PY' || locked=$?
+import errno, fcntl, sys
+try:
+    fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except OSError as e:
+    if e.errno in (errno.EWOULDBLOCK, errno.EAGAIN):
+        sys.exit(1)
+    print(f"cannot lock fuzz/runs/.campaign.lock: {e.strerror}", file=sys.stderr)
+    sys.exit(2)
+PY
+if [ "$locked" -eq 1 ]; then
+  echo "another campaign, or a fuzzer left running by one, is using this clone; stop it first" >&2
+  echo "(lsof fuzz/runs/.campaign.lock lists them)" >&2
+  exit 1
+elif [ "$locked" -ne 0 ]; then
+  exit 1
 fi
-trap '[ "$(cat "$lock" 2>/dev/null)" = "$$" ] && rm -f "$lock"' EXIT
 
 # Keep the machine awake on macOS until this script exits.
 if command -v caffeinate >/dev/null; then
-  caffeinate -i -w $$ &
+  caffeinate -i -w $$ 9>&- &
 fi
 
 names=() pids=() logs=() epochs=() befores=() started=() ids=()
@@ -179,16 +200,22 @@ trap 'stopping=1; kill -TERM ${pids[@]+"${pids[@]}"} 2>/dev/null || true' INT TE
 
 mkdir -p runs logs
 echo "building: $(echo $targets)"
-for t in $targets; do cargo +nightly fuzz build "$t" >/dev/null; done
+# Without fd 9: a build server (sccache) would otherwise hold the lock.
+for t in $targets; do cargo +nightly fuzz build "$t" >/dev/null 9>&-; done
 if [ -n "$stopping" ]; then
   echo "stopped before fuzzing started; nothing recorded" >&2
   exit 1
 fi
-if [ -n "$(git -C "$root" status --porcelain -- fuzz/Cargo.lock)" ]; then
+# Without fd 9 too: git may start its fsmonitor daemon.
+if [ -n "$(git -C "$root" status --porcelain -- fuzz/Cargo.lock 9>&-)" ]; then
   echo "the build changed fuzz/Cargo.lock; commit the updated lock file first" >&2
   exit 1
 fi
-host=$(rustc +nightly -vV | sed -n 's/^host: //p')
+host=$(rustc +nightly -vV 9>&- | sed -n 's/^host: //p')
+# What built the binaries, read now: a nightly updated during the campaign
+# must not be named in its records.
+toolchain=$(rustc +nightly -V 9>&-)
+cargo_fuzz=$(cargo +nightly fuzz --version 9>&- || true)
 
 # Run each fuzzer binary directly rather than through `cargo fuzz run`, so a
 # stop request reaches it: libFuzzer stops on SIGTERM, prints its stats and
@@ -233,7 +260,7 @@ for i in "${!names[@]}"; do
   done
   set -e
   record "${names[$i]}" "${started[$i]}" "${epochs[$i]}" "$rc" "${logs[$i]}" \
-    "${befores[$i]}" "$seconds" "${ids[$i]}" "$commit"
+    "${befores[$i]}" "$seconds" "${ids[$i]}" "$commit" "$toolchain" "$cargo_fuzz"
 done
 echo
 summary
