@@ -4,7 +4,8 @@ Status: todo. Opened 2026-10-14 by the first security review (empty tree to
 `e24f453`), logged in `docs/logs/security-review-log.md`. The second review
 (2026-10-15, `e24f453..a9445d9`) added S-005 to S-007, all low and none
 blocking v0.0.1. The third review (2026-10-16, `a9445d9..5393f67`) added S-008
-and S-009.
+and S-009. The fourth (2026-10-20, `5393f67..9bf18dc`, the v0.0.2 candidate)
+added S-010 to S-015, all low.
 
 IDs are unique across all worklists and continue from the highest S-number used,
 including one that so far appears only in a review log (`SECURITY.md`, "Our own
@@ -138,8 +139,9 @@ that fixed it.
   flat list, and `read_manifest` reserves exactly the declared size. On the
   reference Mac the planted manifest above (264 MB) now peaks `heal` at
   267 MB, 1.01 times its size, against 630 to 862 MB before (3 runs each).
-  Regression test: `manifest::tests::s005_the_root_is_compared_before_the_hashes_are_listed`
-  (it marks the hash list; the peak above covers everything else);
+  Regression test: `manifest::tests::s005_the_root_is_compared_before_the_bytes_are_copied`
+  (#16 renamed it, and `Manifest` now keeps its encoding instead of a flat
+  hash list; it marks the copy, and the peak above covers everything else);
   `tree::tests::builder_matches_level_by_level_pairing` checks the new tree
   builder against the old pairing, and the golden vectors are unchanged.
 
@@ -206,7 +208,9 @@ that fixed it.
 - **Verified:** by reading the commit metadata and the remote refs.
 - **Release:** v0.0.1 is tagged on the corrected commit.
 - **Status:** fixed on `main`, and the CI check landed in #12; open until the
-  GitHub-side copies are removed.
+  GitHub-side copies are removed. This entry predates the rule in
+  `SECURITY.md`, "Our own findings" (S-006), and stays as it is (maintainer's
+  call, 2026-10-20).
 
 ### S-009 · Low · The 0.0.1 changelog left out that a hostile store can stop `heal`
 
@@ -222,3 +226,95 @@ that fixed it.
   `crates/neoblast/src/stream.rs`.
 - **Release:** not blocking (docs).
 - **Status:** fixed in the Phase 1 closing PR.
+
+### S-010 · Low · On macOS, a volume without full syncs made every seal fail
+
+- **Where:** `crates/neoblast/src/store.rs`, `sync_dir`, since #13.
+- **Problem:** a file system that cannot sync directories was meant to be
+  accepted as it is. On Apple systems std's `sync_all` is `F_FULLFSYNC`, and a
+  file system without it answers `ENOTSUP`, which Rust reports as
+  `Uncategorized`, not `Unsupported`; only the latter was accepted. devfs is
+  one; some network and FUSE file systems likely are too.
+- **Impact:** availability. A seal onto such a volume failed at its first
+  shard and left partial shards and no manifest; v0.0.1 worked there. A heal
+  wrote its shards but reported a sync error. It fails closed.
+- **Fix:** on Apple systems `sync_dir` calls `F_FULLFSYNC` itself and falls
+  back to a plain `fsync` on `ENOTSUP`, as SQLite does, and `ENOTSUP` is
+  accepted by name.
+- **Verified:** by a fresh agent, which reproduced the error kind on devfs.
+- **Release:** fixed before the v0.0.2 campaign.
+- **Status:** fixed in the v0.0.2 review-fix PR. Regression test:
+  `store::tests::s010_a_directory_without_full_sync_is_accepted`.
+
+### S-011 · Low · A publisher's inconsistent segment still stopped `heal` part-way
+
+- **Where:** `crates/neoblast/src/stream.rs`, `heal_manifest`; the behaviour
+  predates the range, the claim that it was gone (CHANGELOG, `heal_stream`'s
+  doc) came with #13.
+- **Problem:** whoever builds the manifest can commit to shards that are not
+  one Reed-Solomon codeword (the S-002 setup). A shard rebuilt from the others
+  then fails its hash, and heal returned at once: later segments were not
+  repaired and the last directory was not synced. Only the manifest's author,
+  in practice the publisher, can cause it.
+- **Impact:** a publisher can block repair of their own file only.
+- **Fix:** such a shard is skipped like an unwritable one, every other segment
+  is still repaired, and the segment is reported at the end, ranking with an
+  unrecoverable one.
+- **Verified:** by a fresh agent, which ran a proof of concept.
+- **Release:** fixed before the v0.0.2 campaign. S-002 itself stays open.
+- **Status:** fixed in the v0.0.2 review-fix PR. Regression test:
+  `s011_an_inconsistent_segment_does_not_stop_heal`.
+
+### S-012 · Low · The hygiene job can print more than hashes
+
+- **Where:** `.github/workflows/hygiene.yml`, steps 1 and 2 (before #12).
+- **Problem:** the UTC step prints each failing commit's author and committer
+  addresses and dates, and the session-link step the matching lines. A commit
+  made as the project but committed elsewhere in local time fails here, before
+  the hash-only identity step, and its committer address and offset reach the
+  public Actions log.
+- **Impact:** privacy. The same data is in the pushed commit, but the log
+  repeats it.
+- **Fix:** print only hashes in both steps.
+- **Verified:** by a fresh agent, from the workflow.
+- **Release:** in step 7d, applied by hand.
+- **Status:** open.
+
+### S-013 · Low · Attribution outside git's trailer block passes the hygiene job
+
+- **Where:** `.github/workflows/hygiene.yml`, the identity step (#12).
+- **Problem:** the step reads trailers as git parses them. A `Co-authored-by`
+  line in an earlier paragraph, or followed by prose when there is no
+  sign-off, is not a trailer, and other keys (`Co-developed-by`,
+  `Reviewed-by`) are not checked.
+- **Impact:** privacy: a name could reach public history. Criterion 1 names
+  only `Co-authored-by` and `Signed-off-by` trailers, which are caught.
+- **Fix:** also scan the whole message for `<key>-by:` lines that do not name
+  the project, printing only hashes.
+- **Verified:** by a fresh agent, in a scratch repository.
+- **Release:** in step 7d, applied by hand.
+- **Status:** open.
+
+### S-014 · Low · `[skip ci]` skips the hygiene job
+
+- **Where:** GitHub Actions; `.github/workflows/hygiene.yml`.
+- **Problem:** a head commit whose message contains `[skip ci]` or a similar
+  marker runs no workflow, so a bad commit can be fast-forwarded to `main`
+  unchecked. The next run catches it, after it is public.
+- **Fix:** make the hygiene check required for `main` in a ruleset; a skipped
+  required check blocks the push.
+- **Verified:** by a fresh agent, from GitHub's documented behaviour; the
+  repository's settings could not be seen.
+- **Release:** in step 7d (maintainer, settings).
+- **Status:** open.
+
+### S-015 · Low · Tags are not checked for the project's identity
+
+- **Where:** `.github/workflows/hygiene.yml`, `release.yml`; `RELEASING.md`
+  tags with `git tag -s`, which takes the local identity and time zone.
+- **Problem:** nothing checks a tag's tagger name, address or offset.
+  `v0.0.1`'s tag is the project's, in UTC.
+- **Fix:** check them in the hygiene job on tag pushes, printing only the tag.
+- **Verified:** by a fresh agent.
+- **Release:** in step 7d, applied by hand, before `v0.0.2` is tagged.
+- **Status:** open.

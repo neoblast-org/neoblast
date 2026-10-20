@@ -17,9 +17,11 @@ the frozen v1 byte format).
 - `Params::header` plans a file's header and refuses parameters whose
   manifest would be larger than a store reads, with the new
   `Error::ManifestTooLarge`.
-- `ShardSink::finish`, called once after the last shard of a successful run;
-  the default does nothing. `DirStore` uses it to sync the last segment
-  directory, so a caller that uses `put` directly calls it too.
+- `ShardSink::finish`, called once at the end of a run: by `seal_stream`
+  after a successful one, by `heal_stream` after every one that passes its
+  root check; the default does
+  nothing. `DirStore` uses it to sync the directories it wrote last, so a
+  caller that uses `put` directly calls it too.
 
 ### Changed
 
@@ -40,9 +42,10 @@ the frozen v1 byte format).
 - `Header::new` reports bad k or n as `HeaderError::Params` even when the
   segment size or layout would also fail; the bytes of valid headers are
   unchanged.
-- `heal_stream` no longer stops at a shard its sink cannot store: it goes on,
-  then returns the first unrecoverable segment or, failing that, the first
-  write error.
+- `heal_stream` no longer stops at a shard its sink cannot store, nor at a
+  rebuilt shard that does not match the manifest (review S-011): it goes on,
+  then returns the first segment it could not repair or, failing that, the
+  first write error.
 - `DirStore::write_sealed` writes the shards before the manifest, as a
   streaming seal does.
 
@@ -68,15 +71,26 @@ the frozen v1 byte format).
   shard that cannot be written is skipped, every other one is still rebuilt,
   and `heal` then fails naming the path. Temporary files get random names, so
   names planted in advance no longer block a write (reviews W-003 and W-004).
+  Nor can a publisher, by committing to shards that are not one codeword
+  (S-002): a rebuilt shard that does not match is skipped the same way
+  (review S-011).
 - `seal` and `heal` sync every shard and the manifest before renaming them into
   place, and on Unix the directories after, so what they report as written
-  survives a power loss (review W-007), except on a file system that cannot
-  sync directories, which is accepted as it is. On macOS a file gets a plain
-  `fsync` and its directory one full sync (`F_FULLFSYNC`) after its last
-  write, which flushes the drive's cache for every file before it, so a
-  segment pays for one full flush instead of one per shard. At 1 MiB
-  segments on an Apple M5, sealing 1 GiB takes about 33 s and healing it
-  about 24 s, against about 260 s and 165 s with a full flush per shard.
+  survives a power loss (review W-007). A file system that cannot sync
+  directories is accepted as it is; on macOS one that cannot sync them fully
+  gets a plain `fsync` (review S-010). A store made in a directory that can be
+  written to but not read, such as a shared drop box, is not synced into it
+  (review W-015). On macOS a file gets a plain `fsync` and its directory one
+  full sync (`F_FULLFSYNC`) after its last write, which flushes the drive's
+  cache for every file before it, so a segment pays for one full flush instead
+  of one per shard (review W-016). In the measurements for #18, at 1 MiB
+  segments on an Apple M5, sealing 1 GiB took about 33 s and healing it about
+  24 s, against about 260 s and 165 s with a full flush per shard.
+- An error names the directory that could not be made or synced, instead of
+  the shard that was to be written (review W-018).
+- `tree::segment_root` returns `None` for more than 65,536 hashes instead of
+  overflowing the 16-bit shard index; a verified header has at most 128
+  (review W-019).
 
 ## [0.0.1] - 2026-10-16
 

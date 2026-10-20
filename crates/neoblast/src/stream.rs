@@ -34,10 +34,11 @@ pub trait ShardSink {
     /// Stores one shard. Calls arrive in segment order.
     fn put(&mut self, segment: u32, index: u16, bytes: &[u8]) -> io::Result<()>;
 
-    /// Makes every shard stored so far durable. [`seal_stream`] and
-    /// [`heal_manifest`] call it once, after the last `put` of a run that
-    /// succeeds; a caller using `put` directly calls it too. The default does
-    /// nothing.
+    /// Makes every shard stored so far durable. [`seal_stream`] calls it once,
+    /// after the last `put` of a run that succeeds; [`heal_manifest`] once at
+    /// the end of every run past its root check, also one that fails (review
+    /// W-017). A caller
+    /// using `put` directly calls it too. The default does nothing.
     fn finish(&mut self) -> io::Result<()> {
         Ok(())
     }
@@ -227,9 +228,12 @@ pub fn open_manifest(
 /// [`heal_manifest`] with [`Manifest::decode_owned`] holds the manifest once.
 ///
 /// A segment with fewer than k good shards is skipped, and so is a shard that
-/// `sink` fails to store (review W-003); everything else is still repaired.
-/// Then the first unrecoverable segment is returned as [`Error::Unrecoverable`],
-/// since it means the file is lost; failing that, the sink's first error.
+/// `sink` fails to store (review W-003) or a rebuilt shard that does not match
+/// the manifest, which a publisher can cause by committing to shards that are
+/// not one codeword (reviews S-002 and S-011); everything else is still
+/// repaired. Then the first segment that could not be repaired is returned, as
+/// [`Error::Unrecoverable`] or [`Error::RebuildMismatch`], since the file is
+/// lost or inconsistent there; failing that, the sink's first error.
 ///
 /// Shards that fail their hash check are ignored rather than aborting the heal
 /// (code-review issue 2), so one bad peer cannot block repair.
@@ -259,11 +263,43 @@ pub fn heal_manifest(
     if manifest.root() != cap.root {
         return Err(Error::RootMismatch);
     }
+    let mut rebuilt = 0;
+    let mut first_failure = None;
+    let run = heal_segments(manifest, source, sink, &mut rebuilt, &mut first_failure);
+    // Even after a failure, what was written is made durable (review W-017).
+    if let Err(e) = sink.finish() {
+        first_failure.get_or_insert(Error::Io(e));
+    }
+    run?;
+    match first_failure {
+        Some(failure) => Err(failure),
+        None => Ok(rebuilt),
+    }
+}
+
+/// The segments of [`heal_manifest`]: counts each shard stored in `rebuilt`,
+/// and keeps in `first_failure` the first segment that could not be repaired
+/// or, failing that, the sink's first error. Returns early only on an error
+/// that means a bug, not a bad store.
+fn heal_segments(
+    manifest: &Manifest,
+    source: &impl crate::ShardSource,
+    sink: &mut impl ShardSink,
+    rebuilt: &mut usize,
+    first_failure: &mut Option<Error>,
+) -> Result<(), Error> {
+    // A lost or inconsistent segment outranks a failed write.
+    let lost = |failure: &mut Option<Error>, error: Error| {
+        if !matches!(
+            failure,
+            Some(Error::Unrecoverable { .. } | Error::RebuildMismatch { .. })
+        ) {
+            *failure = Some(error);
+        }
+    };
     let header = *manifest.header();
     let k = usize::from(header.k());
     let n = usize::from(header.n());
-    let mut rebuilt = 0;
-    let mut first_failure = None;
     for segment in 0..header.segment_count() {
         let shard_len = shard_len(&header, segment)?;
         let (held, missing) = verify_all(manifest, segment, source, k, shard_len);
@@ -275,9 +311,7 @@ pub fn heal_manifest(
             Err(e) => match unrecoverable(e, segment, &held, k) {
                 // Keep repairing the other segments; report this one at the end.
                 failure @ Error::Unrecoverable { .. } => {
-                    if !matches!(first_failure, Some(Error::Unrecoverable { .. })) {
-                        first_failure = Some(failure);
-                    }
+                    lost(first_failure, failure);
                     continue;
                 }
                 other => return Err(other),
@@ -285,14 +319,18 @@ pub fn heal_manifest(
         };
         drop(held);
         for index in missing {
-            let bytes = all
+            let listed = manifest.shard_hash(segment, index);
+            // Not the shard the manifest lists: keep repairing the others
+            // (review S-011) and report this one at the end.
+            let Some(bytes) = all
                 .get(usize::from(index))
-                .ok_or(Error::RebuildMismatch { segment, index })?;
-            if manifest.shard_hash(segment, index) != Some(&tree::shard_hash(bytes)) {
-                return Err(Error::RebuildMismatch { segment, index });
-            }
+                .filter(|b| listed == Some(&tree::shard_hash(b)))
+            else {
+                lost(first_failure, Error::RebuildMismatch { segment, index });
+                continue;
+            };
             match sink.put(segment, index, bytes) {
-                Ok(()) => rebuilt += 1,
+                Ok(()) => *rebuilt += 1,
                 // Keep writing the other shards; report this one at the end.
                 Err(e) => {
                     first_failure.get_or_insert(Error::Io(e));
@@ -300,13 +338,7 @@ pub fn heal_manifest(
             }
         }
     }
-    if let Err(e) = sink.finish() {
-        first_failure.get_or_insert(Error::Io(e));
-    }
-    match first_failure {
-        Some(failure) => Err(failure),
-        None => Ok(rebuilt),
-    }
+    Ok(())
 }
 
 /// Fetches shards in index order and keeps the first `k` that match the

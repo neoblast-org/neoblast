@@ -405,6 +405,164 @@ fn w003_a_lost_segment_outranks_a_failed_write() {
     );
 }
 
+/// W-015: a store can be made in a directory that can be written to but not
+/// read, such as a shared drop box. Syncing the new store into it is skipped,
+/// as it cannot be opened, instead of failing the seal.
+#[cfg(unix)]
+#[test]
+fn w015_seal_into_an_unreadable_parent() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = dir::scratch("w015-drop-box");
+    let drop_box = tmp.join("drop-box");
+    std::fs::create_dir(&drop_box).unwrap();
+    std::fs::set_permissions(&drop_box, std::fs::Permissions::from_mode(0o333)).unwrap();
+    let mut store = neoblast::store::DirStore::new(drop_box.join("store"));
+    let params = Params {
+        k: 2,
+        n: 4,
+        segment_size: 1024,
+    };
+
+    let sealed = neoblast::seal_stream(&[7u8; 3000][..], 3000, params, &mut store)
+        .and_then(|(_, manifest)| Ok(store.write_manifest(&manifest)?));
+    std::fs::set_permissions(&drop_box, std::fs::Permissions::from_mode(0o755)).unwrap();
+    sealed.unwrap();
+    assert!(store.manifest_path().is_file());
+}
+
+/// W-015: only a directory outside the store is left unsynced when it cannot
+/// be read. A store's own directory that cannot be read fails the seal, as its
+/// new segment directories could not be made durable.
+#[cfg(unix)]
+#[test]
+fn w015_an_unreadable_store_directory_is_not_skipped() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = dir::scratch("w015-store-dir");
+    let root = tmp.join("store");
+    std::fs::create_dir(&root).unwrap();
+    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o333)).unwrap();
+    // Run as root, the directory can be read anyway; there is nothing to test.
+    if std::fs::File::open(&root).is_ok() {
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o755)).unwrap();
+        return;
+    }
+    let mut store = neoblast::store::DirStore::new(&root);
+    let params = Params {
+        k: 2,
+        n: 4,
+        segment_size: 1024,
+    };
+
+    let sealed = neoblast::seal_stream(&[7u8; 3000][..], 3000, params, &mut store);
+    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let err = sealed.unwrap_err();
+    assert!(
+        err.to_string()
+            .starts_with(&format!("cannot sync {}", root.display())),
+        "{err}"
+    );
+}
+
+/// W-018: a directory that cannot be made is named in the error, instead of
+/// the shard that was to be written into it.
+#[cfg(unix)]
+#[test]
+fn w018_a_directory_that_cannot_be_made_is_named() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = dir::scratch("w018-names");
+    let read_only = tmp.join("read-only");
+    std::fs::create_dir(&read_only).unwrap();
+    std::fs::set_permissions(&read_only, std::fs::Permissions::from_mode(0o555)).unwrap();
+    let mut store = neoblast::store::DirStore::new(read_only.join("store"));
+    let params = Params {
+        k: 2,
+        n: 4,
+        segment_size: 1024,
+    };
+
+    // Run as root, the directory can be made anyway; there is nothing to test.
+    if std::fs::create_dir(read_only.join("probe")).is_ok() {
+        return;
+    }
+    let sealed = neoblast::seal_stream(&[7u8; 3000][..], 3000, params, &mut store);
+    std::fs::set_permissions(&read_only, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let err = sealed.unwrap_err();
+    let segment = read_only.join("store").join("seg-000000");
+    assert!(
+        err.to_string()
+            .starts_with(&format!("cannot create {}", segment.display())),
+        "{err}"
+    );
+}
+
+/// S-011: a publisher can commit to shards that are not one codeword, so a
+/// shard rebuilt from the others does not match the manifest. Heal skips it
+/// and still repairs every other segment, then reports it; what it wrote is
+/// still made durable (W-017).
+#[test]
+fn s011_an_inconsistent_segment_does_not_stop_heal() {
+    struct Sink {
+        put: Vec<(u32, u16)>,
+        finished: bool,
+    }
+    impl neoblast::ShardSink for Sink {
+        fn put(&mut self, segment: u32, index: u16, _: &[u8]) -> std::io::Result<()> {
+            self.put.push((segment, index));
+            Ok(())
+        }
+        fn finish(&mut self) -> std::io::Result<()> {
+            self.finished = true;
+            Ok(())
+        }
+    }
+    let params = Params {
+        k: 2,
+        n: 4,
+        segment_size: 1024,
+    };
+    let mut sealed = seal_with_key(&[9u8; 3000], params, &[3u8; 32]).unwrap();
+    assert!(sealed.shards.len() > 2);
+    // Segment 0's parity no longer matches its data, and the manifest says so.
+    for parity in &mut sealed.shards[0][2..] {
+        parity.iter_mut().for_each(|b| *b ^= 0x5a);
+    }
+    let hashes = sealed
+        .shards
+        .iter()
+        .map(|segment| {
+            segment
+                .iter()
+                .map(|s| neoblast::tree::shard_hash(s))
+                .collect()
+        })
+        .collect();
+    let manifest = neoblast::Manifest::new(*sealed.manifest.header(), hashes).unwrap();
+    let cap = neoblast::FileVerifyCap {
+        root: manifest.root(),
+    };
+    let mut store = MemStore::from_sealed(&sealed);
+    store.0.remove(&(0, 0));
+    store.0.remove(&(2, 1));
+
+    let mut sink = Sink {
+        put: Vec::new(),
+        finished: false,
+    };
+    let err = neoblast::heal_manifest(&cap, &manifest, &store, &mut sink).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            Error::RebuildMismatch {
+                segment: 0,
+                index: 0
+            }
+        ),
+        "{err}"
+    );
+    assert_eq!(sink.put, [(2, 1)]);
+    assert!(sink.finished);
+}
+
 /// W-006: `seal_stream` refuses parameters whose manifest a store could not
 /// read back before it hands out a single shard, not after writing them all.
 #[test]

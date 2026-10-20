@@ -16,8 +16,11 @@
 //!
 //! Every file is synced before it is renamed into place, and each directory
 //! once after its last write, so what a seal or heal reports as written survives
-//! a power loss (review W-007). Directories can only be synced on Unix, and a
-//! file system that cannot sync them is accepted as it is (see `sync_dir`).
+//! a power loss (review W-007). A directory that new directories were made in
+//! is synced once, at the end of the run (review W-016). Directories can only be
+//! synced on Unix, and a file system that cannot sync them is accepted as it is
+//! (see `sync_dir`). So is a directory outside the store that cannot be read,
+//! such as a shared drop box the store is made in (review W-015).
 //!
 //! On Apple systems a file gets a plain `fsync`, which leaves its data in the
 //! drive's write cache, and its directory a full sync (`F_FULLFSYNC`), which
@@ -62,8 +65,8 @@ pub fn manifest_len(header: &Header) -> Option<u64> {
 #[derive(Clone, Debug)]
 pub struct DirStore {
     root: PathBuf,
-    /// The segment directory written last as a [`ShardSink`], not yet synced.
-    /// [`ShardSink::finish`] syncs it.
+    /// The directories written as a [`ShardSink`] and not yet synced.
+    /// [`ShardSink::finish`] syncs them.
     unsynced: Unsynced,
 }
 
@@ -137,18 +140,22 @@ impl DirStore {
     }
 
     /// Writes a sealed file: every shard, then the manifest. A manifest too
-    /// large to read back is refused before anything is written.
+    /// large to read back is refused before anything is written. What was
+    /// written is synced even if a write fails (review W-017).
     pub fn write_sealed(&self, sealed: &Sealed) -> io::Result<()> {
         check_len(sealed.manifest.header())?;
         let mut unsynced = Unsynced::default();
-        for (segment, shards) in (0u32..).zip(&sealed.shards) {
-            for (index, bytes) in (0u16..).zip(shards) {
-                let path = self.shard_path(segment, index);
-                write_shard(&path, bytes)?;
-                unsynced.wrote(&path)?;
-            }
-        }
-        unsynced.sync()?;
+        let written = (0u32..)
+            .zip(&sealed.shards)
+            .try_for_each(|(segment, shards)| {
+                (0u16..).zip(shards).try_for_each(|(index, bytes)| {
+                    let path = self.shard_path(segment, index);
+                    write_shard(&path, bytes, &self.root, &mut unsynced)?;
+                    unsynced.wrote(&path)
+                })
+            });
+        let synced = unsynced.finish();
+        written.and(synced)?;
         self.write_manifest_bytes(sealed.manifest.as_bytes())
     }
 
@@ -160,50 +167,76 @@ impl DirStore {
 
     fn write_manifest_bytes(&self, bytes: &[u8]) -> io::Result<()> {
         let path = self.manifest_path();
-        create_dirs(&self.root)
-            .and_then(|()| replace_file(&path, bytes))
-            .and_then(|()| sync_dir(&self.root))
-            .map_err(|e| cannot("write", &path, e))
+        create_dirs(&self.root, &self.root, &mut Unsynced::default())?;
+        replace_file(&path, bytes).map_err(|e| cannot("write", &path, e))?;
+        sync_dir(&self.root).map_err(|e| cannot("sync", &self.root, e))
     }
 
     /// Writes rebuilt shards back into place, stopping at the first that
-    /// cannot be written. [`heal_stream`](crate::heal_stream) with this store
+    /// cannot be written; those written are still synced (review W-017). [`heal_stream`](crate::heal_stream) with this store
     /// as its sink writes the others too.
     pub fn write_rebuilt(&self, shards: &[RebuiltShard]) -> io::Result<()> {
         let mut unsynced = Unsynced::default();
-        for s in shards {
+        let written = shards.iter().try_for_each(|s| {
             let path = self.shard_path(s.segment, s.index);
-            write_shard(&path, &s.bytes)?;
-            unsynced.wrote(&path)?;
-        }
-        unsynced.sync()
+            write_shard(&path, &s.bytes, &self.root, &mut unsynced)?;
+            unsynced.wrote(&path)
+        });
+        let synced = unsynced.finish();
+        written.and(synced)
     }
 }
 
-/// The directory of the last write, until it is synced. Each segment directory
-/// is synced once, when the writes move on, instead of after every shard.
+/// Directories written to and not yet synced. Each segment directory is synced
+/// once, when the writes move on, instead of after every shard; a directory
+/// that new directories were made in, once at the end (review W-016).
 #[derive(Clone, Debug, Default)]
-struct Unsynced(Option<PathBuf>);
+struct Unsynced {
+    /// The directory of the last write.
+    last: Option<PathBuf>,
+    /// Directories in the store that new directories were made in.
+    made_in: Vec<PathBuf>,
+}
 
 impl Unsynced {
     /// Notes a finished write to `path`, syncing the previous directory first
     /// if `path` is in another one.
     fn wrote(&mut self, path: &Path) -> io::Result<()> {
         let dir = parent_dir(path);
-        if self.0.as_deref() == Some(dir) {
+        if self.last.as_deref() == Some(dir) {
             return Ok(());
         }
-        let synced = self.sync();
-        self.0 = Some(dir.to_owned());
+        let synced = self.sync_last();
+        self.last = Some(dir.to_owned());
         synced
     }
 
-    /// Syncs the pending directory, if any.
-    fn sync(&mut self) -> io::Result<()> {
-        match self.0.take() {
+    /// Notes that a new directory was made in `dir`.
+    fn made_in(&mut self, dir: &Path) {
+        if !self.made_in.iter().any(|d| d == dir) {
+            self.made_in.push(dir.to_owned());
+        }
+    }
+
+    /// Syncs the directory of the last write, if any.
+    fn sync_last(&mut self) -> io::Result<()> {
+        match self.last.take() {
             Some(dir) => sync_dir(&dir).map_err(|e| cannot("sync", &dir, e)),
             None => Ok(()),
         }
+    }
+
+    /// Syncs every pending directory: the last one written, then those new
+    /// directories were made in, innermost first. Returns the first error.
+    fn finish(&mut self) -> io::Result<()> {
+        let mut result = self.sync_last();
+        let mut made_in = std::mem::take(&mut self.made_in);
+        made_in.sort_by_key(|d| std::cmp::Reverse(d.components().count()));
+        for dir in made_in {
+            let synced = sync_dir(&dir).map_err(|e| cannot("sync", &dir, e));
+            result = result.and(synced);
+        }
+        result
     }
 }
 
@@ -219,18 +252,18 @@ fn check_len(header: &Header) -> io::Result<()> {
     Ok(())
 }
 
-/// Writes one shard; the caller syncs its directory. Errors name the shard's
-/// path (review W-003).
-fn write_shard(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    let written = match fs::symlink_metadata(parent_dir(path)) {
-        Ok(meta) if meta.is_dir() => Ok(()),
-        Ok(_) => Err(not_plain(parent_dir(path))),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => create_dirs(parent_dir(path)),
-        Err(e) => Err(e),
-    };
-    written
-        .and_then(|()| replace_file(path, bytes))
-        .map_err(|e| cannot("write", path, e))
+/// Writes one shard into the store at `root`, making its segment directory if
+/// needed; the caller syncs the directory. Errors name the shard's path (review
+/// W-003), or the directory that could not be made or synced (review W-018).
+fn write_shard(path: &Path, bytes: &[u8], root: &Path, unsynced: &mut Unsynced) -> io::Result<()> {
+    let dir = parent_dir(path);
+    match fs::symlink_metadata(dir) {
+        Ok(meta) if meta.is_dir() => {}
+        Ok(_) => return Err(cannot("write", path, not_plain(dir))),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => create_dirs(dir, root, unsynced)?,
+        Err(e) => return Err(cannot("write", path, e)),
+    }
+    replace_file(path, bytes).map_err(|e| cannot("write", path, e))
 }
 
 fn cannot(what: &str, path: &Path, e: io::Error) -> io::Error {
@@ -281,16 +314,27 @@ fn create_temp(path: &Path) -> io::Result<(PathBuf, File)> {
     Err(taken.unwrap_or_else(|| io::ErrorKind::AlreadyExists.into()))
 }
 
-/// `fs::create_dir_all`, then syncs the parent of every directory it created,
-/// so the new directories survive a power loss (review W-007).
-fn create_dirs(dir: &Path) -> io::Result<()> {
+/// `fs::create_dir_all` for a directory in the store at `root`, so that every
+/// directory it makes survives a power loss (review W-007). A parent in the
+/// store is left to `unsynced`, to be synced once at the end (review W-016).
+/// A parent outside the store is synced now if it can be read: it may be a
+/// shared drop box that others can write to but not list (review W-015).
+fn create_dirs(dir: &Path, root: &Path, unsynced: &mut Unsynced) -> io::Result<()> {
     let missing: Vec<&Path> = dir
         .ancestors()
         .take_while(|d| !d.as_os_str().is_empty() && fs::symlink_metadata(d).is_err())
         .collect();
-    fs::create_dir_all(dir)?;
+    fs::create_dir_all(dir).map_err(|e| cannot("create", dir, e))?;
     for d in missing.iter().rev() {
-        sync_dir(parent_dir(d))?;
+        let parent = parent_dir(d);
+        if !root.starts_with(d) {
+            unsynced.made_in(parent);
+            continue;
+        }
+        match sync_dir(parent) {
+            Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {}
+            synced => synced.map_err(|e| cannot("sync", parent, e))?,
+        }
     }
     Ok(())
 }
@@ -320,23 +364,48 @@ fn sync_file(file: &File, path: &Path) -> io::Result<()> {
 /// data of every file synced before it, survive a power loss. Only Unix can
 /// open a directory to sync it; elsewhere this does nothing.
 /// A file system that cannot sync directories at all (some network and FUSE
-/// file systems) is accepted as it is, rather than making every write fail;
-/// on Apple systems, files there get only their plain `fsync`.
+/// file systems) is accepted as it is, rather than making every write fail.
+/// On Apple systems a directory that cannot be synced fully gets a plain
+/// `fsync`, as SQLite does (review S-010); files there get only their plain
+/// `fsync` too.
 fn sync_dir(dir: &Path) -> io::Result<()> {
     #[cfg(unix)]
-    match File::open(dir)?.sync_all() {
-        Err(e)
-            if !matches!(
-                e.kind(),
-                io::ErrorKind::Unsupported | io::ErrorKind::InvalidInput
-            ) =>
-        {
-            return Err(e);
-        }
+    match full_sync(&File::open(dir)?) {
+        Err(e) if !unsupported(&e) => return Err(e),
         _ => {}
     }
     note_synced(dir);
     Ok(())
+}
+
+/// `F_FULLFSYNC`, or a plain `fsync` if it fails, as where the file system
+/// does not offer it.
+#[cfg(target_vendor = "apple")]
+fn full_sync(file: &File) -> io::Result<()> {
+    use rustix::io::retry_on_intr;
+    if retry_on_intr(|| rustix::fs::fcntl_fullfsync(file)).is_ok() {
+        return Ok(());
+    }
+    Ok(retry_on_intr(|| rustix::fs::fsync(file))?)
+}
+
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn full_sync(file: &File) -> io::Result<()> {
+    file.sync_all()
+}
+
+/// True for the errors of a file system that cannot sync a directory. On Apple
+/// systems `ENOTSUP` is not [`io::ErrorKind::Unsupported`], so it is named.
+#[cfg(unix)]
+fn unsupported(e: &io::Error) -> bool {
+    #[cfg(target_vendor = "apple")]
+    if e.raw_os_error() == Some(rustix::io::Errno::NOTSUP.raw_os_error()) {
+        return true;
+    }
+    matches!(
+        e.kind(),
+        io::ErrorKind::Unsupported | io::ErrorKind::InvalidInput
+    )
 }
 
 #[cfg(test)]
@@ -382,12 +451,12 @@ impl ShardSource for DirStore {
 impl ShardSink for DirStore {
     fn put(&mut self, segment: u32, index: u16, bytes: &[u8]) -> io::Result<()> {
         let path = self.shard_path(segment, index);
-        write_shard(&path, bytes)?;
+        write_shard(&path, bytes, &self.root, &mut self.unsynced)?;
         self.unsynced.wrote(&path)
     }
 
     fn finish(&mut self) -> io::Result<()> {
-        self.unsynced.sync()
+        self.unsynced.finish()
     }
 }
 
@@ -463,6 +532,10 @@ mod tests {
         assert!(durable(&log, &store.manifest_path()));
         all_durable(&log, &every_shard(&store, segments));
         dirs_durable(&log, &store, segments);
+        // W-016: the store's own directory is synced once for all the segment
+        // directories made in it, and once for the manifest, not per segment.
+        let root = tmp.join("stream");
+        assert_eq!(log.iter().filter(|p| **p == root).count(), 2);
 
         let lost: Vec<PathBuf> = (0..segments).map(|s| store.shard_path(s, 1)).collect();
         for path in &lost {
@@ -509,5 +582,18 @@ mod tests {
         store.write_rebuilt(&rebuilt).unwrap();
         all_durable(&synced(), &lost);
         fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    /// S-010: on Apple systems a file system without full syncs answers
+    /// `ENOTSUP`, which is not `ErrorKind::Unsupported`. It gets a plain
+    /// `fsync` instead of failing every write. devfs is one such file system.
+    #[cfg(target_vendor = "apple")]
+    #[test]
+    fn s010_a_directory_without_full_sync_is_accepted() {
+        let notsup = io::Error::from_raw_os_error(rustix::io::Errno::NOTSUP.raw_os_error());
+        assert_ne!(notsup.kind(), io::ErrorKind::Unsupported);
+        assert!(unsupported(&notsup));
+        full_sync(&File::open("/dev").unwrap()).unwrap();
+        sync_dir(Path::new("/dev")).unwrap();
     }
 }

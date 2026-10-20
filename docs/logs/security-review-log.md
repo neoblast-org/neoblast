@@ -1,6 +1,6 @@
 # Security Review Log
 
-<!-- baseline --> **Next review diffs from:** `5393f6704b5059c4c8ecfbb6adc01718c13c4455` (`main`, recorded 2026-10-16)
+<!-- baseline --> **Next review diffs from:** `9bf18dccf6e6603b10518b37852a1cda1a2b99bb` (`main`, recorded 2026-10-20)
 
 A running record of branch security reviews. Each entry records the exact commit range
 reviewed; the baseline marker line above is the machine-owned frontier the next
@@ -21,6 +21,59 @@ marker line; a frontier-moving entry's Base must equal the previous one's Tip un
 the entry explains why not.
 
 ## Entries
+
+### 2026-10-20 · `5393f67..9bf18dc` (#11 to #19, the v0.0.2 candidate)
+
+| | Commit | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `5393f6704b5059c4c8ecfbb6adc01718c13c4455` | 2026-10-16T06:38:16Z | docs: release v0.0.1 on 2026-10-16 (#10) |
+| Tip | `9bf18dccf6e6603b10518b37852a1cda1a2b99bb` | 2026-10-17T17:30:52Z | chore: bump to 0.0.2; keep medium findings private until fixed (S-006) (#19) |
+
+- **Scope:** 11 commits (`git rev-list --count 5393f67..9bf18dc`) and 56 files,
+  +3785/−306 (`git diff --shortstat 5393f67 9bf18dc`): #11 to #19, everything
+  in v0.0.2 so far, of which 14 files, +1139/−201, under `crates/` (the same
+  command with `-- crates`). Base equals the previous entry's Tip. Only the
+  committed range is covered.
+- **Method:** a fresh agent read the `crates/` diff against
+  `spec/threat-model.md`, `SECURITY.md` and CLAUDE.md, with proofs of concept;
+  another read CI, scripts and docs for security and privacy, testing the
+  hygiene job's checks in a scratch repository. Two more fresh agents tried
+  to refute each finding; S-010 and S-011 were reproduced.
+- **Findings:** 6, all low, in
+  [`plans/todo/security-review-s-series.md`](../../plans/todo/security-review-s-series.md):
+  - **S-010:** on macOS, a volume without full syncs made every seal fail,
+    against the docs (a regression from #13).
+  - **S-011:** a publisher's inconsistent segment still stopped `heal`
+    part-way, which the CHANGELOG said could no longer happen.
+  - **S-012:** two older hygiene steps print more than hashes.
+  - **S-013:** attribution outside git's trailer block passes the hygiene job.
+  - **S-014:** `[skip ci]` skips the hygiene job unless it is required.
+  - **S-015:** tags are not checked for the project's identity.
+- **Checked, no finding:**
+  - A hostile store: temporary files are made with `create_new` and renamed
+    into place; the new syncs open only directories already checked as real
+    ones, or ones the run made. S-001's, W-001's and W-008's tests pass.
+  - S-005 is fixed: in this review's run a 264 MB planted manifest peaked
+    `heal` at 265.7 MB (267 MB in #15's) and was refused in 2.5 s.
+  - No secret reaches an error, a log or `Debug` output.
+  - `rustix` is Apple-only, with its `fs` and `std` features; no `unsafe` in
+    first-party code; `cargo deny` passes.
+  - Privacy: no names, addresses, hosts, paths, time zones or session links in
+    the range's text or the benchmark records; all 11 commits are the
+    project's, in UTC, signed, and fast-forwarded.
+  - Every number checked in the CHANGELOG, README, ROADMAP and decision 0009
+    matches its record or the code.
+  - Within the range no open finding of medium severity or higher is
+    described in public. S-008's entry, written before `SECURITY.md`'s rule,
+    stays as it is: it names no identity and points only at data already
+    public on GitHub (maintainer's call, noted in the worklist).
+- **Outcome:** no blocker. S-010 and S-011 are fixed in the review-fix PR
+  that follows, before the v0.0.2 campaign; S-012 to S-015 in step 7d, applied
+  by hand, with the hygiene check made required.
+- **Carried-over items:** S-002 and S-003 open and unchanged; S-004 fixed in
+  #12; S-005 fixed in #15 (its entry's test name corrected); S-006 fixed in
+  #19; S-007 open, with every merge since #11 a fast-forward; S-008 open until
+  the GitHub-side copies are removed; S-009 fixed.
 
 ### 2026-10-16 · `a9445d9..5393f67` (#8, #9, #10)
 

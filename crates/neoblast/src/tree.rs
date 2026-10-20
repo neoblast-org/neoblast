@@ -93,7 +93,8 @@ impl TreeBuilder {
     }
 }
 
-/// Root of one segment from its n shard hashes.
+/// Root of one segment from its n shard hashes. `None` if there are none, or
+/// more than a 16-bit shard index can number (review W-019).
 pub fn segment_root(shard_hashes: &[Hash]) -> Option<Hash> {
     segment_root_of(shard_hashes.iter().copied())
 }
@@ -101,8 +102,8 @@ pub fn segment_root(shard_hashes: &[Hash]) -> Option<Hash> {
 /// [`segment_root`] over hashes as they come, without collecting them.
 pub(crate) fn segment_root_of(shard_hashes: impl IntoIterator<Item = Hash>) -> Option<Hash> {
     let mut tree = TreeBuilder::default();
-    for (h, i) in shard_hashes.into_iter().zip(0u16..) {
-        tree.push(shard_leaf(i, &h));
+    for (h, i) in shard_hashes.into_iter().zip(0u32..) {
+        tree.push(shard_leaf(u16::try_from(i).ok()?, &h));
     }
     tree.finish()
 }
@@ -128,6 +129,16 @@ pub fn file_root(header: &[u8; neoblast_format::HEADER_LEN], content_root: &Hash
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// W-019: a segment of more hashes than a 16-bit index can number has no
+    /// root, instead of overflowing the index (a panic in debug builds, a
+    /// wrong root in release builds).
+    #[test]
+    fn w019_too_many_shard_hashes_have_no_root() {
+        let hashes = vec![[5u8; 32]; 65_537];
+        assert!(segment_root(&hashes[..65_536]).is_some());
+        assert_eq!(segment_root(&hashes), None);
+    }
 
     #[test]
     fn odd_node_is_not_self_paired() {

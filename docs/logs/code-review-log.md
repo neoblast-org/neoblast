@@ -1,6 +1,6 @@
 # Code Review Log
 
-<!-- baseline --> **Next review diffs from:** `5393f6704b5059c4c8ecfbb6adc01718c13c4455` (`main`, recorded 2026-10-16)
+<!-- baseline --> **Next review diffs from:** `9bf18dccf6e6603b10518b37852a1cda1a2b99bb` (`main`, recorded 2026-10-20)
 
 A running record of code-review events: branch/pre-PR reviews, review worklists, and
 remediation programmes. Newest entry first. The baseline marker line above is the
@@ -27,6 +27,58 @@ merge-base fallback). Side-branch pre-PR reviews are logged as entries marked
 "frontier unchanged (side branch)" and never move the line.
 
 ## Entries
+
+### 2026-10-20: `5393f67..9bf18dc` (#11 to #19, the v0.0.2 candidate)
+
+| | SHA | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `5393f6704b5059c4c8ecfbb6adc01718c13c4455` | 2026-10-16 | docs: release v0.0.1 on 2026-10-16 (#10) |
+| Tip | `9bf18dccf6e6603b10518b37852a1cda1a2b99bb` | 2026-10-17 | chore: bump to 0.0.2; keep medium findings private until fixed (S-006) (#19) |
+
+- **Scope:** 11 commits (`git rev-list --count 5393f67..9bf18dc`) and 56 files,
+  +3785/−306 (`git diff --shortstat 5393f67 9bf18dc`): #11 to #19, everything
+  in v0.0.2 so far, of which 14 files, +1139/−201, under `crates/` (the same
+  command with `-- crates`). Base equals the previous entry's Tip. Only the
+  committed range is covered.
+- **Method:** the `code-review` skill was not available in this session, so
+  the range was reviewed directly, as the security path does: four fresh
+  agents, one per area (store, stream and CLI; manifest, tree, header and the
+  heap harness; a security pass over `crates/`; CI, scripts and docs), then
+  two more fresh agents tried to refute each of their 18 claims. One was
+  rejected (Dependabot's pull requests fail the hygiene job by design, as
+  `hygiene.yml` says). Of the rest, 15 got IDs; three cleanups were fixed
+  without one (S-005's entry named a renamed test; a completed plan named a
+  moved worklist; S-008's entry got a note), and the released 0.0.1 entry's
+  "about 640 GiB" (648 is right) is left as released.
+- **Findings:** 9 in the code worklist, all low or cleanup; the security ones
+  are S-010 to S-015 in the security log.
+  - W-015 (low): a seal into a new store under a parent that can be written
+    to but not read, such as a drop box, failed (a regression from #13).
+  - W-016 (low): a new seal paid two full flushes per segment on macOS, not
+    the one #18 claims.
+  - W-017 (cleanup): heal skipped `finish` on some failures, and its doc
+    did not match.
+  - W-018 (cleanup): a failed directory sync was reported as "cannot write".
+  - W-019 (cleanup): `tree::segment_root` overflowed its 16-bit index
+    beyond 65,536 hashes (predates v0.0.1; unreachable through a header).
+  - W-020 and W-021: `campaign.sh` can run two campaigns after a stale lock,
+    and `code_id` ignores the compiler.
+  - W-022 and W-023: CHANGELOG timings without a record, and the README's
+    memory claim.
+- **Checked, no finding:** the new tree builder gives the old root for every
+  leaf count tried (1 to 600, and 17 larger ones up to 300,001); every flipped
+  byte, truncation and extension of a manifest is rejected, the same by
+  `decode` and `decode_owned`; W-003 to W-011's fixes do what their worklist
+  says, and their tests assert it; no `unwrap`, `expect`, `panic`, unchecked
+  indexing or `unsafe` outside tests; the golden vectors are byte-identical;
+  decision 0009's numbers match its records.
+- **Outcome:** no blocker. W-015 to W-019 and W-022, W-023 are fixed in the
+  review-fix PR that follows, with S-010 and S-011, before the v0.0.2
+  campaign; step 7e reviews that PR. W-020 and W-021 stay open. Worklist:
+  [`plans/todo/code-review-w-series-2.md`](../../plans/todo/code-review-w-series-2.md).
+- **Carried-over items:** W-003 to W-011 fixed in #13 and #14, W-013 and
+  W-014 in #12; the part 1 worklist moved to
+  `plans/completed/code-review-w-series.md` in #14.
 
 ### 2026-10-16: `a9445d9..5393f67` (#8, #9, #10)
 

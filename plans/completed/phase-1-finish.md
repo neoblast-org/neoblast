@@ -132,7 +132,7 @@ file is about 39 MiB with the fix and 43 MiB without it, above ROADMAP item 2's
 - The open findings: S-002 to S-007, S-008's remaining parts (GitHub-side
   copies, a CI identity check)
   (`plans/todo/security-review-s-series.md`), and W-003 to W-011, W-013 and
-  W-014 (`plans/todo/code-review-w-series.md`).
+  W-014 (`plans/completed/code-review-w-series.md`).
 - Heal's memory growth: find what still grows (A3 results), then the
   segment-size decision (0009) and any change of default it calls for. The
   module doc of `crates/neoblast/src/stream.rs` says peak memory grows only by
