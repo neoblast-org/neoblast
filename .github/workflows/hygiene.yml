@@ -7,6 +7,8 @@ on:
 permissions:
   contents: read
 
+# Every step prints only commit hashes or tag names, so a failure never
+# repeats a name, an address or a time zone in the public log (S-012).
 jobs:
   hygiene:
     runs-on: ubuntu-latest
@@ -16,17 +18,19 @@ jobs:
           fetch-depth: 0
       - name: No tool-session links in commit messages
         run: |
-          if git log --format='%h %B' | grep -Ein 'claude\.ai/code/session|^claude-session:'; then
-            echo "::error::A commit message links to a private tool session. Rewrite it before merging."
-            exit 1
+          bad=$(git log -i -E --grep='claude\.ai/code/session|^claude-session:' --format=%h)
+          if [ -n "$bad" ]; then
+            echo "::error::These commit messages link to a private tool session. Rewrite them before merging:"
+            echo "$bad"; exit 1
           fi
       - name: Maintainer commits are recorded in UTC
         # Only commits made on a maintainer's machine are checked. Commits GitHub
         # creates itself (the pull-request test merge, squash merges) have GitHub
         # as committer and carry the account's time zone, so they are skipped.
+        shell: bash
         run: |
           bad=$(git log --no-merges --format='%h|%ae|%ce|%ad|%cd' --date=format:%z \
-            | awk -F'|' '$2=="dev@neoblast.dev" && $3!="noreply@github.com" && ($4!="+0000" || $5!="+0000")')
+            | awk -F'|' '$2=="dev@neoblast.dev" && $3!="noreply@github.com" && ($4!="+0000" || $5!="+0000") { print $1 }')
           if [ -n "$bad" ]; then
             echo "::error::Maintainer commits must use UTC timestamps:"; echo "$bad"; exit 1
           fi
@@ -35,9 +39,8 @@ jobs:
         # committed as the project in UTC, and any Co-authored-by or
         # Signed-off-by trailer must name the project too (S-008). Merge commits
         # count. A pull request is checked at its own head, which leaves out the
-        # test merge GitHub makes. Only hashes are printed, so a failure never
-        # repeats a name in the public log. Dependabot's commits fail by design:
-        # re-make the change as a project commit.
+        # test merge GitHub makes. Dependabot's commits fail by design: re-make
+        # the change as a project commit.
         shell: bash
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -52,5 +55,46 @@ jobs:
                 $2 != me || $3 != me || $4 != "+0000" || $5 != "+0000" || tr != "" { print $1 }')
           if [ -n "$bad" ]; then
             echo "::error::Only neoblast maintainers <dev@neoblast.dev>, in UTC, may author, commit, co-author or sign off. Re-make these commits:"
+            echo "$bad"; exit 1
+          fi
+      - name: No attribution lines naming anyone else
+        # Any "<something>-by:" line anywhere in a message after 5393f67, not
+        # only in git's trailer block, must name the project (S-013).
+        shell: bash
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          start=5393f6704b5059c4c8ecfbb6adc01718c13c4455
+          git rev-parse --verify --quiet "$HEAD_SHA^{commit}" >/dev/null
+          # Full hashes: a tag named like a short hash cannot stand in for a commit.
+          bad=$(git log --format=%H "$start..$HEAD_SHA" | while read -r h; do
+            msg=$(git log -1 --format=%B "$h") || exit 1
+            if printf '%s\n' "$msg" | awk -v me='neoblast maintainers <dev@neoblast.dev>' '
+              tolower($0) ~ /^[ \t]*[a-z0-9-]+-by[ \t]*:/ {
+                v = $0; sub(/^[^:]*:[ \t]*/, "", v); sub(/[ \t\r]+$/, "", v)
+                if (v != me) found = 1
+              }
+              END { exit !found }'; then
+              git rev-parse --short "$h"
+            fi
+          done)
+          if [ -n "$bad" ]; then
+            echo "::error::Attribution lines (Co-authored-by:, Reviewed-by: and so on) may only name neoblast maintainers <dev@neoblast.dev>. Re-make these commits:"
+            echo "$bad"; exit 1
+          fi
+      - name: Tags carry only the project's identity
+        # Every tag must be annotated, by the project, in UTC (S-015). Only tag
+        # names are printed.
+        shell: bash
+        run: |
+          # The tags were fetched: v0.0.1 is there, annotated.
+          git rev-parse --verify --quiet 'refs/tags/v0.0.1^{tag}' >/dev/null
+          bad=$(git for-each-ref refs/tags \
+              --format='%(refname:short)%09%(objecttype)%09%(taggername) %(taggeremail)%09%(taggerdate:format:%z)' \
+            | awk -F'\t' -v me='neoblast maintainers <dev@neoblast.dev>' '
+                NF != 4 { print "(unparsable line)"; next }
+                $2 != "tag" || $3 != me || $4 != "+0000" { print $1 }')
+          if [ -n "$bad" ]; then
+            echo "::error::Tags must be annotated by neoblast maintainers <dev@neoblast.dev> in UTC. Re-make these tags:"
             echo "$bad"; exit 1
           fi

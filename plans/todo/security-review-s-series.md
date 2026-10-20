@@ -278,7 +278,9 @@ that fixed it.
 - **Fix:** print only hashes in both steps.
 - **Verified:** by a fresh agent, from the workflow.
 - **Release:** in step 7d, applied by hand.
-- **Status:** open.
+- **Status:** fixed in the hygiene PR after #20: every step prints only
+  hashes or tag names, and the UTC step runs with `pipefail`, so it fails
+  closed.
 
 ### S-013 · Low · Attribution outside git's trailer block passes the hygiene job
 
@@ -293,7 +295,10 @@ that fixed it.
   the project, printing only hashes.
 - **Verified:** by a fresh agent, in a scratch repository.
 - **Release:** in step 7d, applied by hand.
-- **Status:** open.
+- **Status:** fixed in the hygiene PR after #20: a new step fails any
+  `<key>-by:` line, anywhere in a message after `5393f67`, that does not name
+  the project. Lines git does not read as trailers either (quoted, bulleted,
+  `Reviewed by:`) are not checked.
 
 ### S-014 · Low · `[skip ci]` skips the hygiene job
 
@@ -306,7 +311,10 @@ that fixed it.
 - **Verified:** by a fresh agent, from GitHub's documented behaviour; the
   repository's settings could not be seen.
 - **Release:** in step 7d (maintainer, settings).
-- **Status:** open.
+- **Status:** open until the maintainer adds the ruleset. The review found
+  `main`'s ruleset already requires the check, but organisation admins may
+  bypass it, so a `[skip ci]` push by an admin is not stopped. Fix: a second
+  ruleset that only requires the check, with no bypass.
 
 ### S-015 · Low · Tags are not checked for the project's identity
 
@@ -317,4 +325,7 @@ that fixed it.
 - **Fix:** check them in the hygiene job on tag pushes, printing only the tag.
 - **Verified:** by a fresh agent.
 - **Release:** in step 7d, applied by hand, before `v0.0.2` is tagged.
-- **Status:** open.
+- **Status:** fixed in the hygiene PR after #20: the hygiene job checks
+  every tag, and the Release workflow the tag it publishes, before anything
+  is published; `RELEASING.md` tags in UTC and checks the tag before pushing
+  it.

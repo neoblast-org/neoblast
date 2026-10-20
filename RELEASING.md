@@ -18,13 +18,19 @@ All four crates (`neoblast`, `neoblast-format`, `neoblast-crypto`,
      cargo update -w --manifest-path bench/heal-heap/Cargo.toml
      ```
 
-2. **Tag** the merged commit on `main` with a signed tag, and push it:
+2. **Tag** the merged commit on `main` with a signed tag, in UTC, and push it.
+   The hygiene job and the Release workflow refuse a tag that is not the
+   project's or not in UTC (S-015), so check it before pushing:
 
    ```sh
    git switch main && git pull
-   git tag -s v0.0.2 -m "v0.0.2"
+   TZ=UTC git tag -s v0.0.2 -m "v0.0.2"
+   git for-each-ref refs/tags/v0.0.2 --format='%(objecttype) %(taggername) %(taggeremail) %(taggerdate:format:%z)'
    git push origin v0.0.2
    ```
+
+   The check must print `tag neoblast maintainers <dev@neoblast.dev> +0000`.
+   If not, delete the tag with `git tag -d v0.0.2` and make it again.
 
 3. **Approve.** The `Release` workflow's `verify` job checks three things:
    - the tag is on `main`;
