@@ -20,20 +20,23 @@ All four crates (`neoblast`, `neoblast-format`, `neoblast-crypto`,
 
 2. **Tag** the merged commit on `main` with a signed tag, in UTC, and push it.
    The hygiene job and the Release workflow refuse a tag that is not the
-   project's or not in UTC (S-015), so check it before pushing:
+   project's, not in UTC (S-015) or not of a commit (S-017), so check it
+   before pushing. Make it of the commit, never of an existing tag:
 
    ```sh
    git switch main && git pull
    TZ=UTC git tag -s v0.0.2 -m "v0.0.2"
-   git for-each-ref refs/tags/v0.0.2 --format='%(objecttype) %(taggername) %(taggeremail) %(taggerdate:format:%z)'
+   git for-each-ref refs/tags/v0.0.2 --format='%(objecttype) %(type) %(taggername) %(taggeremail) %(taggerdate:format:%z)'
    git push origin v0.0.2
    ```
 
-   The check must print `tag neoblast maintainers <dev@neoblast.dev> +0000`.
-   If not, delete the tag with `git tag -d v0.0.2` and make it again.
+   The check must print `tag commit neoblast maintainers <dev@neoblast.dev> +0000`.
+   If not, delete the tag with `git tag -d v0.0.2` and make it again. Never
+   tag the old tag (`git tag -f v0.0.2 v0.0.2`): that makes a tag of a tag.
 
-3. **Approve.** The `Release` workflow's `verify` job checks three things:
+3. **Approve.** The `Release` workflow's `verify` job checks four things:
    - the tag is on `main`;
+   - the tag is annotated, of a commit, by the project in UTC;
    - the tag matches the version;
    - tests and a publish dry run pass.
 

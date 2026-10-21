@@ -17,11 +17,12 @@ the frozen v1 byte format).
 - `Params::header` plans a file's header and refuses parameters whose
   manifest would be larger than a store reads, with the new
   `Error::ManifestTooLarge`.
-- `ShardSink::finish`, called once at the end of a run: by `seal_stream`
-  after a successful one, by `heal_stream` after every one that passes its
-  root check; the default does
-  nothing. `DirStore` uses it to sync the directories it wrote last, so a
-  caller that uses `put` directly calls it too.
+- `ShardSink::finish`, called once at the end of every run, also one that
+  fails: by `seal_stream` past its parameter check, by `heal_stream` past its
+  root check. The default does nothing. `DirStore` uses it to sync the
+  directories it wrote last, so a caller that uses `put` directly calls it
+  too, and a `DirStore` sealed into again after a failed seal no longer
+  tries to sync a directory of that run (review W-025).
 
 ### Changed
 
@@ -78,9 +79,10 @@ the frozen v1 byte format).
   place, and on Unix the directories after, so what they report as written
   survives a power loss (review W-007). A file system that cannot sync
   directories is accepted as it is; on macOS one that cannot sync them fully
-  gets a plain `fsync` (review S-010). A store made in a directory that can be
-  written to but not read, such as a shared drop box, is not synced into it
-  (review W-015). On macOS a file gets a plain `fsync` and its directory one
+  gets a plain `fsync` (review S-010), but a full sync that fails with an I/O
+  error is reported, not hidden by one (review S-016). A store made in a
+  directory that can be written to but not read, such as a shared drop box,
+  is not synced into it (review W-015). On macOS a file gets a plain `fsync` and its directory one
   full sync (`F_FULLFSYNC`) after its last write, which flushes the drive's
   cache for every file before it, so a segment pays for one full flush instead
   of one per shard (review W-016). In the measurements for #18, at 1 MiB
@@ -91,6 +93,10 @@ the frozen v1 byte format).
 - `tree::segment_root` returns `None` for more than 65,536 hashes instead of
   overflowing the 16-bit shard index; a verified header has at most 128
   (review W-019).
+- `open` and `heal` count a shard only if it is as long as the header says,
+  whatever the `ShardSource` returns. A publisher's manifest can commit to a
+  shard of another length, which stopped `heal` part-way with a source that
+  does not check lengths; `DirStore` does (review S-019).
 
 ## [0.0.1] - 2026-10-16
 

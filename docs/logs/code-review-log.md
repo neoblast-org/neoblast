@@ -1,6 +1,6 @@
 # Code Review Log
 
-<!-- baseline --> **Next review diffs from:** `9bf18dccf6e6603b10518b37852a1cda1a2b99bb` (`main`, recorded 2026-10-20)
+<!-- baseline --> **Next review diffs from:** `255353b780c0a41de3d32259a2178d40d39691b5` (`main`, recorded 2026-10-21)
 
 A running record of code-review events: branch/pre-PR reviews, review worklists, and
 remediation programmes. Newest entry first. The baseline marker line above is the
@@ -27,6 +27,50 @@ merge-base fallback). Side-branch pre-PR reviews are logged as entries marked
 "frontier unchanged (side branch)" and never move the line.
 
 ## Entries
+
+### 2026-10-21: `9bf18dc..255353b` (#20 to #22)
+
+| | SHA | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `9bf18dccf6e6603b10518b37852a1cda1a2b99bb` | 2026-10-17 | chore: bump to 0.0.2; keep medium findings private until fixed (S-006) (#19) |
+| Tip | `255353b780c0a41de3d32259a2178d40d39691b5` | 2026-10-20 | fuzz: campaign lock held by the fuzzers; warn on mixed compilers (#22) |
+
+- **Scope:** 3 commits (`git rev-list --count 9bf18dc..255353b`) and 18
+  files, +909/−148 (`git diff --shortstat 9bf18dc 255353b`): the review-fix
+  PR (#20), the hygiene and tag checks (#21) and the campaign lock (#22), of
+  which 5 files, +379/−91, under `crates/` (the same command with
+  `-- crates`). Base equals the previous entry's Tip. Only the committed
+  range is covered. Run before the v0.0.2 campaign, so that a fix it calls
+  for under `crates/` does not restart it; step 7e reviews only what follows.
+- **Method:** the `code-review` skill, at high effort, over the range; two
+  fresh agents read `crates/` and the rest for security (logged in the
+  security log); a fresh agent then tried to refute each `crates/` claim,
+  with probes and by reverting fixes, and another each claim outside it. Of
+  the code review's 10 claims, one was rejected: `actions/checkout` keeps
+  an annotated tag annotated on a tag push (its source at the pinned commit,
+  and `v0.0.1`'s own runs, show it fetches the tag objects). Its Apple sync
+  claim is S-016 in the security log.
+- **Findings:** 4 in the code worklist, all low or cleanup:
+  - W-024 (low): three of #20's W-017 fixes had no test that fails without
+    them, against #20's own claim.
+  - W-025 (low): a `DirStore` sealed into again after a failed seal kept
+    directories to sync from that run.
+  - W-026 (cleanup): `write_manifest_bytes` dropped a list of directories
+    to sync; empty today.
+  - W-027 (cleanup): a short codec result counted as a publisher's
+    mismatch.
+- **Checked, no finding:** #20's fixes do what part 2 of the worklist says;
+  its new tests fail on `9bf18dc`; no `unwrap`, `expect`, `panic`, unchecked
+  indexing or `unsafe` outside tests; heal writes only bytes that match the
+  manifest; clippy and the tests pass. Four claims were left as they are,
+  with the reason, in the worklist's "Not tracked".
+- **Outcome:** no blocker. All four are fixed in the review-fix PR that
+  follows, before the v0.0.2 campaign, with S-016 to S-020. Worklist:
+  [`plans/completed/code-review-w-series-3.md`](../../plans/completed/code-review-w-series-3.md),
+  closed at once.
+- **Carried-over items:** W-015 to W-019, W-022 and W-023 fixed in #20,
+  W-020 and W-021 in #22; part 2 of the worklist moved to
+  `plans/completed/code-review-w-series-2.md` in #22.
 
 ### 2026-10-20: `5393f67..9bf18dc` (#11 to #19, the v0.0.2 candidate)
 

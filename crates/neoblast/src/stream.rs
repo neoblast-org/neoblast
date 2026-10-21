@@ -34,11 +34,11 @@ pub trait ShardSink {
     /// Stores one shard. Calls arrive in segment order.
     fn put(&mut self, segment: u32, index: u16, bytes: &[u8]) -> io::Result<()>;
 
-    /// Makes every shard stored so far durable. [`seal_stream`] calls it once,
-    /// after the last `put` of a run that succeeds; [`heal_manifest`] once at
-    /// the end of every run past its root check, also one that fails (review
-    /// W-017). A caller
-    /// using `put` directly calls it too. The default does nothing.
+    /// Makes every shard stored so far durable. [`seal_stream`] calls it once
+    /// at the end of every run past its parameter check, and [`heal_manifest`]
+    /// at the end of every run past its root check, also one that fails
+    /// (reviews W-017 and W-025). A caller using `put` directly calls it too.
+    /// The default does nothing.
     fn finish(&mut self) -> io::Result<()> {
         Ok(())
     }
@@ -65,14 +65,36 @@ pub fn seal_stream(
 /// [`seal_stream`] under a caller-chosen read key. Never reuse a read key for
 /// two different payloads.
 pub fn seal_stream_with_key(
-    mut input: impl Read,
+    input: impl Read,
     payload_len: u64,
     params: Params,
     read_key: &[u8; 32],
     sink: &mut impl ShardSink,
 ) -> Result<(FileReadCap, Manifest), Error> {
     let header = params.header(payload_len)?;
-    let cipher = SegmentCipher::new(read_key, &header);
+    let run = seal_segments(input, payload_len, &header, read_key, sink);
+    // Even after a failure, what was written is made durable, so a sink used
+    // again holds nothing left over from this run (review W-025).
+    let finished = sink.finish();
+    let manifest = Manifest::from_encoding(run?)?;
+    finished?;
+    let cap = FileReadCap {
+        root: manifest.root(),
+        read_key: *read_key,
+    };
+    Ok((cap, manifest))
+}
+
+/// The segments of [`seal_stream_with_key`]: hands every shard to `sink` and
+/// returns the manifest's encoding.
+fn seal_segments(
+    mut input: impl Read,
+    payload_len: u64,
+    header: &Header,
+    read_key: &[u8; 32],
+    sink: &mut impl ShardSink,
+) -> Result<Vec<u8>, Error> {
+    let cipher = SegmentCipher::new(read_key, header);
     let k = usize::from(header.k());
     let n = usize::from(header.n());
     let mut remaining = payload_len;
@@ -85,7 +107,7 @@ pub fn seal_stream_with_key(
 
     for segment in 0..header.segment_count() {
         let plain_len = segment_len(header.segment_plain_len(segment))?;
-        let shard_len = shard_len(&header, segment)?;
+        let shard_len = shard_len(header, segment)?;
         buf.clear();
         buf.reserve(k.saturating_mul(shard_len).max(plain_len));
         if segment == 0 {
@@ -122,13 +144,7 @@ pub fn seal_stream_with_key(
             expected: payload_len,
         });
     }
-    sink.finish()?;
-    let manifest = Manifest::from_encoding(manifest)?;
-    let cap = FileReadCap {
-        root: manifest.root(),
-        read_key: *read_key,
-    };
-    Ok((cap, manifest))
+    Ok(manifest)
 }
 
 /// Opens a file segment by segment, writing the payload to `out`. Returns the
@@ -307,6 +323,13 @@ fn heal_segments(
             continue;
         }
         let all = match neoblast_erasure::regenerate(&ReedSolomonSimd, k, n, shard_len, &held) {
+            // Fewer than n shards back means a broken codec, not a bad
+            // publisher (review W-027).
+            Ok(all) if all.len() != n => {
+                return Err(Error::Erasure(ErasureError::Codec(
+                    "too few shards rebuilt".into(),
+                )));
+            }
             Ok(all) => all,
             Err(e) => match unrecoverable(e, segment, &held, k) {
                 // Keep repairing the other segments; report this one at the end.
@@ -343,6 +366,7 @@ fn heal_segments(
 
 /// Fetches shards in index order and keeps the first `k` that match the
 /// manifest. Fetching stops there: an intact segment costs exactly k reads.
+/// A shard of the wrong length counts as missing (see [`verified`]).
 fn first_k_verified(
     manifest: &Manifest,
     segment: u32,
@@ -355,9 +379,7 @@ fn first_k_verified(
     let mut good = 0;
     for index in 0..n {
         let shard = if good < k {
-            source.get(segment, index, shard_len).filter(|bytes| {
-                manifest.shard_hash(segment, index) == Some(&tree::shard_hash(bytes))
-            })
+            verified(manifest, segment, index, source, shard_len)
         } else {
             None
         };
@@ -382,10 +404,7 @@ fn verify_all(
     let mut missing = Vec::new();
     let mut kept = 0;
     for index in 0..n {
-        let good = source
-            .get(segment, index, shard_len)
-            .filter(|bytes| manifest.shard_hash(segment, index) == Some(&tree::shard_hash(bytes)));
-        match good {
+        match verified(manifest, segment, index, source, shard_len) {
             None => {
                 missing.push(index);
                 held.push(None);
@@ -398,6 +417,23 @@ fn verify_all(
         }
     }
     (held, missing)
+}
+
+/// One shard from `source`, if it is as long as the header says and matches
+/// the manifest. The length is checked here, not left to the source: a
+/// publisher can commit to a shard of another length, which would otherwise
+/// stop the decoder (review S-019).
+fn verified(
+    manifest: &Manifest,
+    segment: u32,
+    index: u16,
+    source: &impl crate::ShardSource,
+    shard_len: usize,
+) -> Option<Vec<u8>> {
+    source.get(segment, index, shard_len).filter(|bytes| {
+        bytes.len() == shard_len
+            && manifest.shard_hash(segment, index) == Some(&tree::shard_hash(bytes))
+    })
 }
 
 /// Reads until at least one byte arrives or the input ends, retrying on

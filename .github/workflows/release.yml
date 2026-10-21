@@ -34,13 +34,13 @@ jobs:
       - name: Tag is on main
         run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       - name: Tag is the project's, in UTC
-        # As the hygiene job checks (S-015), but before anything is published.
-        # Prints nothing about the tagger.
+        # As the hygiene job checks (S-015, S-017), but before anything is
+        # published. Prints nothing about the tagger.
         run: |
-          test "$(git cat-file -t "$GITHUB_REF")" = tag
+          test "$(git for-each-ref "$GITHUB_REF" --format='%(objecttype) %(type)')" = "tag commit"
           tagger=$(git for-each-ref "$GITHUB_REF" --format='%(taggername) %(taggeremail) %(taggerdate:format:%z)')
           if [ "$tagger" != "neoblast maintainers <dev@neoblast.dev> +0000" ]; then
-            echo "::error::The tag must be made by neoblast maintainers <dev@neoblast.dev> in UTC."; exit 1
+            echo "::error::The tag must be made of a commit, by neoblast maintainers <dev@neoblast.dev> in UTC."; exit 1
           fi
       - name: Tag matches the workspace version
         run: |

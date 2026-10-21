@@ -11,8 +11,9 @@
 //! S-001): only regular files are read, a symlinked segment directory is neither
 //! read nor written, and files are written to a new temporary file that is
 //! renamed into place, so a planted symlink is replaced, never followed. The
-//! store root itself is the caller's choice and may be a symlink. The checks run just before each
-//! open; a directory changed by someone racing the running command is out of scope.
+//! store root itself is the caller's choice and may be a symlink. The checks
+//! run just before each open; a directory changed by someone racing the running
+//! command is out of scope.
 //!
 //! Every file is synced before it is renamed into place, and each directory
 //! once after its last write, so what a seal or heal reports as written survives
@@ -167,14 +168,19 @@ impl DirStore {
 
     fn write_manifest_bytes(&self, bytes: &[u8]) -> io::Result<()> {
         let path = self.manifest_path();
-        create_dirs(&self.root, &self.root, &mut Unsynced::default())?;
+        // Nothing is left to `unsynced` for the root itself, but whatever is
+        // gets synced here, not dropped (review W-026).
+        let mut unsynced = Unsynced::default();
+        create_dirs(&self.root, &self.root, &mut unsynced)?;
+        unsynced.finish()?;
         replace_file(&path, bytes).map_err(|e| cannot("write", &path, e))?;
         sync_dir(&self.root).map_err(|e| cannot("sync", &self.root, e))
     }
 
     /// Writes rebuilt shards back into place, stopping at the first that
-    /// cannot be written; those written are still synced (review W-017). [`heal_stream`](crate::heal_stream) with this store
-    /// as its sink writes the others too.
+    /// cannot be written; those written are still synced (review W-017).
+    /// [`heal_stream`](crate::heal_stream) with this store as its sink writes
+    /// the others too.
     pub fn write_rebuilt(&self, shards: &[RebuiltShard]) -> io::Result<()> {
         let mut unsynced = Unsynced::default();
         let written = shards.iter().try_for_each(|s| {
@@ -366,8 +372,8 @@ fn sync_file(file: &File, path: &Path) -> io::Result<()> {
 /// A file system that cannot sync directories at all (some network and FUSE
 /// file systems) is accepted as it is, rather than making every write fail.
 /// On Apple systems a directory that cannot be synced fully gets a plain
-/// `fsync`, as SQLite does (review S-010); files there get only their plain
-/// `fsync` too.
+/// `fsync`, as SQLite does (review S-010), unless the full sync failed with an
+/// I/O error (review S-016); files there get only their plain `fsync` too.
 fn sync_dir(dir: &Path) -> io::Result<()> {
     #[cfg(unix)]
     match full_sync(&File::open(dir)?) {
@@ -378,15 +384,25 @@ fn sync_dir(dir: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// `F_FULLFSYNC`, or a plain `fsync` if it fails, as where the file system
-/// does not offer it.
+/// `F_FULLFSYNC`, or a plain `fsync` where the file system does not offer it.
 #[cfg(target_vendor = "apple")]
 fn full_sync(file: &File) -> io::Result<()> {
     use rustix::io::retry_on_intr;
-    if retry_on_intr(|| rustix::fs::fcntl_fullfsync(file)).is_ok() {
-        return Ok(());
+    match retry_on_intr(|| rustix::fs::fcntl_fullfsync(file)) {
+        Err(e) if !falls_back(e) => Err(e.into()),
+        Err(_) => Ok(retry_on_intr(|| rustix::fs::fsync(file))?),
+        Ok(()) => Ok(()),
     }
-    Ok(retry_on_intr(|| rustix::fs::fsync(file))?)
+}
+
+/// True if a failed `F_FULLFSYNC` may fall back to a plain `fsync`: on every
+/// error but `EIO`. That one means the sync failed, and a plain `fsync`, which
+/// does not flush the drive's cache, could succeed after it and report data
+/// that may be lost as written (review S-016). Other errors, which vary by file system (`ENOTSUP`
+/// on devfs, others on network and FUSE file systems), mean it is not offered.
+#[cfg(target_vendor = "apple")]
+fn falls_back(e: rustix::io::Errno) -> bool {
+    e != rustix::io::Errno::IO
 }
 
 #[cfg(all(unix, not(target_vendor = "apple")))]
@@ -595,5 +611,66 @@ mod tests {
         assert!(unsupported(&notsup));
         full_sync(&File::open("/dev").unwrap()).unwrap();
         sync_dir(Path::new("/dev")).unwrap();
+    }
+
+    /// S-016: a full sync that fails with an I/O error is reported, not
+    /// followed by a plain `fsync` that would hide it. Every other error still
+    /// falls back, so S-010's file systems keep working.
+    #[cfg(target_vendor = "apple")]
+    #[test]
+    fn s016_a_failed_full_sync_is_not_hidden() {
+        use rustix::io::Errno;
+        assert!(!falls_back(Errno::IO));
+        for e in [
+            Errno::NOTSUP,
+            Errno::OPNOTSUPP,
+            Errno::NOTTY,
+            Errno::INVAL,
+            Errno::NOSYS,
+        ] {
+            assert!(falls_back(e), "{e:?}");
+        }
+    }
+
+    /// Makes the second shard of segment 0 impossible to write, by planting a
+    /// directory at its path. Returns the directory the first shard went into.
+    fn block_second_shard(store: &DirStore) -> PathBuf {
+        let blocked = store.shard_path(0, 1);
+        fs::create_dir_all(blocked.join("keep")).unwrap();
+        parent_dir(&blocked).to_owned()
+    }
+
+    /// W-024: `write_sealed` and `write_rebuilt` stop at a shard they cannot
+    /// write, but still sync the directory of the shards written before it
+    /// (W-017).
+    #[test]
+    fn w024_a_failed_write_still_syncs_what_was_written() {
+        let tmp = std::env::temp_dir().join(format!("neoblast-w024-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        let sealed = seal(&[7u8; 3000], PARAMS).unwrap();
+
+        let store = DirStore::new(tmp.join("sealed"));
+        let segment = block_second_shard(&store);
+        let _ = synced();
+        assert!(store.write_sealed(&sealed).is_err());
+        let log = synced();
+        assert!(durable(&log, &store.shard_path(0, 0)), "{log:?}");
+        assert!(log.contains(&segment), "{log:?}");
+
+        let store = DirStore::new(tmp.join("rebuilt"));
+        let segment = block_second_shard(&store);
+        let rebuilt: Vec<RebuiltShard> = (0..2)
+            .map(|index| RebuiltShard {
+                segment: 0,
+                index,
+                bytes: sealed.shards[0][usize::from(index)].clone(),
+            })
+            .collect();
+        let _ = synced();
+        assert!(store.write_rebuilt(&rebuilt).is_err());
+        let log = synced();
+        assert!(durable(&log, &store.shard_path(0, 0)), "{log:?}");
+        assert!(log.contains(&segment), "{log:?}");
+        fs::remove_dir_all(&tmp).unwrap();
     }
 }

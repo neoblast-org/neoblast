@@ -1,6 +1,6 @@
 # Security Review Log
 
-<!-- baseline --> **Next review diffs from:** `9bf18dccf6e6603b10518b37852a1cda1a2b99bb` (`main`, recorded 2026-10-20)
+<!-- baseline --> **Next review diffs from:** `255353b780c0a41de3d32259a2178d40d39691b5` (`main`, recorded 2026-10-21)
 
 A running record of branch security reviews. Each entry records the exact commit range
 reviewed; the baseline marker line above is the machine-owned frontier the next
@@ -21,6 +21,61 @@ marker line; a frontier-moving entry's Base must equal the previous one's Tip un
 the entry explains why not.
 
 ## Entries
+
+### 2026-10-21 · `9bf18dc..255353b` (#20 to #22)
+
+| | Commit | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `9bf18dccf6e6603b10518b37852a1cda1a2b99bb` | 2026-10-17T17:30:52Z | chore: bump to 0.0.2; keep medium findings private until fixed (S-006) (#19) |
+| Tip | `255353b780c0a41de3d32259a2178d40d39691b5` | 2026-10-20T22:35:07Z | fuzz: campaign lock held by the fuzzers; warn on mixed compilers (#22) |
+
+- **Scope:** 3 commits (`git rev-list --count 9bf18dc..255353b`) and 18
+  files, +909/−148 (`git diff --shortstat 9bf18dc 255353b`): #20, #21 and
+  #22, of which 5 files, +379/−91, under `crates/` (the same command with
+  `-- crates`). Base equals the previous entry's Tip. Only the committed
+  range is covered. Run before the v0.0.2 campaign.
+- **Method:** a fresh agent read the `crates/` diff against
+  `spec/threat-model.md`, `SECURITY.md` and CLAUDE.md, ran the new tests
+  against `9bf18dc` and probes; another read CI, scripts and docs for
+  security and privacy, in a scratch repository. Two more fresh agents tried
+  to refute each finding, together with the code review's; one read
+  `actions/checkout`'s source and `v0.0.1`'s runs, the other probed
+  `F_FULLFSYNC` on five file systems.
+- **Findings:** 5, all low, in
+  [`plans/todo/security-review-s-series.md`](../../plans/todo/security-review-s-series.md):
+  - **S-016:** on macOS, a full sync that failed with an I/O error was
+    followed by a plain `fsync` and reported as a success (from #20).
+  - **S-017:** a tag of a tag, or of a tree, passed the tag checks (#21).
+  - **S-018:** a line after a lone carriage return, or with a Unicode
+    hyphen, passed the attribution check (#21).
+  - **S-019:** a shard of the wrong length, from a source that does not
+    check lengths, stopped `heal` (predates the range).
+  - **S-020:** `campaign.sh` ran Python with `fuzz/` on its module path.
+- **Not tracked:** the required `hygiene` check is matched by name, so a
+  commit that changes the workflow can pass it (noted under S-014); GitHub
+  sends no push event for more than three tags at once, and CI sees a
+  branch or tag only once it is public, so `RELEASING.md` pushes one tag and
+  checks it first.
+- **Checked, no finding:**
+  - Heal writes only bytes that match the manifest, and parameters still
+    come only from the verified header. The `PermissionDenied` skip applies
+    only outside the store; a symlinked segment directory is still refused.
+  - No `${{ }}` in any `run:` block; every step prints only hashes or tag
+    names, and fails closed. Ref names cannot break the parsing.
+  - The campaign lock holds across a SIGKILL, also on Linux; records hold no
+    host, user or path.
+  - Privacy: all 3 commits are the project's, in UTC, signed, signed off and
+    fast-forwarded; no names, addresses, paths or session links in the
+    range's text; `v0.0.1` is the project's, in UTC.
+  - No open finding of medium severity or higher is described in public.
+- **Outcome:** no blocker. S-016, S-019 and S-020 are fixed in the
+  review-fix PR that follows, before the v0.0.2 campaign; S-017 and S-018
+  there too, applied by hand.
+- **Carried-over items:** S-002 open (noted: heal rebuilds from the first k
+  shards that match), S-003 open; S-007 open, with every merge a
+  fast-forward; S-008 open until the GitHub-side copies are removed;
+  S-010 and S-011 fixed in #20; S-012, S-013 and S-015 in #21 (step 7c′,
+  not 7d as the last entry planned); S-014 fixed in the settings.
 
 ### 2026-10-20 · `5393f67..9bf18dc` (#11 to #19, the v0.0.2 candidate)
 

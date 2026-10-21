@@ -59,7 +59,10 @@ jobs:
           fi
       - name: No attribution lines naming anyone else
         # Any "<something>-by:" line anywhere in a message after 5393f67, not
-        # only in git's trailer block, must name the project (S-013).
+        # only in git's trailer block, must name the project (S-013). A lone
+        # carriage return also ends a line, and any byte but a letter, digit,
+        # space or colon counts as the hyphen, so a Unicode one cannot hide a
+        # line either (S-018).
         shell: bash
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -69,8 +72,8 @@ jobs:
           # Full hashes: a tag named like a short hash cannot stand in for a commit.
           bad=$(git log --format=%H "$start..$HEAD_SHA" | while read -r h; do
             msg=$(git log -1 --format=%B "$h") || exit 1
-            if printf '%s\n' "$msg" | awk -v me='neoblast maintainers <dev@neoblast.dev>' '
-              tolower($0) ~ /^[ \t]*[a-z0-9-]+-by[ \t]*:/ {
+            if printf '%s\n' "$msg" | tr '\r' '\n' | LC_ALL=C awk -v me='neoblast maintainers <dev@neoblast.dev>' '
+              tolower($0) ~ /^[ \t]*[^ \t:]*[^a-z0-9 \t:]by[ \t]*:/ {
                 v = $0; sub(/^[^:]*:[ \t]*/, "", v); sub(/[ \t\r]+$/, "", v)
                 if (v != me) found = 1
               }
@@ -83,18 +86,19 @@ jobs:
             echo "$bad"; exit 1
           fi
       - name: Tags carry only the project's identity
-        # Every tag must be annotated, by the project, in UTC (S-015). Only tag
-        # names are printed.
+        # Every tag must be annotated, by the project, in UTC (S-015), and
+        # point at a commit: a tag of a tag would publish the inner tag's
+        # identity too (S-017). Only tag names are printed.
         shell: bash
         run: |
           # The tags were fetched: v0.0.1 is there, annotated.
           git rev-parse --verify --quiet 'refs/tags/v0.0.1^{tag}' >/dev/null
           bad=$(git for-each-ref refs/tags \
-              --format='%(refname:short)%09%(objecttype)%09%(taggername) %(taggeremail)%09%(taggerdate:format:%z)' \
+              --format='%(refname:short)%09%(objecttype)%09%(type)%09%(taggername) %(taggeremail)%09%(taggerdate:format:%z)' \
             | awk -F'\t' -v me='neoblast maintainers <dev@neoblast.dev>' '
-                NF != 4 { print "(unparsable line)"; next }
-                $2 != "tag" || $3 != me || $4 != "+0000" { print $1 }')
+                NF != 5 { print "(unparsable line)"; next }
+                $2 != "tag" || $3 != "commit" || $4 != me || $5 != "+0000" { print $1 }')
           if [ -n "$bad" ]; then
-            echo "::error::Tags must be annotated by neoblast maintainers <dev@neoblast.dev> in UTC. Re-make these tags:"
+            echo "::error::Tags must be annotated, of a commit, by neoblast maintainers <dev@neoblast.dev> in UTC. Re-make these tags:"
             echo "$bad"; exit 1
           fi

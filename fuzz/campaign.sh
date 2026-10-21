@@ -8,6 +8,8 @@
 # fuzz/campaigns/ in a development clone to commit them. Runs are recorded
 # against committed code, so the tree must be clean. Records hold no host
 # names, user names or paths. Works with the bash 3.2 that ships with macOS.
+# Python runs isolated (-I), so a stray .py file in fuzz/ cannot stand in for
+# a module it imports (review S-020).
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,7 +34,7 @@ summary() {
   local ids="" t
   for t in $(all_targets); do ids="$ids $t=$(code_id "$t")"; done
   # shellcheck disable=SC2086
-  python3 - "$here" $ids <<'PY'
+  python3 -I - "$here" $ids <<'PY'
 import datetime, json, pathlib, sys
 here = pathlib.Path(sys.argv[1])
 current = dict(arg.split("=", 1) for arg in sys.argv[2:])
@@ -82,7 +84,7 @@ PY
 
 # Writes fuzz/runs/<start>-<target>.json for one finished run.
 record() { # target started_utc start_epoch exit_code log artifacts_before planned code_id commit toolchain cargo_fuzz
-  python3 - "$@" <<'PY'
+  python3 -I - "$@" <<'PY'
 import datetime, json, os, pathlib, platform, re, subprocess, sys
 t, started, start_epoch, rc, log, before, planned, cid, commit, toolchain, cargo_fuzz = sys.argv[1:]
 text = pathlib.Path(log).read_text(errors="replace")
@@ -148,7 +150,7 @@ if [ $# -ne 2 ]; then
   exit 1
 fi
 hours="$2"
-seconds=$(python3 -c "import sys; print(int(float(sys.argv[1]) * 3600))" "$hours")
+seconds=$(python3 -I -c "import sys; print(int(float(sys.argv[1]) * 3600))" "$hours")
 if [ "$seconds" -lt 60 ]; then
   # libFuzzer treats -max_total_time=0 as "run forever".
   echo "hours must be at least 1/60 (one minute)" >&2
@@ -171,7 +173,7 @@ commit=$(git -C "$root" rev-parse HEAD)
 mkdir -p runs
 exec 9>>runs/.campaign.lock
 locked=0
-python3 - <<'PY' || locked=$?
+python3 -I - <<'PY' || locked=$?
 import errno, fcntl, sys
 try:
     fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)

@@ -563,6 +563,160 @@ fn s011_an_inconsistent_segment_does_not_stop_heal() {
     assert!(sink.finished);
 }
 
+/// A sink that records what it is given, failing every write and the final
+/// sync when `fail` is set.
+struct Recorder {
+    put: Vec<(u32, u16)>,
+    finished: bool,
+    fail: bool,
+}
+
+impl Recorder {
+    fn new(fail: bool) -> Self {
+        Self {
+            put: Vec::new(),
+            finished: false,
+            fail,
+        }
+    }
+
+    fn result(&self) -> std::io::Result<()> {
+        match self.fail {
+            true => Err(std::io::Error::other("sink failed")),
+            false => Ok(()),
+        }
+    }
+}
+
+impl neoblast::ShardSink for Recorder {
+    fn put(&mut self, segment: u32, index: u16, _: &[u8]) -> std::io::Result<()> {
+        self.put.push((segment, index));
+        self.result()
+    }
+    fn finish(&mut self) -> std::io::Result<()> {
+        self.finished = true;
+        self.result()
+    }
+}
+
+/// Seals 3 KB 2-of-4 under a fixed key, lets `change` alter the shards, and
+/// returns them with a manifest that commits to them as they now are.
+fn sealed_as(
+    change: impl FnOnce(&mut Vec<Vec<Vec<u8>>>),
+) -> (neoblast::Sealed, neoblast::Manifest) {
+    let params = Params {
+        k: 2,
+        n: 4,
+        segment_size: 1024,
+    };
+    let mut sealed = seal_with_key(&[9u8; 3000], params, &[3u8; 32]).unwrap();
+    assert!(sealed.shards.len() > 2);
+    change(&mut sealed.shards);
+    let hashes = sealed
+        .shards
+        .iter()
+        .map(|segment| {
+            segment
+                .iter()
+                .map(|s| neoblast::tree::shard_hash(s))
+                .collect()
+        })
+        .collect();
+    let manifest = neoblast::Manifest::new(*sealed.manifest.header(), hashes).unwrap();
+    (sealed, manifest)
+}
+
+/// W-024: a lost or inconsistent segment is reported over a write that failed
+/// earlier in the run, and over a failed final sync, which still runs (W-017).
+#[test]
+fn w024_an_inconsistent_segment_outranks_a_failed_write() {
+    // Segment 2's parity no longer matches its data, and the manifest says so.
+    let (sealed, manifest) = sealed_as(|shards| {
+        for parity in &mut shards[2][2..] {
+            parity.iter_mut().for_each(|b| *b ^= 0x5a);
+        }
+    });
+    let cap = neoblast::FileVerifyCap {
+        root: manifest.root(),
+    };
+    let mut store = MemStore::from_sealed(&sealed);
+    store.0.remove(&(0, 1));
+    store.0.remove(&(2, 0));
+
+    let mut sink = Recorder::new(true);
+    let err = neoblast::heal_manifest(&cap, &manifest, &store, &mut sink).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            Error::RebuildMismatch {
+                segment: 2,
+                index: 0
+            }
+        ),
+        "{err}"
+    );
+    assert_eq!(sink.put, [(0, 1)]);
+    assert!(sink.finished);
+}
+
+/// S-019: a publisher can commit to a shard of the wrong length. Heal and open
+/// treat it as missing, whatever the source returns, instead of handing it to
+/// the decoder, which stopped heal there and hid an earlier lost segment.
+#[test]
+fn s019_a_shard_of_the_wrong_length_counts_as_missing() {
+    let (sealed, manifest) = sealed_as(|shards| shards[1][0].extend_from_slice(&[0u8; 64]));
+    let read_cap = neoblast::FileReadCap {
+        root: manifest.root(),
+        read_key: [3u8; 32],
+    };
+    // `MemStore` hands back whatever it holds, whatever length is asked for.
+    let mut store = MemStore::from_sealed(&sealed);
+    let mut out = Vec::new();
+    neoblast::open_manifest(&read_cap, &manifest, &store, &mut out).unwrap();
+    assert_eq!(out, vec![9u8; 3000]);
+
+    // Segment 0 is lost; segment 1 must be rebuilt past its long shard.
+    for index in 0..3 {
+        store.0.remove(&(0, index));
+    }
+    store.0.remove(&(1, 3));
+    store.0.remove(&(2, 1));
+    let mut sink = Recorder::new(false);
+    let err =
+        neoblast::heal_manifest(&read_cap.verify_cap(), &manifest, &store, &mut sink).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            Error::Unrecoverable {
+                segment: 0,
+                have: 1,
+                need: 2
+            }
+        ),
+        "{err}"
+    );
+    assert_eq!(sink.put, [(1, 3), (2, 1)]);
+}
+
+/// W-025: a failed seal still syncs what it wrote, so a `DirStore` sealed
+/// into again afterwards does not try to sync a directory of the failed run.
+#[test]
+fn w025_a_store_can_be_sealed_into_again_after_a_failed_seal() {
+    let tmp = dir::scratch("w025-reuse");
+    let root = tmp.join("store");
+    let mut store = neoblast::store::DirStore::new(&root);
+    let params = Params {
+        k: 2,
+        n: 4,
+        segment_size: 1024,
+    };
+    let err = neoblast::seal_stream(&[7u8; 2500][..], 3000, params, &mut store).unwrap_err();
+    assert!(matches!(err, Error::InputLength { .. }), "{err}");
+
+    std::fs::remove_dir_all(&root).unwrap();
+    neoblast::seal_stream(&[7u8; 3000][..], 3000, params, &mut store).unwrap();
+}
+
 /// W-006: `seal_stream` refuses parameters whose manifest a store could not
 /// read back before it hands out a single shard, not after writing them all.
 #[test]

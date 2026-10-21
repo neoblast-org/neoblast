@@ -5,7 +5,8 @@ Status: todo. Opened 2026-10-14 by the first security review (empty tree to
 (2026-10-15, `e24f453..a9445d9`) added S-005 to S-007, all low and none
 blocking v0.0.1. The third review (2026-10-16, `a9445d9..5393f67`) added S-008
 and S-009. The fourth (2026-10-20, `5393f67..9bf18dc`, the v0.0.2 candidate)
-added S-010 to S-015, all low.
+added S-010 to S-015, all low. The fifth (2026-10-21, `9bf18dc..255353b`,
+#20 to #22) added S-016 to S-020, all low.
 
 IDs are unique across all worklists and continue from the highest S-number used,
 including one that so far appears only in a review log (`SECURITY.md`, "Our own
@@ -76,6 +77,11 @@ that fixed it.
   decoded data and compare all n hashes, then refuse the file as inconsistent),
   or state in `spec/threat-model.md` that a link pins shard bytes, not a unique
   plaintext against its own publisher.
+- **Note (2026-10-21):** heal and open rebuild from the first k shards that
+  match the manifest. In an inconsistent segment another k could rebuild a
+  shard that matches, so heal reports `RebuildMismatch` (S-011) where a
+  different choice would have repaired it. Only the manifest's author can
+  cause this, and the fix above covers it.
 - **Release:** not blocking.
 - **Status:** open.
 
@@ -277,7 +283,7 @@ that fixed it.
   repeats it.
 - **Fix:** print only hashes in both steps.
 - **Verified:** by a fresh agent, from the workflow.
-- **Release:** in step 7d, applied by hand.
+- **Release:** in step 7c′ (#21), applied by hand.
 - **Status:** fixed in #21: every step prints only
   hashes or tag names, and the UTC step runs with `pipefail`, so it fails
   closed.
@@ -294,7 +300,7 @@ that fixed it.
 - **Fix:** also scan the whole message for `<key>-by:` lines that do not name
   the project, printing only hashes.
 - **Verified:** by a fresh agent, in a scratch repository.
-- **Release:** in step 7d, applied by hand.
+- **Release:** in step 7c′ (#21), applied by hand.
 - **Status:** fixed in #21: a new step fails any
   `<key>-by:` line, anywhere in a message after `5393f67`, that does not name
   the project. Lines git does not read as trailers either (quoted, bulleted,
@@ -310,12 +316,15 @@ that fixed it.
   required check blocks the push.
 - **Verified:** by a fresh agent, from GitHub's documented behaviour; the
   repository's settings could not be seen.
-- **Release:** in step 7d (maintainer, settings).
+- **Release:** in step 7c′ (maintainer, settings).
 - **Status:** fixed 2026-10-20, in the settings. The review found `main`'s
   ruleset already requires the check, but organisation admins may bypass it,
   so a `[skip ci]` push by an admin was not stopped. A second ruleset,
   `hygiene-required`, now requires only the `hygiene` check from GitHub
   Actions on the default branch, with no bypass; read back through the API.
+  The check is matched by its name and source, so a commit that changes
+  `hygiene.yml` itself can pass it; changes under `.github/` are reviewed
+  like any other (the fifth review).
 
 ### S-015 · Low · Tags are not checked for the project's identity
 
@@ -325,8 +334,103 @@ that fixed it.
   `v0.0.1`'s tag is the project's, in UTC.
 - **Fix:** check them in the hygiene job on tag pushes, printing only the tag.
 - **Verified:** by a fresh agent.
-- **Release:** in step 7d, applied by hand, before `v0.0.2` is tagged.
+- **Release:** in step 7c′ (#21), applied by hand, before `v0.0.2` is tagged.
 - **Status:** fixed in #21: the hygiene job checks
   every tag, and the Release workflow the tag it publishes, before anything
   is published; `RELEASING.md` tags in UTC and checks the tag before pushing
-  it.
+  it. A tag of a tag passed these checks (S-017).
+
+### S-016 · Low · On macOS, a failed full sync was reported as a success
+
+- **Where:** `crates/neoblast/src/store.rs`, `full_sync`, since #20 (S-010's
+  fix).
+- **Problem:** a directory's `F_FULLFSYNC` that failed for any reason was
+  followed by a plain `fsync`, as SQLite does. If the drive failed to flush
+  its cache, `F_FULLFSYNC` returns `EIO`, and the plain `fsync` after it,
+  which does not flush the cache, can succeed. Files there get only a plain
+  `fsync` (#18), so shards still in the drive's cache were reported as
+  written. Before #20, std's `sync_all` returned that error. S-010's entry
+  and #20's commit describe a fallback on `ENOTSUP` only.
+- **Impact:** durability: after a power loss, a seal or heal reported as
+  complete can be missing shards. Needs a failing drive, not an attacker.
+- **Fix:** an `EIO` from `F_FULLFSYNC` is returned. Every other error still
+  falls back, since they vary by file system (`ENOTSUP` on devfs, others on
+  network and FUSE file systems) and mean only that it is not offered.
+- **Verified:** by two fresh agents, from rustix's and std's source and by
+  probing APFS, HFS+, FAT32, exFAT and devfs (only devfs refused, with
+  `ENOTSUP`).
+- **Release:** fixed before the v0.0.2 campaign.
+- **Status:** fixed in the review-fix PR after #22. Regression test:
+  `store::tests::s016_a_failed_full_sync_is_not_hidden`.
+
+### S-017 · Low · A tag of a tag passed the tag checks
+
+- **Where:** `.github/workflows/hygiene.yml`, the tag step, `release.yml`'s
+  tag step and `RELEASING.md` step 2 (#21).
+- **Problem:** the checks read only the outer tag. Re-tagging in place
+  (`git tag -f -s v0.0.2 -m v0.0.2 v0.0.2`) makes a tag whose target is the
+  old tag, which is pushed with it and keeps its own tagger, address and
+  offset. A tag of a tree or blob passed too.
+- **Impact:** privacy: an identity the checks exist to stop could reach
+  GitHub inside a tag that passes them. Needs a maintainer's mistake.
+- **Fix:** every check also requires the tag to point at a commit
+  (`%(type)`; `%(*objecttype)` peels through to the commit and would not
+  see it). `RELEASING.md` says to delete and re-make a bad tag, never
+  `git tag -f` over it.
+- **Verified:** by two fresh agents, in a scratch repository.
+- **Release:** fixed before `v0.0.2` is tagged, applied by hand.
+- **Status:** fixed in the review-fix PR after #22. Tested in a scratch
+  repository: a tag of a tag and a tag of a tree fail both checks; a project
+  tag of a commit, and `v0.0.1`, pass.
+
+### S-018 · Low · Some crafted attribution lines passed the hygiene job
+
+- **Where:** `.github/workflows/hygiene.yml`, the attribution step (#21,
+  S-013).
+- **Problem:** a line that follows a lone carriage return was read as part
+  of the line before, and a key with a Unicode hyphen (`Co‐authored‐by`)
+  did not match. Either way the name is in the public message.
+- **Impact:** privacy, for a crafted message only; tools write ASCII
+  `-by:` lines ending in a newline, which were caught.
+- **Fix:** a lone carriage return also ends a line, and any byte that is not
+  a letter, digit, space or colon counts as the hyphen before `by:`, so
+  `Standby:` and the like still pass.
+- **Verified:** by two fresh agents, in a scratch repository.
+- **Release:** fixed before `v0.0.2` is tagged, applied by hand.
+- **Status:** fixed in the review-fix PR after #22. Tested in a scratch
+  repository: lone carriage returns, U+2010 and U+FF0D hyphens and a
+  `Reviewed-by` naming someone else fail; `Standby:`, a CRLF sign-off by the
+  project and a URL containing `-by:` pass; so does all of `main`'s history.
+
+### S-019 · Low · A shard of the wrong length stopped `heal`
+
+- **Where:** `crates/neoblast/src/stream.rs`, `verify_all` and
+  `first_k_verified` (predates the range).
+- **Problem:** a shard was checked against its hash but not its length; the
+  length was left to the source, and `ShardSource::get` only "should" check
+  it. A manifest can commit to a shard of another length. From a source
+  that does not check, heal handed it to the decoder, whose error stopped
+  the run: later segments were not repaired, and an earlier lost segment was
+  not reported. `DirStore` checks the length, so the CLI was not affected.
+- **Impact:** a publisher can stop repair of their own file only, through a
+  library caller's source.
+- **Fix:** a shard counts only if it is as long as the header says, whatever
+  the source returns (parameters come only from a verified header).
+- **Verified:** by a fresh agent, which ran a proof of concept.
+- **Release:** fixed before the v0.0.2 campaign.
+- **Status:** fixed in the review-fix PR after #22. Regression test:
+  `s019_a_shard_of_the_wrong_length_counts_as_missing`.
+
+### S-020 · Low · `campaign.sh` ran Python with `fuzz/` on its module path
+
+- **Where:** `fuzz/campaign.sh`, every `python3` call.
+- **Problem:** `python3 -` puts the working directory, `fuzz/`, first on
+  `sys.path`, so a stray `fuzz/json.py` would run in place of the module.
+  A campaign refuses untracked files there, but `summary` does not check.
+- **Impact:** code execution on the fuzzing machine for anyone who can
+  already write into the clone. Hardening.
+- **Fix:** run Python isolated (`-I`).
+- **Verified:** by two fresh agents; `-I` tested with Python 3.9 (as on a
+  fresh Mac) and 3.14.
+- **Release:** not blocking (not in `code_id`).
+- **Status:** fixed in the review-fix PR after #22.
