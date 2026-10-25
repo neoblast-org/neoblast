@@ -14,7 +14,8 @@ two kinds of bug:
   shards must always be enough.
 
 The Phase 1 gate asks for 24 hours per target with no crash before the format is
-frozen and v0.0.1 is published. CI's nightly job only runs 10 minutes per target.
+frozen and v0.0.1 is published, and every release since needs the same on its
+own code. CI's nightly job only runs 10 minutes per target.
 
 ## Targets
 

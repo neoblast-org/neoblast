@@ -4,7 +4,7 @@
 
 **Censorship-resistant storage where encrypted shards heal themselves.**
 
-> **Status: experimental. v0.0.1 is the offline core (Phase 1); Phase 2 is in
+> **Status: experimental. v0.0.2 is the offline core (Phase 1); Phase 2 is in
 > progress. Not audited. Do not rely on it to protect anything yet.**
 
 Neoblast encrypts a file on your machine, erasure-codes the ciphertext into

@@ -1,0 +1,27 @@
+{
+  "target": "link_parse",
+  "result": "stopped",
+  "exit_code": 72,
+  "started_utc": "2026-10-23T07:19:18Z",
+  "ended_utc": "2026-10-23T07:19:23Z",
+  "seconds_planned": 86400,
+  "seconds_run": 5,
+  "code_id": "322972a7d09ac4b0",
+  "commit": "86b8a67d1506ee2d1d41858704482cad12dbc1d5",
+  "executions": 3206342,
+  "execs_per_sec": 801585,
+  "peak_rss_mb": 175,
+  "coverage": {
+    "cov": 36,
+    "ft": 36
+  },
+  "corpus_entries": 4,
+  "new_artifacts": [],
+  "toolchain": "rustc 1.101.0-nightly (822182db4 2026-10-13)",
+  "cargo_fuzz": "cargo-fuzz 0.13.2",
+  "machine": {
+    "os": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M1 Pro"
+  }
+}

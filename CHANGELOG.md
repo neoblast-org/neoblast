@@ -8,6 +8,11 @@ the frozen v1 byte format).
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-10-25
+
+Hardening of the offline core, fuzzed again for 24 hours per target with no
+crash. Still experimental and **not audited**.
+
 ### Added
 
 - `Manifest::decode_owned`, and `open_manifest` and `heal_manifest`, which take
@@ -167,5 +172,6 @@ not hide who published or read it ([`spec/threat-model.md`](spec/threat-model.md
   Files sealed with any segment size stay readable, because the size is
   recorded in the header.
 
-[Unreleased]: https://github.com/neoblast-org/neoblast/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/neoblast-org/neoblast/compare/v0.0.2...HEAD
+[0.0.2]: https://github.com/neoblast-org/neoblast/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/neoblast-org/neoblast/releases/tag/v0.0.1

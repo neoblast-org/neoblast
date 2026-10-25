@@ -1,0 +1,27 @@
+{
+  "target": "manifest_decode",
+  "result": "clean",
+  "exit_code": 0,
+  "started_utc": "2026-10-23T07:20:01Z",
+  "ended_utc": "2026-10-24T07:20:03Z",
+  "seconds_planned": 86400,
+  "seconds_run": 86402,
+  "code_id": "7a808147a2a4bf5f",
+  "commit": "86b8a67d1506ee2d1d41858704482cad12dbc1d5",
+  "executions": 26540039727,
+  "execs_per_sec": 307172,
+  "peak_rss_mb": 451,
+  "coverage": {
+    "cov": 95,
+    "ft": 95
+  },
+  "corpus_entries": 15,
+  "new_artifacts": [],
+  "toolchain": "rustc 1.101.0-nightly (822182db4 2026-10-13)",
+  "cargo_fuzz": "cargo-fuzz 0.13.2",
+  "machine": {
+    "os": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M1 Pro"
+  }
+}
