@@ -29,7 +29,9 @@ Read before changing anything:
 - `cargo test --all` · `cargo deny check`
 - `NBL_UPDATE_VECTORS=1 cargo test -p neoblast --test golden_vectors`: rewrites the
   frozen `phase1.json`; the result must be byte-identical (CI pins its hash).
-- `.github/checks/test.sh`: the hygiene and Release object checks on crafted objects.
+- `.github/checks/test.sh` · `.github/checks/mutate.sh`: the hygiene and Release
+  object and message checks, on crafted and git-made objects under every awk; then
+  each mutant in `mutate.sh` must make a test fail.
 - `cargo +nightly fuzz run <target>` · `fuzz/campaign.sh summary` · `python3 sim/durability.py`
 
 Keep fmt, clippy, tests, `cargo deny` and the golden vectors green.
@@ -48,6 +50,17 @@ Keep fmt, clippy, tests, `cargo deny` and the golden vectors green.
 - **Secrets** appear only after `#` in links, never in logs or `Debug` output.
 - **No kill switch.** Nothing may let anyone delete another party's shards.
 - **Every fixed bug gets a regression test** (see `crates/neoblast/tests/review_regressions.rs`).
+- **Every new or changed function or check gets its tests reviewed**, in the same
+  change. Check coverage and quality, and improve what falls short:
+  - every branch, and every rule of a check, has a case, its edge cases included;
+  - in a table of cases, each failing case differs from a passing one in one way only;
+  - for a change in behaviour, breaking it (reverting it, or a mutation) makes a
+    test fail. A refactor that keeps behaviour names the tests that already cover it.
+
+  For `.github/checks/`, that means a case in `test.sh` and a mutant in `mutate.sh`
+  for each new rule. For Rust code, it means a test that fails when the change is
+  reverted. Say in the change which tests cover it and what, if anything, cannot be
+  tested.
 
 ## Working agreement — every plan & change
 

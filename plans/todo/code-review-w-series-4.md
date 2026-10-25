@@ -84,19 +84,26 @@ IDs are unique across all worklists and continue from the highest W-number used.
   `.github/scripts/tag-object.awk`, run by both with `awk -f`; the same
   for the commit program if S-025 grows it.
 - Verified: by a fresh agent; the two copies are byte-identical.
-- Status: fixed in the change after `7f8b3e9`. Both workflows run
+- Status: fixed in `14989d0`. Both workflows run
   `.github/checks/object.sh`, which runs `commit-object.awk` or
   `tag-object.awk`; the programs are the old ones line for line, with
-  S-025's line added. `.github/checks/test.sh` checks 61 crafted objects
-  under mawk and gawk, and the hygiene job runs it first. A fresh agent
-  and the author mutated the checks: each mutation tried that brings back
-  a weakness S-015, S-017, S-022 or S-025 closed makes a case fail, among
-  them a dropped `^` or `$`, a wider base64 class, a prefix match on the
-  tag's name and a narrower control-byte range. Two are not caught:
-  removing `sig` from the commit check's `END`, since a signature that
-  never ends also leaves no message, and removing `LC_ALL=C`, which only a
-  non-C locale shows. An object of only a blank line passes, as it did
+  S-025's line added. An object of only a blank line passes, as it did
   before; git never writes one.
+- Tests, after `14989d0`: the attribution check (S-013, S-018) moved to
+  `message.awk`, run as `object.sh message`, as the old program line for
+  line. `test.sh` runs 107 cases under every awk on PATH (mawk on
+  GitHub's runner, BSD awk on macOS, gawk where installed): crafted commits, tags and messages, each
+  differing from an allowed one in one way, and 14 objects git itself
+  writes in a throwaway repository with a throwaway SSH key (a signed
+  commit, tag and merge pass; a `mergetag`, an `encoding` header, a
+  commit not in UTC, a tag of a tag, a two-line tag message, another
+  tagger and a co-author, as a trailer or in prose, fail). CI fails if it
+  cannot make those, and they cannot reach another repository through
+  `GIT_DIR` and the like. `mutate.sh` holds 47 mutants, each bringing
+  back a weakness a review closed; it fails if the checks as they are do
+  not pass, or if a mutant survives or no longer applies. The hygiene job
+  runs both. The mutants it cannot hold, as no
+  test tells them apart, are listed in its header.
 
 ## Not tracked
 

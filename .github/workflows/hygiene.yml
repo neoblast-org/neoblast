@@ -57,10 +57,15 @@ jobs:
             echo "::error::Only neoblast maintainers <dev@neoblast.dev>, in UTC, may author, commit, co-author or sign off. Re-make these commits:"
             echo "$bad"; exit 1
           fi
-      - name: Object checks pass their tests
-        # The two steps that read commit and tag objects as stored share one
-        # check with the Release workflow (W-031); its tests run first.
-        run: .github/checks/test.sh
+      - name: Object and message checks pass their tests
+        # The steps that read commit and tag objects as stored, and commit
+        # messages, run the checks in .github/checks/, which the Release
+        # workflow shares (W-031). Their tests run first, under every awk the
+        # runner has and on objects git itself writes; then every mutation in
+        # mutate.sh must make a test fail.
+        run: |
+          .github/checks/test.sh
+          .github/checks/mutate.sh
       - name: Commit headers hold nothing else
         # The step above reads git's parsed fields only. A merge of a signed
         # tag adds a mergetag header holding that tag's tagger, and another
@@ -87,8 +92,8 @@ jobs:
         # Any "<something>-by:" line anywhere in a message after 5393f67, not
         # only in git's trailer block, must name the project (S-013). A lone
         # carriage return also ends a line, and any byte but a letter, digit,
-        # space or colon counts as the hyphen, so a Unicode one cannot hide a
-        # line either (S-018).
+        # space, tab or colon counts as the hyphen, so a Unicode one cannot hide a
+        # line either (S-018). See .github/checks/message.awk.
         shell: bash
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -98,12 +103,7 @@ jobs:
           # Full hashes: a tag named like a short hash cannot stand in for a commit.
           bad=$(git log --format=%H "$start..$HEAD_SHA" | while read -r h; do
             msg=$(git log -1 --format=%B "$h") || exit 1
-            if printf '%s\n' "$msg" | tr '\r' '\n' | LC_ALL=C awk -v me='neoblast maintainers <dev@neoblast.dev>' '
-              tolower($0) ~ /^[ \t]*[^ \t:]*[^a-z0-9 \t:]by[ \t]*:/ {
-                v = $0; sub(/^[^:]*:[ \t]*/, "", v); sub(/[ \t\r]+$/, "", v)
-                if (v != me) found = 1
-              }
-              END { exit !found }'; then
+            if ! printf '%s\n' "$msg" | .github/checks/object.sh message; then
               git rev-parse --short "$h"
             fi
           done)
