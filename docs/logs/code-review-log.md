@@ -1,6 +1,6 @@
 # Code Review Log
 
-<!-- baseline --> **Next review diffs from:** `c3d405de4e4ff39c0132dd2f049f664396b22080` (`main`, recorded 2026-10-25)
+<!-- baseline --> **Next review diffs from:** `118f710bb1944b9c3817c10e8eae3b4274948bec` (`main`, recorded 2026-10-25)
 
 A running record of code-review events: branch/pre-PR reviews, review worklists, and
 remediation programmes. Newest entry first. The baseline marker line above is the
@@ -27,6 +27,48 @@ merge-base fallback). Side-branch pre-PR reviews are logged as entries marked
 "frontier unchanged (side branch)" and never move the line.
 
 ## Entries
+
+### 2026-10-25: `c3d405d..118f710` (the review PR after #26)
+
+| | SHA | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `c3d405de4e4ff39c0132dd2f049f664396b22080` | 2026-10-25 | fix: ctutils 0.4.5 for RUSTSEC-2026-0385; MSRV 1.87 (#26) |
+| Tip | `118f710bb1944b9c3817c10e8eae3b4274948bec` | 2026-10-25 | fix: review findings from #23, #25 and #26 outside code_id; log the sixth reviews |
+
+- **Scope:** 1 commit (`git rev-list --count c3d405d..118f710`) and 13
+  files, +423/−46 (`git diff --shortstat c3d405d 118f710`): CI, scripts and
+  docs, none under `crates/`. Base equals the previous entry's Tip. Only
+  the committed range is covered. Run while the second v0.0.2 campaign
+  (step 7d″) runs on `c3d405d`; the rest of 7e's second part, `118f710`
+  to 7d‴, follows once 7d‴ lands.
+- **Method:** the `code-review` skill over the range; the new checks were
+  run under mawk over the history and on crafted objects (details in the
+  security log); a
+  fresh agent then tried to refute each claim and verdict. Of the code
+  review's 10 claims:
+  - 4 are tracked: W-031 here, and three that are S-026 in the security
+    log (an unsigned tag passes; an unsigned commit passes; `RELEASING.md`
+    reads as if a signature were required).
+  - 3 are rejected: the CHANGELOG's `--precise 0.4.5` is right, as 0.4.3
+    to 0.4.5 all need Rust 1.87; the last entry's claim count adds up, as
+    W-028 came from the security review; and `deny` on the root lock file
+    only is the published graph's and predates the range in CI.
+  - 3 are not tracked: no test for a workflow check, one `git cat-file`
+    per commit, and the header step repeating the identity rule.
+
+  The 3 rejected and the 3 not tracked are in the worklist's "Not
+  tracked", with the reason.
+- **Findings:** 1 in the code worklist: W-031 (cleanup), the tag check's
+  awk program is written out twice, in `hygiene.yml` and `release.yml`.
+- **Checked, no finding:** the new checks pass all 18 commits since
+  `5393f67` and `v0.0.1`, and CI is green on `118f710`; every `python3`
+  call has `-I`; `deny` in `verify` is pinned as in CI; nothing under
+  `crates/`, so no `code_id` changes.
+- **Outcome:** no blocker. W-031 is outside `code_id`, so it can land
+  before the tag. Worklist:
+  [`plans/todo/code-review-w-series-4.md`](../../plans/todo/code-review-w-series-4.md).
+- **Carried-over items:** W-028 to W-030 open, waiting until after v0.0.2
+  as the last entry said.
 
 ### 2026-10-25: `255353b..c3d405d` (#23, #25 and #26)
 

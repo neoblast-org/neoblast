@@ -1,6 +1,6 @@
 # Security Review Log
 
-<!-- baseline --> **Next review diffs from:** `c3d405de4e4ff39c0132dd2f049f664396b22080` (`main`, recorded 2026-10-25)
+<!-- baseline --> **Next review diffs from:** `118f710bb1944b9c3817c10e8eae3b4274948bec` (`main`, recorded 2026-10-25)
 
 A running record of branch security reviews. Each entry records the exact commit range
 reviewed; the baseline marker line above is the machine-owned frontier the next
@@ -21,6 +21,66 @@ marker line; a frontier-moving entry's Base must equal the previous one's Tip un
 the entry explains why not.
 
 ## Entries
+
+### 2026-10-25 · `c3d405d..118f710` (the review PR after #26)
+
+| | Commit | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `c3d405de4e4ff39c0132dd2f049f664396b22080` | 2026-10-25T02:34:33Z | fix: ctutils 0.4.5 for RUSTSEC-2026-0385; MSRV 1.87 (#26) |
+| Tip | `118f710bb1944b9c3817c10e8eae3b4274948bec` | 2026-10-25T06:08:20Z | fix: review findings from #23, #25 and #26 outside code_id; log the sixth reviews |
+
+- **Scope:** 1 commit (`git rev-list --count c3d405d..118f710`) and 13
+  files, +423/−46 (`git diff --shortstat c3d405d 118f710`), none under
+  `crates/`, so no `code_id` changes. Base equals the previous entry's Tip.
+  Only the committed range is covered. The first part of step 7e's second
+  half, run while the second v0.0.2 campaign runs on `c3d405d`; the rest,
+  from `118f710` to 7d‴, follows once 7d‴ lands.
+- **Method:** the diff read directly against `SECURITY.md` and CLAUDE.md.
+  The new commit and tag checks ran under mawk 1.3.4, as on the runner,
+  over all 18 commits since `5393f67`, over `v0.0.1` and over crafted
+  objects; `ctutils`' `rust-version`s were read from crates.io; CI's runs on
+  `118f710` were read through GitHub's API. A fresh agent then tried to
+  refute each verdict, together with the code review's, in a scratch
+  repository.
+- **Findings:** 2, both low, in
+  [`plans/todo/security-review-s-series.md`](../../plans/todo/security-review-s-series.md):
+  - **S-025:** a NUL in a commit message hides the rest of the message
+    from every message check, and S-022's new step skips the message
+    (found by the refuting agent; the message checks predate the range).
+  - **S-026:** nothing checks that a commit or tag is signed, or by whom,
+    though `RELEASING.md` and CLAUDE.md require a signature (S-022's own
+    residual note; predates the range).
+- **Not tracked:** the Release workflow's `deny` reads only the root lock
+  file, which is the graph that is published; CI's `deny` job did the same
+  before the range, and the logs' "all three lock files" are a reviewer's
+  own runs. No test exists for a workflow check; S-012 to S-017 and S-022
+  were checked by hand on crafted objects, as here.
+- **Checked, no finding:**
+  - S-021: every `python3` call in the scripts and workflows has `-I`; the
+    venv's Python under `-I` still finds its packages through
+    `pyvenv.cfg`.
+  - S-022: all 18 commits since `5393f67` and `v0.0.1` pass; a `mergetag`
+    or `encoding` header, another tag header, a second message line, a
+    NUL in a message or signature line, text after the signature, a
+    truncated signature and a PGP block all fail. A valid ref name holds
+    no backslash, space or control byte, so `awk -v name=` cannot change
+    it. `shell: bash` gives `pipefail`, so a failing `git` fails the step.
+    Commit hygiene passed on `118f710` on GitHub.
+  - S-023: `cargo-deny-action` is pinned to the same commit as in CI and
+    runs before the tests; `gh pr checks --watch --fail-fast` fails while
+    no check has registered yet.
+  - S-024: `ctutils` 0.4.3 to 0.4.5 all need Rust 1.87, so below it
+    resolver 3 keeps 0.4.2 and `--precise 0.4.5` is the right advice.
+  - Privacy: the commit is the project's, in UTC, signed and signed off;
+    no names, addresses, paths or session links in the range's text.
+  - No open finding of medium severity or higher is described in public.
+- **Outcome:** no blocker. Both findings are outside `code_id`, so they can
+  be fixed before the tag without restarting the campaign; S-025's fix is
+  one line in the hygiene step, applied by hand.
+- **Carried-over items:** S-002 open; S-003 open; S-007 open; S-008 open
+  until the GitHub-side copies are removed; S-021 to S-023 fixed in
+  `118f710`, the review PR the last entry named; S-024 open, its
+  CHANGELOG note in `118f710` and its `Cargo.toml` minimum after v0.0.2.
 
 ### 2026-10-25 · `255353b..c3d405d` (#23, #25 and #26)
 

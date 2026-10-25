@@ -7,7 +7,9 @@ blocking v0.0.1. The third review (2026-10-16, `a9445d9..5393f67`) added S-008
 and S-009. The fourth (2026-10-20, `5393f67..9bf18dc`, the v0.0.2 candidate)
 added S-010 to S-015, all low. The fifth (2026-10-21, `9bf18dc..255353b`,
 #20 to #22) added S-016 to S-020, all low. The sixth (2026-10-25,
-`255353b..c3d405d`, #23, #25 and #26) added S-021 to S-024, all low.
+`255353b..c3d405d`, #23, #25 and #26) added S-021 to S-024, all low. The
+seventh (2026-10-25, `c3d405d..118f710`, the review PR after #26) added S-025
+and S-026, both low.
 
 IDs are unique across all worklists and continue from the highest S-number used,
 including one that so far appears only in a review log (`SECURITY.md`, "Our own
@@ -529,3 +531,56 @@ that fixed it.
   downstream crate at each `rust-version`.
 - **Release:** not blocking.
 - **Status:** open. The CHANGELOG note is in the review PR after #26.
+
+### S-025 · Low · A NUL in a commit message hides the rest of it from the message checks
+
+- **Where:** `.github/workflows/hygiene.yml`: the identity step's trailers,
+  the session-link `--grep`, the attribution step's `%B` (S-008, S-013 and
+  S-018, before the range) and S-022's header step, which skips the message
+  (`118f710`).
+- **Problem:** git reads a commit message only up to its first NUL. A
+  commit object (`git hash-object -t commit --literally`) whose message
+  holds `hidden`, a NUL, then `Co-authored-by: Alice <a@example.org>` shows
+  `%B` as `subject`, a blank line and `hidden`; its trailers are empty;
+  `--grep=alice` finds nothing; and S-022's step passes, since after the
+  blank line it reads nothing. `git fsck` only warns (`nulInCommit`). The
+  whole message is public through `git cat-file -p`. S-022 says a NUL
+  "cannot hide the rest of a line", which holds for headers only.
+- **Impact:** privacy, as S-022. It needs a maintainer to craft a commit
+  object and push it.
+- **Fix:** in S-022's step, fail any control byte but a tab, a CR included,
+  in the message
+  as stored (`body && /[\001-\010\013-\037\177]/ { bad = 1 }` before
+  `body { next }`). No commit since `5393f67` holds one.
+- **Verified:** reproduced under mawk 1.3.4 in a scratch repository by a
+  fresh agent, then again by the reviewer; GitHub's own acceptance of the
+  push was not tested.
+- **Release:** fixed before `v0.0.2` is tagged, applied by hand; not in
+  `code_id`.
+- **Status:** open.
+
+### S-026 · Low · Nothing checks that a commit or tag is signed, or by whom
+
+- **Where:** `.github/workflows/hygiene.yml` and `release.yml`'s `verify`
+  job; `RELEASING.md` step 2 (predates the range; S-022's fix names it as
+  what is left).
+- **Problem:** CLAUDE.md says commits are signed and `RELEASING.md` says the
+  tag is SSH-signed, but S-022's checks allow a signature without requiring
+  one, and nothing runs `git verify-commit` or `git verify-tag`. An unsigned
+  tag, made with `git tag -a` in place of `-s`, passes both workflows; so
+  does a block of base64 letters that spells a name. `RELEASING.md` says the
+  checks refuse a tag with "anything but its name and its signature as
+  message", which reads as if a signature were required.
+- **Impact:** a released tag that is unsigned, or signed by another key,
+  with no check failing. Pushing a tag needs write access and publishing
+  needs approval in the `release` environment, so this is about provenance
+  and the documented guarantee, not about who can release.
+- **Fix:** commit the project's SSH public key as an allowed-signers file,
+  and have `verify` (and the hygiene tag step) run `git -c
+  gpg.ssh.allowedSignersFile=<file> verify-tag`; until then, `RELEASING.md`
+  says only that a signature, if there is one, must be an SSH block.
+- **Verified:** by the reviewer, with an unsigned tag and an unsigned commit
+  under both checks; confirmed by a fresh agent.
+- **Release:** not blocking; the tag step in `RELEASING.md` makes a signed
+  tag.
+- **Status:** open.

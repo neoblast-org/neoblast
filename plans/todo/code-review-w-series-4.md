@@ -5,8 +5,10 @@ Status: todo. Opened 2026-10-25 by the sixth `/review-since`
 `docs/logs/code-review-log.md`, while the v0.0.2 campaign (step 7d″) ran on
 `c3d405d`. Part 3, W-024 to W-027,
 is closed (`plans/completed/code-review-w-series-3.md`). All items are low or
-cleanup; none blocks v0.0.2. Each changes `crates/`, and so every target's
-`code_id`, so they wait until after v0.0.2 is tagged.
+cleanup; none blocks v0.0.2. W-028 to W-030 each change `crates/`, and so every target's
+`code_id`, so they wait until after v0.0.2 is tagged. The seventh
+`/review-since` (`c3d405d..118f710`, the review PR after #26) added W-031,
+which is outside `code_id` and can land before the tag.
 
 IDs are unique across all worklists and continue from the highest W-number used.
 
@@ -19,7 +21,9 @@ IDs are unique across all worklists and continue from the highest W-number used.
    publisher's fault.
 3. W-030: `review_regressions.rs` has one recording sink and one way to
    rebuild a manifest after changing a sealed file.
-4. Each fix that can be reached has a regression test that fails without it,
+4. W-031: the tag object is checked by one awk program, which the hygiene
+   job and the Release workflow both run.
+5. Each fix that can be reached has a regression test that fails without it,
    and the golden vectors are unchanged.
 
 ## Findings
@@ -67,6 +71,21 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Verified: by a fresh agent.
 - Status: open.
 
+### W-031 (cleanup): the tag check is written out twice
+
+- Where: `.github/workflows/hygiene.yml`, "Tags carry only the project's
+  identity", and `release.yml`, "Tag is the project's, in UTC" (`118f710`,
+  S-022).
+- What: the same 11-line awk program is in both steps. A later change to
+  one, such as S-026's signature check or S-025's control bytes, can miss
+  the other, and the hygiene job and the release gate then disagree about
+  what a tag may hold.
+- Remediation: move it to a checked-in file, such as
+  `.github/scripts/tag-object.awk`, run by both with `awk -f`; the same
+  for the commit program if S-025 grows it.
+- Verified: by a fresh agent; the two copies are byte-identical.
+- Status: open.
+
 ## Not tracked
 
 Checked by the same review and left as they are, with the reason:
@@ -86,3 +105,21 @@ Checked by the same review and left as they are, with the reason:
 - The CHANGELOG dates 0.0.2 and claims a campaign, which ran on `86b8a67`,
   not `c3d405d`: step 7d‴ re-dates it and re-checks that sentence against
   7d″'s records.
+- From the seventh review (`c3d405d..118f710`):
+  - No regression test for S-021 to S-023: no test exists for a workflow
+    check, and S-012 to S-017 and S-022 were checked by hand on crafted
+    objects, as here.
+  - One `git cat-file` per commit in the header step: 18 commits today;
+    one `--batch` stream would do when the history grows.
+  - The header step's author and committer pattern repeats the identity
+    step's rule: one reads git's parsed fields and the other the object as
+    stored, on purpose.
+  - Rejected: the log's and the worklist's counts for the sixth review
+    were said not to add up; they do, as W-028 came from the security
+    review.
+  - Rejected: the CHANGELOG's `cargo update -p ctutils --precise 0.4.5`
+    for a `rust-version` below 1.87 was said to be wrong; `ctutils` 0.4.3
+    to 0.4.5 all need Rust 1.87, so resolver 3 keeps 0.4.2 without it.
+  - Rejected: `verify`'s `deny` reads only the root lock file; that is the
+    graph that is published, and CI's `deny` job did the same before the
+    range.
