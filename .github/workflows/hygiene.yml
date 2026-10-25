@@ -57,13 +57,17 @@ jobs:
             echo "::error::Only neoblast maintainers <dev@neoblast.dev>, in UTC, may author, commit, co-author or sign off. Re-make these commits:"
             echo "$bad"; exit 1
           fi
+      - name: Object checks pass their tests
+        # The two steps that read commit and tag objects as stored share one
+        # check with the Release workflow (W-031); its tests run first.
+        run: .github/checks/test.sh
       - name: Commit headers hold nothing else
         # The step above reads git's parsed fields only. A merge of a signed
         # tag adds a mergetag header holding that tag's tagger, and another
         # header could hold a name too, so a commit after 5393f67 may have only
         # tree, parent, author, committer and an SSH signature, whose lines
-        # may hold only base64 (S-022). A NUL becomes a control byte, which
-        # fails every pattern, so it cannot hide the rest of a line from awk.
+        # may hold only base64 (S-022), and a message with no control byte but
+        # a tab (S-025). See .github/checks/commit-object.awk.
         shell: bash
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -71,22 +75,12 @@ jobs:
           start=5393f6704b5059c4c8ecfbb6adc01718c13c4455
           git rev-parse --verify --quiet "$HEAD_SHA^{commit}" >/dev/null
           bad=$(git log --format=%H "$start..$HEAD_SHA" | while read -r h; do
-            if ! git cat-file commit "$h" | tr '\000' '\001' | LC_ALL=C awk '
-              body { next }
-              sig && /^ [A-Za-z0-9+\/=]+$/ { next }
-              sig && $0 == " -----END SSH SIGNATURE-----" { sig = 0; next }
-              sig { bad = 1; sig = 0 }
-              /^$/ { body = 1; next }
-              /^(tree|parent) [0-9a-f]+$/ { next }
-              /^(author|committer) neoblast maintainers <dev@neoblast\.dev> [0-9]+ \+0000$/ { next }
-              $0 == "gpgsig -----BEGIN SSH SIGNATURE-----" && !s++ { sig = 1; next }
-              { bad = 1 }
-              END { exit bad || !body || sig }'; then
+            if ! git cat-file commit "$h" | .github/checks/object.sh commit; then
               git rev-parse --short "$h"
             fi
           done)
           if [ -n "$bad" ]; then
-            echo "::error::Commits may have only tree, parent, author, committer and gpgsig headers, by neoblast maintainers <dev@neoblast.dev> in UTC. Re-make these commits:"
+            echo "::error::Commits may have only tree, parent, author, committer and gpgsig headers, by neoblast maintainers <dev@neoblast.dev> in UTC, and no control byte but a tab in their message. Re-make these commits:"
             echo "$bad"; exit 1
           fi
       - name: No attribution lines naming anyone else
@@ -123,26 +117,15 @@ jobs:
         # identity too (S-017). The tag object is read as it is stored: only
         # those four headers, and as message only the tag's name and an
         # SSH-armored block of base64, so no other header or line can hold a
-        # name (S-022). A NUL becomes a control byte, as for commits. Only tag
-        # names are printed.
+        # name (S-022). See .github/checks/tag-object.awk. Only tag names are
+        # printed.
         shell: bash
         run: |
           # The tags were fetched: v0.0.1 is there, annotated.
           git rev-parse --verify --quiet 'refs/tags/v0.0.1^{tag}' >/dev/null
           bad=$(git for-each-ref refs/tags --format='%(refname:lstrip=2)%09%(objecttype)' \
             | while IFS=$'\t' read -r name type; do
-            if [ "$type" != tag ] || ! git cat-file tag "refs/tags/$name" | tr '\000' '\001' | LC_ALL=C awk -v name="$name" '
-              part == 0 && /^object [0-9a-f]+$/ && !o++ { next }
-              part == 0 && $0 == "type commit" && !t++ { next }
-              part == 0 && $0 == "tag " name && !n++ { next }
-              part == 0 && /^tagger neoblast maintainers <dev@neoblast\.dev> [0-9]+ \+0000$/ && !g++ { next }
-              part == 0 && $0 == "" { part = 1; next }
-              part == 1 && m == 1 && $0 == "-----BEGIN SSH SIGNATURE-----" { part = 2; next }
-              part == 1 && !m++ && $0 == name { next }
-              part == 2 && /^[A-Za-z0-9+\/=]+$/ { next }
-              part == 2 && $0 == "-----END SSH SIGNATURE-----" { part = 3; next }
-              { bad = 1 }
-              END { exit bad || !(o && t && n && g) || m != 1 || part == 2 }'; then
+            if [ "$type" != tag ] || ! git cat-file tag "refs/tags/$name" | .github/checks/object.sh tag "$name"; then
               printf '%s\n' "$name"
             fi
           done)

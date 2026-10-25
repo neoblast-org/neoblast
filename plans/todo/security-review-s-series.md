@@ -557,7 +557,9 @@ that fixed it.
   push was not tested.
 - **Release:** fixed before `v0.0.2` is tagged, applied by hand; not in
   `code_id`.
-- **Status:** open.
+- **Status:** fixed in the change after `7f8b3e9`, in
+  `.github/checks/commit-object.awk` (W-031). `.github/checks/test.sh`
+  fails without it, and no commit since `5393f67` fails with it.
 
 ### S-026 · Low · Nothing checks that a commit or tag is signed, or by whom
 

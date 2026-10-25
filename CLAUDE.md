@@ -29,6 +29,7 @@ Read before changing anything:
 - `cargo test --all` · `cargo deny check`
 - `NBL_UPDATE_VECTORS=1 cargo test -p neoblast --test golden_vectors`: rewrites the
   frozen `phase1.json`; the result must be byte-identical (CI pins its hash).
+- `.github/checks/test.sh`: the hygiene and Release object checks on crafted objects.
 - `cargo +nightly fuzz run <target>` · `fuzz/campaign.sh summary` · `python3 sim/durability.py`
 
 Keep fmt, clippy, tests, `cargo deny` and the golden vectors green.

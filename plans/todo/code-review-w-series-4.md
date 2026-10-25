@@ -84,7 +84,19 @@ IDs are unique across all worklists and continue from the highest W-number used.
   `.github/scripts/tag-object.awk`, run by both with `awk -f`; the same
   for the commit program if S-025 grows it.
 - Verified: by a fresh agent; the two copies are byte-identical.
-- Status: open.
+- Status: fixed in the change after `7f8b3e9`. Both workflows run
+  `.github/checks/object.sh`, which runs `commit-object.awk` or
+  `tag-object.awk`; the programs are the old ones line for line, with
+  S-025's line added. `.github/checks/test.sh` checks 61 crafted objects
+  under mawk and gawk, and the hygiene job runs it first. A fresh agent
+  and the author mutated the checks: each mutation tried that brings back
+  a weakness S-015, S-017, S-022 or S-025 closed makes a case fail, among
+  them a dropped `^` or `$`, a wider base64 class, a prefix match on the
+  tag's name and a narrower control-byte range. Two are not caught:
+  removing `sig` from the commit check's `END`, since a signature that
+  never ends also leaves no message, and removing `LC_ALL=C`, which only a
+  non-C locale shows. An object of only a blank line passes, as it did
+  before; git never writes one.
 
 ## Not tracked
 
@@ -108,7 +120,8 @@ Checked by the same review and left as they are, with the reason:
 - From the seventh review (`c3d405d..118f710`):
   - No regression test for S-021 to S-023: no test exists for a workflow
     check, and S-012 to S-017 and S-022 were checked by hand on crafted
-    objects, as here.
+    objects, as here. Since W-031, the object checks of S-015, S-017,
+    S-022 and S-025 have one (`.github/checks/test.sh`).
   - One `git cat-file` per commit in the header step: 18 commits today;
     one `--batch` stream would do when the history grows.
   - The header step's author and committer pattern repeats the identity
