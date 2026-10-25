@@ -8,6 +8,8 @@
 # Each run seals a random file at 20-of-50, deletes n - k = 30 shards in every
 # segment, and heals. Prints peak RSS and, on macOS, peak memory footprint.
 # Works with the bash 3.2 that ships with macOS.
+# Python runs isolated (-I), so a stray .py file in the working directory
+# cannot stand in for a module it imports (review S-021).
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,7 +30,7 @@ fi
 
 cargo build --release --locked -p neoblast --manifest-path "$root/Cargo.toml" >/dev/null
 target_dir=$(cargo metadata --format-version 1 --no-deps --manifest-path "$root/Cargo.toml" |
-  python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')
+  python3 -I -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')
 bin="$target_dir/release/neoblast"
 
 work="$(mktemp -d)"
@@ -47,7 +49,7 @@ for f in 0 $files; do
       exit 1
     }
     verify=$(printf '%s' "$link" | sed 's|^nbl://f/|nbl://fv/|; s|#.*||')
-    python3 - "$work/s" "$((n - k))" <<'PY'
+    python3 -I - "$work/s" "$((n - k))" <<'PY'
 import pathlib, sys
 for seg in pathlib.Path(sys.argv[1]).glob("seg-*"):
     for i in range(int(sys.argv[2])):
@@ -58,7 +60,7 @@ PY
       cat "$work/t.txt" >&2
       exit 1
     }
-    python3 - "$work/t.txt" "$label" "$s" <<'PY'
+    python3 -I - "$work/t.txt" "$label" "$s" <<'PY'
 import re, sys
 text, label, seg = open(sys.argv[1]).read(), sys.argv[2], sys.argv[3]
 mib = 1024 * 1024

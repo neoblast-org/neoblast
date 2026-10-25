@@ -18,26 +18,34 @@ All four crates (`neoblast`, `neoblast-format`, `neoblast-crypto`,
      cargo update -w --manifest-path bench/heal-heap/Cargo.toml
      ```
 
-2. **Tag** the merged commit on `main` with a signed tag, in UTC, and push it.
-   The hygiene job and the Release workflow refuse a tag that is not the
-   project's, not in UTC (S-015) or not of a commit (S-017), so check it
-   before pushing. Make it of the commit, never of an existing tag:
+2. **Tag** the merged commit on `main` with an SSH-signed tag, in UTC, and
+   push it. The hygiene job and the Release workflow refuse a tag that is not
+   the project's, not in UTC (S-015), not of a commit (S-017), or with
+   anything but its name and its signature as message (S-022), so check
+   it before pushing. Make it of the commit, never of an existing tag:
 
    ```sh
    git switch main && git pull
    TZ=UTC git tag -s v0.0.2 -m "v0.0.2"
    git for-each-ref refs/tags/v0.0.2 --format='%(objecttype) %(type) %(taggername) %(taggeremail) %(taggerdate:format:%z)'
+   git cat-file tag v0.0.2
    git push origin v0.0.2
    ```
 
-   The check must print `tag commit neoblast maintainers <dev@neoblast.dev> +0000`.
+   The first check must print `tag commit neoblast maintainers <dev@neoblast.dev> +0000`.
+   The second must show only the lines `object`, `type commit`, `tag v0.0.2`
+   and `tagger neoblast maintainers <dev@neoblast.dev> … +0000`, a blank
+   line, `v0.0.2` and an SSH signature block.
    If not, delete the tag with `git tag -d v0.0.2` and make it again. Never
    tag the old tag (`git tag -f v0.0.2 v0.0.2`): that makes a tag of a tag.
 
-3. **Approve.** The `Release` workflow's `verify` job checks four things:
+3. **Approve.** The `Release` workflow's `verify` job checks five things:
    - the tag is on `main`;
-   - the tag is annotated, of a commit, by the project in UTC;
+   - the tag is annotated, of a commit, by the project in UTC, with only its
+     name as message;
    - the tag matches the version;
+   - `cargo deny` passes, so an advisory published since the last merge
+     stops the release (S-023);
    - tests and a publish dry run pass.
 
    Then the `publish` job waits for your approval in the `release` environment.

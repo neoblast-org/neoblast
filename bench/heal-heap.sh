@@ -11,6 +11,8 @@
 # smallest file to each larger one must not exceed the manifest's own growth
 # by more than 64 KiB; it needs at least two file sizes. Works with the bash
 # 3.2 that ships with macOS.
+# Python runs isolated (-I), so a stray .py file in the working directory
+# cannot stand in for a module it imports (review S-021).
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,9 +25,9 @@ n=50
 cargo build --release --locked -p neoblast --manifest-path "$root/Cargo.toml" >/dev/null
 cargo build --release --locked --manifest-path "$here/heal-heap/Cargo.toml" >/dev/null
 target_dir=$(cargo metadata --format-version 1 --no-deps --manifest-path "$root/Cargo.toml" |
-  python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')
+  python3 -I -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')
 heap_dir=$(cargo metadata --format-version 1 --no-deps --manifest-path "$here/heal-heap/Cargo.toml" |
-  python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')
+  python3 -I -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')
 bin="$target_dir/release/neoblast"
 heap="$heap_dir/release/neoblast-heal-heap"
 
@@ -54,7 +56,7 @@ for f in $files; do
   done
 done
 
-python3 - "$work/results.txt" <<'PY'
+python3 -I - "$work/results.txt" <<'PY'
 import re, sys
 mib = 1024 * 1024
 rows = []

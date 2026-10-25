@@ -3,6 +3,8 @@
 #
 # Needs: git, a C++14 compiler (c++), python3 with venv, network access.
 # Leopard is cloned into a temp dir and never vendored. See README.md.
+# Python runs isolated (-I), so a stray .py file in the working directory
+# cannot stand in for a module it imports (review S-021).
 set -euo pipefail
 
 LEOPARD_REPO="https://github.com/catid/leopard"
@@ -22,7 +24,7 @@ git -C "$work/src" -c advice.detachedHead=false checkout -q "$LEOPARD_COMMIT"
 # Replace exact text, failing unless it occurs exactly `count` times. Python rather
 # than sed -i so the script runs the same on macOS and Linux.
 replace_text() { # file count old new
-  python3 - "$@" <<'PY'
+  python3 -I - "$@" <<'PY'
 import sys
 path, count, old, new = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
 text = open(path).read()
@@ -60,13 +62,13 @@ for b in ff16 ff16x; do
     "$work/$b/LeopardFF8.cpp" "$work/$b/LeopardFF16.cpp"
 done
 
-python3 -m venv "$work/venv"
+python3 -I -m venv "$work/venv"
 # Pinned by version only; this is a maintainer tool, and its output is the
 # committed fixture file, which is reviewed as a diff.
-"$work/venv/bin/pip" install -q "blake3==$BLAKE3_PY"
+"$work/venv/bin/python" -I -m pip install -q "blake3==$BLAKE3_PY"
 
 echo "running cases"
-"$work/venv/bin/python" - "$here/cases.txt" "$work" "$work/out.json" "$LEOPARD_REPO" "$LEOPARD_COMMIT" <<'PY'
+"$work/venv/bin/python" -I - "$here/cases.txt" "$work" "$work/out.json" "$LEOPARD_REPO" "$LEOPARD_COMMIT" <<'PY'
 import json, subprocess, sys
 from blake3 import blake3
 

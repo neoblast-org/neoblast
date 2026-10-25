@@ -13,6 +13,8 @@
 # segment size. The result goes to
 # bench/results/<UTC time>-segment-size.json with no host names, user names
 # or paths. Works with the bash 3.2 that ships with macOS.
+# Python runs isolated (-I), so a stray .py file in the working directory
+# cannot stand in for a module it imports (review S-021).
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -38,7 +40,7 @@ echo "building the release binary"
 cargo build --release --locked -p neoblast --manifest-path "$root/Cargo.toml" >/dev/null
 # Honour CARGO_TARGET_DIR and build.target-dir instead of assuming target/.
 target_dir=$(cargo metadata --format-version 1 --no-deps --manifest-path "$root/Cargo.toml" |
-  python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')
+  python3 -I -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')
 bin="$target_dir/release/neoblast"
 
 work="$(mktemp -d)"
@@ -54,13 +56,13 @@ results="$work/results.tsv"
 measure() { # segment_mib label command...
   local seg="$1" label="$2" start end
   shift 2
-  start=$(python3 -c 'import time; print(time.time())')
+  start=$(python3 -I -c 'import time; print(time.time())')
   /usr/bin/time "$time_flag" "$@" 2>"$work/time.txt" >"$work/stdout.txt" || {
     cat "$work/time.txt" >&2
     exit 1
   }
-  end=$(python3 -c 'import time; print(time.time())')
-  python3 - "$seg" "$label" "$start" "$end" "$work/time.txt" >>"$results" <<'PY'
+  end=$(python3 -I -c 'import time; print(time.time())')
+  python3 -I - "$seg" "$label" "$start" "$end" "$work/time.txt" >>"$results" <<'PY'
 import re, sys
 seg, label, start, end, path = sys.argv[1:]
 text = open(path).read()
@@ -84,7 +86,7 @@ PY
 }
 
 drop_shards() { # store first last: delete shard indices first..last in every segment
-  python3 - "$@" <<'PY'
+  python3 -I - "$@" <<'PY'
 import pathlib, sys
 store, first, last = pathlib.Path(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
 for seg in store.glob("seg-*"):
@@ -123,7 +125,7 @@ for s in $sizes; do
 done
 
 mkdir -p "$here/results"
-python3 - "$results" "$here/results" "$file_mib" "$k" "$n" "$(git -C "$root" rev-parse HEAD)" \
+python3 -I - "$results" "$here/results" "$file_mib" "$k" "$n" "$(git -C "$root" rev-parse HEAD)" \
   "$(git -C "$root" status --porcelain -- crates Cargo.toml Cargo.lock | wc -l | tr -d ' ')" \
   "$started_utc" <<'PY'
 import json, pathlib, platform, subprocess, sys

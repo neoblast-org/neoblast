@@ -6,7 +6,8 @@ Status: todo. Opened 2026-10-14 by the first security review (empty tree to
 blocking v0.0.1. The third review (2026-10-16, `a9445d9..5393f67`) added S-008
 and S-009. The fourth (2026-10-20, `5393f67..9bf18dc`, the v0.0.2 candidate)
 added S-010 to S-015, all low. The fifth (2026-10-21, `9bf18dc..255353b`,
-#20 to #22) added S-016 to S-020, all low.
+#20 to #22) added S-016 to S-020, all low. The sixth (2026-10-25,
+`255353b..c3d405d`, #23, #25 and #26) added S-021 to S-024, all low.
 
 IDs are unique across all worklists and continue from the highest S-number used,
 including one that so far appears only in a review log (`SECURITY.md`, "Our own
@@ -360,7 +361,7 @@ that fixed it.
   probing APFS, HFS+, FAT32, exFAT and devfs (only devfs refused, with
   `ENOTSUP`).
 - **Release:** fixed before the v0.0.2 campaign.
-- **Status:** fixed in the review-fix PR after #22. Regression test:
+- **Status:** fixed in #23 (`86b8a67`). Regression test:
   `store::tests::s016_a_failed_full_sync_is_not_hidden`.
 
 ### S-017 · Low · A tag of a tag passed the tag checks
@@ -379,7 +380,7 @@ that fixed it.
   `git tag -f` over it.
 - **Verified:** by two fresh agents, in a scratch repository.
 - **Release:** fixed before `v0.0.2` is tagged, applied by hand.
-- **Status:** fixed in the review-fix PR after #22. Tested in a scratch
+- **Status:** fixed in #23 (`86b8a67`). Tested in a scratch
   repository: a tag of a tag and a tag of a tree fail both checks; a project
   tag of a commit, and `v0.0.1`, pass.
 
@@ -397,7 +398,7 @@ that fixed it.
   `Standby:` and the like still pass.
 - **Verified:** by two fresh agents, in a scratch repository.
 - **Release:** fixed before `v0.0.2` is tagged, applied by hand.
-- **Status:** fixed in the review-fix PR after #22. Tested in a scratch
+- **Status:** fixed in #23 (`86b8a67`). Tested in a scratch
   repository: lone carriage returns, U+2010 and U+FF0D hyphens and a
   `Reviewed-by` naming someone else fail; `Standby:`, a CRLF sign-off by the
   project and a URL containing `-by:` pass; so does all of `main`'s history.
@@ -418,7 +419,7 @@ that fixed it.
   the source returns (parameters come only from a verified header).
 - **Verified:** by a fresh agent, which ran a proof of concept.
 - **Release:** fixed before the v0.0.2 campaign.
-- **Status:** fixed in the review-fix PR after #22. Regression test:
+- **Status:** fixed in #23 (`86b8a67`). Regression test:
   `s019_a_shard_of_the_wrong_length_counts_as_missing`.
 
 ### S-020 · Low · `campaign.sh` ran Python with `fuzz/` on its module path
@@ -433,4 +434,98 @@ that fixed it.
 - **Verified:** by two fresh agents; `-I` tested with Python 3.9 (as on a
   fresh Mac) and 3.14.
 - **Release:** not blocking (not in `code_id`).
-- **Status:** fixed in the review-fix PR after #22.
+- **Status:** fixed in #23 (`86b8a67`).
+
+### S-021 · Low · The bench and vector scripts ran Python with the working directory on its module path
+
+- **Where:** `bench/heal-check.sh`, `bench/heal-heap.sh`,
+  `bench/segment-size.sh` and `tools/leopard-vectors/generate.sh`, every
+  `python3` call (predates the range; S-020 fixed `campaign.sh` only).
+- **Problem:** `python3 -`, `python3 -c` and `python3 -m venv` put the
+  directory the script is run from first on `sys.path`, so a `json.py`,
+  `pathlib.py` or `venv.py` there runs in place of the module. (`time` is
+  built into the interpreter, so a `time.py` does not.)
+- **Impact:** code execution for anyone who can already write into the
+  directory the script runs from. Hardening, as S-020.
+- **Fix:** `-I` on every call, the venv's own Python included, which now
+  also runs `pip`; it still finds the venv's packages.
+- **Verified:** by a fresh agent, with a planted `json.py` under the exact
+  `-c` call on Python 3.9 and 3.14; a planted `venv.py` ran under
+  `python3 -m venv` and not under `-I`.
+- **Release:** not blocking (not in `code_id`).
+- **Status:** fixed in the review PR after #26.
+
+### S-022 · Low · An identity could ride inside a commit or tag object past the hygiene checks
+
+- **Where:** `.github/workflows/hygiene.yml`, the identity and tag steps, and
+  `release.yml`'s tag step (the commit side predates the range; the tag side
+  is what S-017 left).
+- **Problem:** the checks read git's parsed fields only. A merge of a signed
+  tag writes a `mergetag` header holding that tag's tagger, a tag can carry
+  another header (`git hash-object --literally`, which `fsck` accepts), and
+  nothing read a tag's message. Each is public through `git cat-file -p`.
+- **Impact:** privacy. It needs a maintainer to merge someone's signed tag,
+  craft an object or write a name into a tag message. `main` has no merge
+  commits, and `protect-main` requires a linear history except through its
+  admin bypass.
+- **Fix:** a new hygiene step allows a commit after `5393f67` only `tree`,
+  `parent`, `author`, `committer` and `gpgsig` headers, with the author and
+  committer read as stored, and a signature only as an SSH-armored block of
+  base64. Both tag checks read the tag object as stored: only `object`,
+  `type commit`, its name and the project's tagger in UTC, and as message
+  only the tag's name and an SSH-armored block. A NUL becomes a control
+  byte first, which fails every line, so it cannot hide the rest of a line
+  from mawk. Nothing verifies
+  the signature, so a block of base64 letters could still spell a name; an
+  allowed-signers check would close that.
+- **Verified:** by two fresh agents, in scratch repositories.
+- **Release:** fixed before `v0.0.2` is tagged, applied by hand.
+- **Status:** fixed in the review PR after #26. Tested on crafted objects
+  under mawk, gawk and BSD awk: a `mergetag` or `encoding` header, another
+  tag header, a name in a commit's or a tag's signature block or after it,
+  a NUL in an author or tagger line, a name in a tag's message or after a
+  lone carriage return, a tag whose name and message differ, and a tag of
+  a tag all fail; all of `main`'s history, `v0.0.1`, and a tag next to a
+  branch of the same name pass.
+
+### S-023 · Low · A commit could reach `main`, and a tag be released, with `deny` failing
+
+- **Where:** the merge rule in `plans/todo/v0.0.2.md`, and `release.yml`'s
+  `verify` job (predates the range).
+- **Problem:** `protect-main` requires `deny` among other checks, but the
+  fast-forward push goes through its admin bypass, so only the maintainer's
+  own wait enforces them. #25 was pushed 42 s after its CI began; `deny`
+  then failed on RUSTSEC-2026-0385, published 2026-10-23, after the last
+  green run. The Release workflow's `verify` job does not run `cargo deny`,
+  so tagging #25 would have published with a lock file the advisory flags.
+- **Impact:** a release built from a lock file with a known advisory, which
+  `cargo install --locked` would install.
+- **Fix:** `verify` runs `cargo-deny-action`, pinned as in CI, before the
+  tests, and the merge rule waits for `gh pr checks <n> --watch --fail-fast`
+  to succeed before the push.
+- **Verified:** by two fresh agents, from the runs' times, the rulesets and
+  advisory-db's history.
+- **Release:** fixed before `v0.0.2` is tagged, applied by hand.
+- **Status:** fixed in the review PR after #26.
+
+### S-024 · Low · Library users can keep the `ctutils` that RUSTSEC-2026-0385 flags
+
+- **Where:** the crates' `Cargo.toml` files set no minimum for `ctutils`,
+  which `universal-hash` 0.6.1 asks for as `0.4`; `c3d405d` fixed this
+  repository's lock files only.
+- **Problem:** a program that uses `neoblast-crypto` as a library resolves
+  `ctutils` itself. A lock file that already holds 0.4.2 or 0.4.3 keeps it.
+  Where cargo honours a `rust-version` below 1.87 (resolver 3, the default
+  from edition 2024), it picks 0.4.2, and `cargo update -p ctutils` keeps
+  it; `--precise 0.4.5` moves it.
+- **Impact:** in such a program, the tag comparison `poly1305` makes through
+  `universal-hash` might not run in constant time. Probably not exploitable,
+  since whether a tag is accepted is public anyway; not proven.
+- **Fix:** the CHANGELOG tells library users how to update `ctutils` to
+  0.4.4 or later. A minimum in `neoblast-crypto` would be a new direct
+  dependency (the blast-radius rule in `decisions/README.md`) and changes
+  `code_id`, so it waits until after v0.0.2.
+- **Verified:** by two fresh agents, with `cargo generate-lockfile` for a
+  downstream crate at each `rust-version`.
+- **Release:** not blocking.
+- **Status:** open. The CHANGELOG note is in the review PR after #26.

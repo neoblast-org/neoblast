@@ -1,6 +1,6 @@
 # Security Review Log
 
-<!-- baseline --> **Next review diffs from:** `255353b780c0a41de3d32259a2178d40d39691b5` (`main`, recorded 2026-10-21)
+<!-- baseline --> **Next review diffs from:** `c3d405de4e4ff39c0132dd2f049f664396b22080` (`main`, recorded 2026-10-25)
 
 A running record of branch security reviews. Each entry records the exact commit range
 reviewed; the baseline marker line above is the machine-owned frontier the next
@@ -21,6 +21,69 @@ marker line; a frontier-moving entry's Base must equal the previous one's Tip un
 the entry explains why not.
 
 ## Entries
+
+### 2026-10-25 · `255353b..c3d405d` (#23, #25 and #26)
+
+| | Commit | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `255353b780c0a41de3d32259a2178d40d39691b5` | 2026-10-20T22:35:07Z | fuzz: campaign lock held by the fuzzers; warn on mixed compilers (#22) |
+| Tip | `c3d405de4e4ff39c0132dd2f049f664396b22080` | 2026-10-25T02:34:33Z | fix: ctutils 0.4.5 for RUSTSEC-2026-0385; MSRV 1.87 (#26) |
+
+- **Scope:** 3 commits (`git rev-list --count 255353b..c3d405d`) and 37
+  files, +1096/−95 (`git diff --shortstat 255353b c3d405d`): #23, #25 and
+  #26, of which 5 files, +303/−36, under `crates/` (the same command with
+  `-- crates`). Base equals the previous entry's Tip. Only the committed
+  range is covered. Run while the second v0.0.2 campaign runs on `c3d405d`.
+- **Method:** a fresh agent read the `crates/` diff, the lock files and the
+  MSRV change against `spec/threat-model.md`, `SECURITY.md` and CLAUDE.md,
+  ran the tests, `cargo deny` on all three lock files and mutations; another
+  read CI, scripts, the campaign records and docs for security and privacy,
+  in scratch repositories and through GitHub's API. Two more fresh agents
+  tried to refute each finding, together with the code review's.
+- **Findings:** 4, all low, in
+  [`plans/todo/security-review-s-series.md`](../../plans/todo/security-review-s-series.md):
+  - **S-021:** the bench and vector scripts ran Python with the working
+    directory on its module path, as S-020 was for `campaign.sh`
+    (predates the range).
+  - **S-022:** an identity could ride inside a commit or tag object, in a
+    `mergetag` or another header or a tag's message, past the hygiene
+    checks (the commit side predates the range).
+  - **S-023:** #25 reached `main` while `deny` failed on an advisory
+    published after the last green run, and the Release workflow does not
+    run `cargo deny`.
+  - **S-024:** library users can keep the `ctutils` that RUSTSEC-2026-0385
+    flags; #26 fixed this repository's lock files only.
+- **Not tracked:** a zero-width space, a fullwidth colon, a Cyrillic `у` or
+  a line separator after prose still hides a `-by:` line from the
+  attribution check, but git reads none of these as a trailer, and only a
+  maintainer can write the message; the check exists for tools' ASCII
+  trailers. The check also flags prose such as `(by: x)`: it fails closed,
+  and no commit since `5393f67` matches.
+- **Checked, no finding:**
+  - #23's fixes fail closed: an `EIO` is returned, `EINTR` is retried, a
+    shard counts only at the header's length, and heal still writes only
+    bytes that match the manifest. Parameters still come only from the
+    verified header.
+  - `ctutils` 0.4.5 is in all three build graphs, its checksum matches the
+    crate, it needs Rust 1.87 as the new MSRV says, and no other advisory is
+    open.
+  - S-017 and S-018 work as described; no `${{ }}` in any `run:` block;
+    every step prints only hashes or tag names.
+  - The 15 records hold no host, user or path; all are on `86b8a67`, with
+    `nightly-2026-10-14`, `cargo-fuzz` 0.13.2 and no artifacts, and
+    `summary` counts none of their hours for `c3d405d`.
+  - Privacy: all 3 commits are the project's, in UTC, signed, signed off and
+    fast-forwarded; no names, addresses, paths or session links in the
+    range's text. The last line of `7c06619`'s message is garbled, but
+    holds nothing private.
+  - No open finding of medium severity or higher is described in public.
+- **Outcome:** no blocker. S-021 to S-023 are fixed in the review PR that
+  follows, outside `code_id`, the workflows applied by hand; so is S-024's
+  CHANGELOG note, and its change to `Cargo.toml` waits until after v0.0.2.
+- **Carried-over items:** S-002 open; S-003 open; S-007 open, with every
+  merge a fast-forward (#25 before its checks had finished: S-023); S-008
+  open until the GitHub-side copies are removed; S-016 to S-020 fixed in
+  #23, the review-fix PR the last entry named.
 
 ### 2026-10-21 · `9bf18dc..255353b` (#20 to #22)
 

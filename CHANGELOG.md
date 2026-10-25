@@ -111,6 +111,11 @@ crash. Still experimental and **not audited**.
   in every lock file (from 0.4.2 and 0.4.3). Before 0.4.4 its mask functions could
   compile to a branch, and its `u128` comparisons branched on 32-bit targets,
   so code meant to run in constant time might not (RUSTSEC-2026-0385).
+  A program that uses the crates as a library picks its own `ctutils`: make
+  sure its lock file has 0.4.4 or later (`cargo update -p ctutils`). Where
+  cargo honours a `rust-version` below 1.87 (resolver 3, the default from
+  edition 2024), it keeps 0.4.2: use
+  `cargo update -p ctutils --precise 0.4.5` (review S-024).
 
 ## [0.0.1] - 2026-10-16
 

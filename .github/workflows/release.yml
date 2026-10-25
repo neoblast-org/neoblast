@@ -34,13 +34,24 @@ jobs:
       - name: Tag is on main
         run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       - name: Tag is the project's, in UTC
-        # As the hygiene job checks (S-015, S-017), but before anything is
-        # published. Prints nothing about the tagger.
+        # As the hygiene job checks (S-015, S-017, S-022), but before anything
+        # is published. Prints nothing about the tagger.
+        shell: bash
         run: |
           test "$(git for-each-ref "$GITHUB_REF" --format='%(objecttype) %(type)')" = "tag commit"
-          tagger=$(git for-each-ref "$GITHUB_REF" --format='%(taggername) %(taggeremail) %(taggerdate:format:%z)')
-          if [ "$tagger" != "neoblast maintainers <dev@neoblast.dev> +0000" ]; then
-            echo "::error::The tag must be made of a commit, by neoblast maintainers <dev@neoblast.dev> in UTC."; exit 1
+          if ! git cat-file tag "$GITHUB_REF" | tr '\000' '\001' | LC_ALL=C awk -v name="$GITHUB_REF_NAME" '
+            part == 0 && /^object [0-9a-f]+$/ && !o++ { next }
+            part == 0 && $0 == "type commit" && !t++ { next }
+            part == 0 && $0 == "tag " name && !n++ { next }
+            part == 0 && /^tagger neoblast maintainers <dev@neoblast\.dev> [0-9]+ \+0000$/ && !g++ { next }
+            part == 0 && $0 == "" { part = 1; next }
+            part == 1 && m == 1 && $0 == "-----BEGIN SSH SIGNATURE-----" { part = 2; next }
+            part == 1 && !m++ && $0 == name { next }
+            part == 2 && /^[A-Za-z0-9+\/=]+$/ { next }
+            part == 2 && $0 == "-----END SSH SIGNATURE-----" { part = 3; next }
+            { bad = 1 }
+            END { exit bad || !(o && t && n && g) || m != 1 || part == 2 }'; then
+            echo "::error::The tag must be made of a commit, by neoblast maintainers <dev@neoblast.dev> in UTC, with only its name as message."; exit 1
           fi
       - name: Tag matches the workspace version
         run: |
@@ -48,6 +59,9 @@ jobs:
           echo "workspace version(s): $versions, tag: $GITHUB_REF_NAME"
           test "$(echo "$versions" | wc -l)" -eq 1
           test "v$versions" = "$GITHUB_REF_NAME"
+      # An advisory published since the last merge stops the release too
+      # (S-023): #25 reached main while its deny check was failing.
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
       - run: cargo test --workspace --locked
       - name: Golden vectors unchanged
         run: git diff --exit-code spec/test-vectors

@@ -1,6 +1,6 @@
 # Code Review Log
 
-<!-- baseline --> **Next review diffs from:** `255353b780c0a41de3d32259a2178d40d39691b5` (`main`, recorded 2026-10-21)
+<!-- baseline --> **Next review diffs from:** `c3d405de4e4ff39c0132dd2f049f664396b22080` (`main`, recorded 2026-10-25)
 
 A running record of code-review events: branch/pre-PR reviews, review worklists, and
 remediation programmes. Newest entry first. The baseline marker line above is the
@@ -27,6 +27,51 @@ merge-base fallback). Side-branch pre-PR reviews are logged as entries marked
 "frontier unchanged (side branch)" and never move the line.
 
 ## Entries
+
+### 2026-10-25: `255353b..c3d405d` (#23, #25 and #26)
+
+| | SHA | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `255353b780c0a41de3d32259a2178d40d39691b5` | 2026-10-20 | fuzz: campaign lock held by the fuzzers; warn on mixed compilers (#22) |
+| Tip | `c3d405de4e4ff39c0132dd2f049f664396b22080` | 2026-10-25 | fix: ctutils 0.4.5 for RUSTSEC-2026-0385; MSRV 1.87 (#26) |
+
+- **Scope:** 3 commits (`git rev-list --count 255353b..c3d405d`) and 37
+  files, +1096/−95 (`git diff --shortstat 255353b c3d405d`): the review-fix
+  PR (#23), the first campaign's records (#25) and the `ctutils` fix (#26),
+  of which 5 files, +303/−36, under `crates/` (the same command with
+  `-- crates`). Base equals the previous entry's Tip. Only the committed
+  range is covered. Run while the second v0.0.2 campaign (step 7d″) runs on
+  `c3d405d`, so a fix under `crates/` waits unless it blocks; step 7e's
+  second part reviews what follows.
+- **Method:** the `code-review` skill, at high effort, over the range; two
+  fresh agents read `crates/` and the rest for security (logged in the
+  security log); a fresh agent then tried to refute each `crates/` claim,
+  with mutations, fake codecs, probes and the xnu, smbfs and FUSE sources,
+  and another each claim outside it. Of the code review's 8 claims, 2 were
+  rejected (`finish` after a failed seal changes its meaning; an `EIO` from
+  a full sync that is not offered) and 2 are not tracked, all with the
+  reason, in the worklist's "Not tracked". One more, that the attribution
+  check flags some prose, is in the security log's, and the bench scripts'
+  Python is S-021 there.
+- **Findings:** 3 in the code worklist, all low or cleanup:
+  - W-028 (low): S-016's test checks the predicate, not `full_sync`; a
+    mutant that brings the bug back passes clippy and every test (found by
+    the security review).
+  - W-029 (cleanup): a codec's result is checked only for its count, and
+    only in heal; a wrong count or length is blamed on the store or the
+    publisher. Unreachable with the only codec.
+  - W-030 (cleanup): two copies of the same test helpers.
+- **Checked, no finding:** #23's fixes do what part 3 of the worklist says,
+  and each of its new tests fails when its fix is reverted (W-028 aside);
+  `is_multiple_of` means the same as `%` for `SHARD_ALIGN` (64); each lock
+  file changes only `ctutils`; no `unwrap`, `expect`, `panic`, unchecked
+  indexing or `unsafe` outside tests; the tests, clippy and `cargo deny`
+  pass.
+- **Outcome:** no blocker, so nothing under `crates/` changes during the
+  campaign. All three wait until after v0.0.2. Worklist:
+  [`plans/todo/code-review-w-series-4.md`](../../plans/todo/code-review-w-series-4.md).
+- **Carried-over items:** W-024 to W-027 fixed in #23, the review-fix PR the
+  last entry named; part 3 of the worklist was closed there.
 
 ### 2026-10-21: `9bf18dc..255353b` (#20 to #22)
 
