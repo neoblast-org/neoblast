@@ -54,6 +54,8 @@ crash. Still experimental and **not audited**.
   first write error.
 - `DirStore::write_sealed` writes the shards before the manifest, as a
   streaming seal does.
+- The minimum supported Rust version is 1.87 instead of 1.85, because the
+  `ctutils` release that fixes RUSTSEC-2026-0385 needs it.
 
 ### Fixed
 
@@ -102,6 +104,13 @@ crash. Still experimental and **not audited**.
   whatever the `ShardSource` returns. A publisher's manifest can commit to a
   shard of another length, which stopped `heal` part-way with a source that
   does not check lengths; `DirStore` does (review S-019).
+
+### Security
+
+- `ctutils`, which `chacha20poly1305` uses through `poly1305`, moves to 0.4.5
+  in every lock file (from 0.4.2 and 0.4.3). Before 0.4.4 its mask functions could
+  compile to a branch, and its `u128` comparisons branched on 32-bit targets,
+  so code meant to run in constant time might not (RUSTSEC-2026-0385).
 
 ## [0.0.1] - 2026-10-16
 

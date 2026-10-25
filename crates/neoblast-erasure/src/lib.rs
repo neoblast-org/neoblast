@@ -256,7 +256,7 @@ fn check_counts(k: usize, m: usize, shard_len: usize) -> Result<(), ErasureError
 }
 
 fn check(k: usize, n: usize, shard_len: usize) -> Result<(), ErasureError> {
-    if k < MIN_K || n <= k || shard_len == 0 || shard_len % SHARD_ALIGN != 0 {
+    if k < MIN_K || n <= k || shard_len == 0 || !shard_len.is_multiple_of(SHARD_ALIGN) {
         return Err(ErasureError::Params);
     }
     Ok(())
