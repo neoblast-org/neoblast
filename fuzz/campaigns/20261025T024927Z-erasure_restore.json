@@ -1,0 +1,27 @@
+{
+  "target": "erasure_restore",
+  "result": "clean",
+  "exit_code": 0,
+  "started_utc": "2026-10-25T02:49:27Z",
+  "ended_utc": "2026-10-26T02:49:29Z",
+  "seconds_planned": 86400,
+  "seconds_run": 86402,
+  "code_id": "929a29323ff68126",
+  "commit": "c3d405de4e4ff39c0132dd2f049f664396b22080",
+  "executions": 97533166,
+  "execs_per_sec": 1128,
+  "peak_rss_mb": 623,
+  "coverage": {
+    "cov": 1161,
+    "ft": 6216
+  },
+  "corpus_entries": 336,
+  "new_artifacts": [],
+  "toolchain": "rustc 1.101.0-nightly (822182db4 2026-10-13)",
+  "cargo_fuzz": "cargo-fuzz 0.13.2",
+  "machine": {
+    "os": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M1 Pro"
+  }
+}

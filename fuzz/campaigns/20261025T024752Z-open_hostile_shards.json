@@ -1,0 +1,27 @@
+{
+  "target": "open_hostile_shards",
+  "result": "stopped",
+  "exit_code": 72,
+  "started_utc": "2026-10-25T02:47:52Z",
+  "ended_utc": "2026-10-25T02:48:50Z",
+  "seconds_planned": 86400,
+  "seconds_run": 58,
+  "code_id": "9995bac332f95061",
+  "commit": "c3d405de4e4ff39c0132dd2f049f664396b22080",
+  "executions": 21461,
+  "execs_per_sec": 376,
+  "peak_rss_mb": 383,
+  "coverage": {
+    "cov": 1863,
+    "ft": 5897
+  },
+  "corpus_entries": 230,
+  "new_artifacts": [],
+  "toolchain": "rustc 1.101.0-nightly (822182db4 2026-10-13)",
+  "cargo_fuzz": "cargo-fuzz 0.13.2",
+  "machine": {
+    "os": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M1 Pro"
+  }
+}
