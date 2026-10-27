@@ -8,7 +8,7 @@ the frozen v1 byte format).
 
 ## [Unreleased]
 
-## [0.0.2] - 2026-10-26
+## [0.0.2] - 2026-10-27
 
 Hardening of the offline core, fuzzed again for 24 hours per target with no
 crash. Still experimental and **not audited**.

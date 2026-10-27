@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tests object.sh: what the project makes must pass, and each way a name
 # could ride inside a commit, a tag or a commit message must fail (S-013,
-# S-015, S-017, S-018, S-022, S-025). The hygiene job runs it, then
+# S-015, S-017, S-018, S-022, S-025, S-028). The hygiene job runs it, then
 # mutate.sh, before the checks themselves.
 #
 #   .github/checks/test.sh        # every case under every awk found
@@ -38,7 +38,8 @@ record() { # want label got
 expect() { # pass|fail label object [object.sh args...]
   local want="$1" label="$2" object="$3" got=fail
   shift 3
-  if printf '%s' "$object" | tr '~' '\000' | "$here/object.sh" "$@" 2>/dev/null; then
+  # Only this tr runs in the C locale: object.sh must set its own.
+  if printf '%s' "$object" | LC_ALL=C tr '~' '\000' | "$here/object.sh" "$@" 2>/dev/null; then
     got=pass
   fi
   record "$want" "$label" "$got"
@@ -130,6 +131,8 @@ if [ "$real" = 1 ]; then
   save_message co-author-message HEAD
   g commit -q --allow-empty -S -s -m "fix: a co-author in prose" -m "Co-authored-by: $other" -m "More prose."
   save_message co-author-in-prose HEAD
+  g commit -q --allow-empty -S -s -m "fix: a folded reviewer line" -m "Reviewed-by: $me"$'\n '"$other"
+  save_message folded-message HEAD
 fi
 
 run_cases() {
@@ -149,6 +152,8 @@ run_cases() {
   expect pass "commit: an empty message" "$tree$parent$author$committer$csig"$'\n' commit
   # Allowed until a check verifies signatures (S-026).
   expect pass "commit: unsigned" "$tree$parent$author$committer$msg" commit
+  expect pass "commit: a Latin-1 byte in the message" "$tree$parent$author$committer$csig"$'\nfix: caf\351\n' commit
+  expect pass "commit: a UTF-8 message" "$tree$parent$author$committer$csig"$'\nfix: caf\xc3\xa9 \xe2\x80\x94 a subject\n' commit
 
   expect fail "commit: another author" "$tree$parent""author $other $when"$'\n'"$committer$csig$msg" commit
   expect fail "commit: another committer" "$tree$parent$author""committer $other $when"$'\n'"$csig$msg" commit
@@ -191,6 +196,7 @@ run_cases() {
 
   expect pass "tag: signed, as the project, in UTC" "$tgood" tag $v
   expect pass "tag: a name with a slash" "$object$type$(tag rc/v9.9.9)"$'\n'"$tsig" tag rc/v9.9.9
+  expect pass "tag: a name that is a number" "$object$type"$'tag 1\n'"$tagger"$'\n1\n'"$tsig" tag 1
   # Allowed until a check verifies signatures (S-026).
   expect pass "tag: unsigned" "$object$type$(tag $v)"$'\n' tag $v
 
@@ -212,7 +218,11 @@ run_cases() {
   expect fail "tag: no tagger" "$object$type"$'tag '"$v"$'\n\n'"$v"$'\n'"$tsig" tag $v
   expect fail "tag: a NUL in the tagger line" "$object$type"$'tag '"$v"$'\ntagger '"$me $when~ $other"$'\n\n'"$v"$'\n'"$tsig" tag $v
   expect fail "tag: two object lines" "$object$object$type$(tag $v)"$'\n'"$tsig" tag $v
+  expect fail "tag: two type lines" "$object$type$type$(tag $v)"$'\n'"$tsig" tag $v
+  expect fail "tag: two tag headers" "$object$type"$'tag '"$v"$'\n'"$(tag $v)"$'\n'"$tsig" tag $v
+  expect fail "tag: two tagger lines" "$object$type"$'tag '"$v"$'\n'"$tagger$tagger"$'\n'"$v"$'\n'"$tsig" tag $v
   expect fail "tag: an unknown header" "$object$type"$'tag '"$v"$'\n'"$tagger"$'x-reviewer '"$other"$'\n\n'"$v"$'\n'"$tsig" tag $v
+  expect fail "tag: the number in the name spelt another way" "$object$type"$'tag 1\n'"$tagger"$'\n1.0\n'"$tsig" tag 1
   expect fail "tag: a message other than the name" "$object$type"$'tag '"$v"$'\n'"$tagger"$'\nrelease '"$v"$'\n'"$tsig" tag $v
   expect fail "tag: a second message line" "$object$type$(tag $v)"$'\nCo-authored-by: '"$other"$'\n'"$tsig" tag $v
   expect fail "tag: a NUL in the message" "$object$type"$'tag '"$v"$'\n'"$tagger"$'\n'"$v~ $other"$'\n'"$tsig" tag $v
@@ -240,6 +250,8 @@ run_cases() {
   expect pass "message: a quoted line (not checked)" "$m"$'\n> Co-authored-by: '"$other"$'\n' message
   expect pass "message: a bulleted line (not checked)" "$m"$'\n- Co-authored-by: '"$other"$'\n' message
   expect pass "message: Reviewed by: with a space (not checked)" "$m"$'\nReviewed by: '"$other"$'\n' message
+  expect pass "message: an indented line after a blank line" "$m"$'\nReviewed-by: '"$me"$'\n\n '"$other"$'\n' message
+  expect pass "message: a line of blanks after a reviewer line" "$m"$'\nReviewed-by: '"$me"$'\n \t\n' message
 
   expect fail "message: a co-author" "$m"$'\nCo-authored-by: '"$other"$'\n' message
   expect fail "message: a sign-off by someone else" "$m"$'\nSigned-off-by: '"$other"$'\n' message
@@ -253,6 +265,9 @@ run_cases() {
   expect fail "message: after a lone carriage return (S-018)" $'fix: a subject\rCo-authored-by: '"$other"$'\n' message
   expect fail "message: a U+2010 hyphen (S-018)" "$m"$'\nCo\xe2\x80\x90authored\xe2\x80\x90by: '"$other"$'\n' message
   expect fail "message: a U+FF0D hyphen (S-018)" "$m"$'\nCo\xef\xbc\x8dauthored\xef\xbc\x8dby: '"$other"$'\n' message
+  expect fail "message: a reviewer line folded onto the next (S-028)" "$m"$'\nReviewed-by: '"$me"$'\n '"$other"$'\n' message
+  expect fail "message: a reviewer line folded with a tab" "$m"$'\nReviewed-by: '"$me"$'\n\t'"$other"$'\n' message
+  expect fail "message: a reviewer line folded in CRLF" "$m"$'\nReviewed-by: '"$me"$'\r\n '"$other"$'\r\n' message
   expect fail "message: an underscore as the hyphen" "$m"$'\nCo_authored_by: '"$other"$'\n' message
 
   # --- objects git writes ----------------------------------------------------
@@ -273,6 +288,7 @@ run_cases() {
     expect_file fail "git: a tag by someone else" "$r/other-tagger" tag side-tag
     expect_file fail "git: a co-author trailer" "$r/co-author-message" message
     expect_file fail "git: a co-author in prose (S-013)" "$r/co-author-in-prose" message
+    expect_file fail "git: a folded reviewer line (S-028)" "$r/folded-message" message
   fi
 
   # --- usage ---------------------------------------------------------------

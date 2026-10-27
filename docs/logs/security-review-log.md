@@ -1,6 +1,6 @@
 # Security Review Log
 
-<!-- baseline --> **Next review diffs from:** `118f710bb1944b9c3817c10e8eae3b4274948bec` (`main`, recorded 2026-10-25)
+<!-- baseline --> **Next review diffs from:** `f2380e7ff4ac4708d9dc8599915feb49397b4c98` (`main`, recorded 2026-10-27)
 
 A running record of branch security reviews. Each entry records the exact commit range
 reviewed; the baseline marker line above is the machine-owned frontier the next
@@ -21,6 +21,77 @@ marker line; a frontier-moving entry's Base must equal the previous one's Tip un
 the entry explains why not.
 
 ## Entries
+
+### 2026-10-27 · `118f710..f2380e7` (#28, #30 and #31)
+
+| | Commit | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `118f710bb1944b9c3817c10e8eae3b4274948bec` | 2026-10-25T06:08:20Z | fix: review findings from #23, #25 and #26 outside code_id; log the sixth reviews (#27) |
+| Tip | `f2380e7ff4ac4708d9dc8599915feb49397b4c98` | 2026-10-26T20:00:22Z | ci: pin dtolnay/rust-toolchain to 683b588 (#31) |
+
+- **Scope:** 5 commits (`git rev-list --count 118f710..f2380e7`) and 27
+  files, +1077/−65 (`git diff --shortstat 118f710 f2380e7`): #28's ten
+  campaign records and CHANGELOG date, #30's three commits (the seventh
+  reviews' logs, `.github/checks/` with its tests, S-025's fix) and #31's
+  action pin, of which 10 files, +567/−55, under `.github/` (the same
+  command with `-- .github`) and none under `crates/`. Base equals the
+  previous entry's Tip. Only the committed range is covered. The last part
+  of step 7e; `f2380e7` is `main`'s tip.
+- **Method:** a fresh agent read `.github/` and CLAUDE.md, ran the steps'
+  bodies on crafted objects under mawk 1.3.4, gawk, busybox and macOS awk,
+  and ran `test.sh` and `mutate.sh` offline; another read the records,
+  docs, worklists, commits and pull requests, recomputed every record's
+  `code_id`, and read GitHub's API for check times, signatures, runs and
+  pushes. A third fresh agent tried to refute each finding, together with
+  the code review's.
+- **Findings:** 3, in
+  [`plans/todo/security-review-s-series.md`](../../plans/todo/security-review-s-series.md)
+  except the first:
+  - **S-027 (Medium):** kept out of the public repository until fixed
+    (`SECURITY.md`, "Our own findings"). Not blocking.
+  - **S-028 (Low):** an indented line that git folds into an attribution
+    line passed the hygiene job (predates the range; the check moved in
+    #30 unchanged).
+  - **S-029 (Low):** three commits reached `main` signed with a key GitHub
+    does not know, through `protect-main`'s admin bypass (#30).
+- **Not tracked:** a tag named like a number passed with the number spelt
+  another way (`1` and `1.0`), and macOS's `tr` printed an error on bytes
+  outside UTF-8; no name fits either, and both are fixed with W-032. The
+  new CLAUDE.md rule to say which tests cover a change could put a private
+  finding's details in a test's label before its fix merges; `SECURITY.md`
+  already keeps such details out until then.
+- **Checked, no finding:**
+  - The 10 records: `code_id` recomputed at `c3d405d`, `57b7b54` and
+    `f2380e7` matches each; every target has one clean run of 86401 or
+    86402 s with no artifacts, after a start stopped at about 57 s; the
+    compiler is `nightly-2026-10-14` and `cargo-fuzz` 0.13.2, as CI pins;
+    no host, user or path; `summary` shows `met` ×5.
+  - S-025 is fixed: a NUL anywhere in a message, a CR, FF, VT, BS, ESC or
+    DEL fails; a tab and bytes above DEL pass.
+  - Moving the checks changed no rule; a missing or failing `object.sh`
+    fails each step; `release.yml` runs them from the tag's checkout,
+    after "Tag is on main".
+  - `test.sh` and `mutate.sh` use no network, only `mktemp -d` with a
+    cleanup trap, a throwaway key and a cleared git environment, and print
+    only labels and a made-up identity.
+  - #31: `683b588` is `dtolnay/rust-toolchain`'s `master`, one commit after
+    `e2a55d2`, with `action.yml` unchanged; every action is pinned to a full
+    SHA; no `${{ }}` in any `run:` block; permissions unchanged.
+  - S-023: #28, #30 and #31 each reached `main` after all their checks had
+    passed.
+  - Privacy: all 5 commits are the project's, in UTC, signed off and
+    fast-forwarded; no names, addresses, paths or session links in the
+    range's text, its commit messages or #28's, #30's and #31's pull
+    requests.
+  - No open finding of medium severity or higher is described in public.
+- **Outcome:** no blocker. S-028 is fixed in the review PR after #31,
+  applied by hand; S-029 is open, waiting on the maintainer's decision about
+  the key; S-027 is handled privately.
+- **Carried-over items:** S-002 open; S-003 open; S-007 open, with every
+  merge a fast-forward; S-008 open until the GitHub-side copies are
+  removed; S-024 open, its `Cargo.toml` minimum after v0.0.2; S-025 fixed
+  in `9b8cefe` (#30), which its status had as the change after `7f8b3e9`;
+  S-026 open, with S-029 a case of it.
 
 ### 2026-10-25 · `c3d405d..118f710` (the review PR after #26)
 

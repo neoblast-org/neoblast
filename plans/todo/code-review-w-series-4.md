@@ -8,7 +8,10 @@ is closed (`plans/completed/code-review-w-series-3.md`). All items are low or
 cleanup; none blocks v0.0.2. W-028 to W-030 each change `crates/`, and so every target's
 `code_id`, so they wait until after v0.0.2 is tagged. The seventh
 `/review-since` (`c3d405d..118f710`, the review PR after #26) added W-031,
-which is outside `code_id` and can land before the tag.
+which is outside `code_id` and can land before the tag. The eighth
+(`118f710..f2380e7`, #28, #30 and #31) added W-032 to W-034, all outside
+`code_id`: W-032 and W-033 are fixed in the review PR after #31, and W-034
+waits until after v0.0.2.
 
 IDs are unique across all worklists and continue from the highest W-number used.
 
@@ -23,7 +26,13 @@ IDs are unique across all worklists and continue from the highest W-number used.
    rebuild a manifest after changing a sealed file.
 4. W-031: the tag object is checked by one awk program, which the hygiene
    job and the Release workflow both run.
-5. Each fix that can be reached has a regression test that fails without it,
+5. W-032: every rule of the object checks has a case in `test.sh` and a
+   mutant in `mutate.sh` that the case kills.
+6. W-033: every commit the worklists cite exists on `main`, and the plan
+   names the commit `v0.0.2` tags.
+7. W-034: the identity and UTC steps' programs are in `.github/checks/`,
+   with cases and mutants.
+8. Each fix that can be reached has a regression test that fails without it,
    and the golden vectors are unchanged.
 
 ## Findings
@@ -84,15 +93,17 @@ IDs are unique across all worklists and continue from the highest W-number used.
   `.github/scripts/tag-object.awk`, run by both with `awk -f`; the same
   for the commit program if S-025 grows it.
 - Verified: by a fresh agent; the two copies are byte-identical.
-- Status: fixed in `14989d0`. Both workflows run
+- Status: fixed in `9b8cefe` (#30). Both workflows run
   `.github/checks/object.sh`, which runs `commit-object.awk` or
   `tag-object.awk`; the programs are the old ones line for line, with
   S-025's line added. An object of only a blank line passes, as it did
   before; git never writes one.
-- Tests, after `14989d0`: the attribution check (S-013, S-018) moved to
-  `message.awk`, run as `object.sh message`, as the old program line for
-  line. `test.sh` runs 107 cases under every awk on PATH (mawk on
-  GitHub's runner, BSD awk on macOS, gawk where installed): crafted commits, tags and messages, each
+- Tests, in `642ebc0` (#30): the attribution check (S-013, S-018) moved to
+  `message.awk`, run as `object.sh message`. Its rules are the old
+  program's, but it exits non-zero when it finds a line, where the old one
+  exited zero, and the hygiene step tests it with `if !`. `test.sh` runs
+  107 cases under every awk on PATH (mawk on GitHub's runner, BSD awk on
+  macOS, gawk where installed): crafted commits, tags and messages, each
   differing from an allowed one in one way, and 14 objects git itself
   writes in a throwaway repository with a throwaway SSH key (a signed
   commit, tag and merge pass; a `mergetag`, an `encoding` header, a
@@ -103,7 +114,61 @@ IDs are unique across all worklists and continue from the highest W-number used.
   back a weakness a review closed; it fails if the checks as they are do
   not pass, or if a mutant survives or no longer applies. The hygiene job
   runs both. The mutants it cannot hold, as no
-  test tells them apart, are listed in its header.
+  test tells them apart, are listed in its header. W-032 adds the rules
+  that had no case.
+
+### W-032 (cleanup): some rules of the object checks had no case
+
+- Where: `.github/checks/tag-object.awk`, the `!t++`, `!n++` and `!g++`
+  guards (S-022, `118f710`); `commit-object.awk`, the upper end of S-025's
+  byte class (`9b8cefe`).
+- What: a tag with two `type`, `tag` or `tagger` lines had no case, so
+  turning `!t++` into `++t`, or the same for `n` and `g`, failed no test.
+  The mutant for two object lines removed `!o++` whole, which fails every
+  tag for another reason. No commit message held a byte above DEL, so
+  widening `\177` to `\177-\377` would have refused every UTF-8 message
+  with no test failing.
+- Remediation: a case and a mutant for each rule.
+- Verified: by a fresh agent, by mutation under mawk, gawk and busybox.
+- Status: fixed in the review PR after #31: cases for two `type`, `tag`
+  and `tagger` lines and a UTF-8 message, and mutants that keep each guard
+  counting (`++t`) or widen the class. With them, two smaller fixes:
+  `tag-object.awk` compares the message to the tag's name as a string, as
+  a tag named `1` passed with `1.0` as its message, and `object.sh` sets
+  `LC_ALL=C` for `tr` too, which on macOS printed "Illegal byte sequence"
+  on bytes outside UTF-8 (it failed closed; a Latin-1 case catches it on
+  macOS). `test.sh` runs 120 cases and `mutate.sh` 57 mutants, with
+  S-028's.
+
+### W-033 (cleanup): the worklists cite commits that are not on `main`
+
+- Where: W-031's status in this worklist and S-025's in
+  `security-review-s-series.md` (#30); `plans/todo/v0.0.2.md`, rows 7d‴,
+  7e and 8; `CHANGELOG.md`, the date of 0.0.2 (#28).
+- What: `14989d0` and `7f8b3e9` are the branch's commits from before its
+  rebase onto #28, which no branch holds; `main` has `9b8cefe` (the fix)
+  and `642ebc0` (the tests). W-031 said `message.awk` moved line for line,
+  though its exit status was reversed. The plan still named 7d‴ (`57b7b54`)
+  as the commit `v0.0.2` tags, with four commits after it, and the
+  CHANGELOG dated 0.0.2 to 2026-10-26, a day before any tag.
+- Remediation: cite the commits on `main`; tag the review PR after #31;
+  date 0.0.2 to the day it is tagged.
+- Verified: by a fresh agent (`git cat-file -t` on each hash).
+- Status: fixed in the review PR after #31.
+
+### W-034 (cleanup): two hygiene steps still hold their own awk
+
+- Where: `.github/workflows/hygiene.yml`, "Maintainer commits are recorded
+  in UTC" and "Commits carry only the project's identity" (S-008, before
+  the range).
+- What: their programs, such as the trailer `gsub` and the `NF != 6`
+  guard, have no case and no mutant. CLAUDE.md asks for both for a new or
+  changed check; these did not change, so they fall outside its letter
+  but not its point.
+- Remediation: move them to `.github/checks/`, with cases and mutants, as
+  W-031 did for the others.
+- Verified: by a fresh agent.
+- Status: open; outside `code_id`, not needed for v0.0.2.
 
 ## Not tracked
 
@@ -143,3 +208,14 @@ Checked by the same review and left as they are, with the reason:
   - Rejected: `verify`'s `deny` reads only the root lock file; that is the
     graph that is published, and CI's `deny` job did the same before the
     range.
+- From the eighth review (`118f710..f2380e7`):
+  - `mutate.sh` runs all of `test.sh` once per mutant: the hygiene step
+    takes about 50 s on GitHub's runner, against about 1 min 40 s for CI
+    and 4 min 30 s for CodeQL on the same push. Its first run of `test.sh`
+    is what stops a broken environment from killing every mutant.
+  - S-025's byte class lets through C1 controls written in UTF-8 (U+009B,
+    U+0085): they hide nothing from git or the message check, and names in
+    prose are not checked by design.
+  - `commit-object.awk` does not require a tree, author or committer: git
+    writes no such commit, `git log` fails the step on a commit with no
+    tree, and the identity step fails one with no author or committer.

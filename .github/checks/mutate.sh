@@ -17,7 +17,7 @@
 #   whose signature comes first never counts its name, which `m != 1` fails;
 # - removing LC_ALL=C or the NUL translation for tags: they matter only
 #   under a locale or an awk (BSD awk stops a line at a NUL) that the run
-#   may not have;
+#   may not have (test.sh's Latin-1 case catches the first on macOS);
 # - the workflows' own lines around object.sh (an `if !` dropped, say):
 #   test.sh runs object.sh, not the workflows.
 set -euo pipefail
@@ -89,12 +89,16 @@ mutant "commit: control bytes in a message (S-025)" $c 'body && /[\001-\010\013-
 mutant "commit: backspace in a message" $c '\001-\010' '\001-\007'
 mutant "commit: vertical tab in a message" $c '\013-\037' '\016-\037'
 mutant "commit: DEL in a message" $c '\037\177]' '\037]'
+mutant "commit: bytes above DEL in a message" $c '\037\177]' '\037\177-\377]'
 
 # --- tag-object.awk (S-015, S-017, S-022) ----------------------------------
 
 t=tag-object.awk
 mutant "tag: any header" $t $'{ bad = 1 }\nEND' $'{ }\nEND'
-mutant "tag: two object lines" $t ' && !o++' ''
+mutant "tag: two object lines" $t '!o++' '++o'
+mutant "tag: two type lines" $t '!t++' '++t'
+mutant "tag: two tag headers" $t '!n++' '++n'
+mutant "tag: two tagger lines" $t '!g++' '++g'
 mutant "tag: an object line inside another header" $t '/^object ' '/object '
 mutant "tag: a tagger line inside another header" $t '/^tagger ' '/tagger '
 mutant "tag: any signature start" $t '$0 == "-----BEGIN SSH SIGNATURE-----"' '/BEGIN/'
@@ -107,13 +111,14 @@ mutant "tag: any tagger" $t 'tagger neoblast maintainers <dev@neoblast\.dev> [0-
 mutant "tag: any time zone" $t '[0-9]+ \+0000$/' '[0-9]+ [+-][0-9]+$/'
 mutant "tag: a header may be missing" $t '!(o && t && n && g) || ' ''
 mutant "tag: no message needed" $t ' || m != 1' ''
-mutant "tag: the name twice" $t '!m++ && $0 == name' '$0 == name && (m = 1)'
-mutant "tag: a message other than the name" $t '!m++ && $0 == name' '!m++'
+mutant "tag: the name twice" $t '!m++ && $0 == name ""' '$0 == name "" && (m = 1)'
+mutant "tag: a message other than the name" $t '!m++ && $0 == name ""' '!m++'
+mutant "tag: the name compared as a number" $t '$0 == name ""' '$0 == name'
 mutant "tag: any word in a signature" $t '/^[A-Za-z0-9+\/=]+$/' '/^[^ ]+$/'
 mutant "tag: lines after the signature" $t '{ part = 3; next }' '{ part = 1; next }'
 mutant "tag: a signature that never ends" $t ' || part == 2 }' ' }'
 
-# --- message.awk (S-013, S-018) --------------------------------------------
+# --- message.awk (S-013, S-018, S-028) ------------------------------------
 
 g=message.awk
 mutant "message: only an ASCII hyphen (S-018)" $g '[^a-z0-9 \t:]by' '-by'
@@ -123,12 +128,17 @@ mutant "message: no space before the colon" $g 'by[ \t]*:/' 'by:/'
 mutant "message: any value" $g 'if (v != me) found = 1' 'found = 0'
 mutant "message: a prefix of the project" $g 'if (v != me)' 'if (index(v, me) != 1)'
 mutant "message: trailing blanks count" $g 'sub(/[ \t\r]+$/, "", v)' 'v = v'
+mutant "message: folded lines (S-028)" $g 'by && /^[ \t]+[^ \t]/ { found = 1 }' ''
+mutant "message: a fold after any line" $g '{ by = 0 }' '{ }'
+mutant "message: only a space folds" $g '/^[ \t]+[^ \t]/' '/^ +[^ \t]/'
+mutant "message: a line of blanks folds" $g '/^[ \t]+[^ \t]/' '/^[ \t]+/'
 
 # --- object.sh -------------------------------------------------------------
 
 o=object.sh
 mutant "object.sh: NULs reach the commit check" $o "commit:1) tr '\\000' '\\001' | " 'commit:1) '
-mutant "object.sh: a lone CR does not end a line (S-018)" $o "message:1) tr '\\r' '\\n' | " 'message:1) '
+mutant "object.sh: a lone CR does not end a line (S-018)" $o "| tr '\\r' '\\n' | " '| '
+mutant "object.sh: a CR before a newline is kept (S-028)" $o "message:1) LC_ALL=C awk '{ sub(/\\r\$/, \"\") } 1' | " 'message:1) '
 mutant "object.sh: commit takes any arguments" $o 'commit:1)' 'commit:*)'
 mutant "object.sh: tag takes any arguments" $o 'tag:2)' 'tag:*)'
 mutant "object.sh: message takes any arguments" $o 'message:1)' 'message:*)'

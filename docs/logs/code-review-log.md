@@ -1,6 +1,6 @@
 # Code Review Log
 
-<!-- baseline --> **Next review diffs from:** `118f710bb1944b9c3817c10e8eae3b4274948bec` (`main`, recorded 2026-10-25)
+<!-- baseline --> **Next review diffs from:** `f2380e7ff4ac4708d9dc8599915feb49397b4c98` (`main`, recorded 2026-10-27)
 
 A running record of code-review events: branch/pre-PR reviews, review worklists, and
 remediation programmes. Newest entry first. The baseline marker line above is the
@@ -27,6 +27,51 @@ merge-base fallback). Side-branch pre-PR reviews are logged as entries marked
 "frontier unchanged (side branch)" and never move the line.
 
 ## Entries
+
+### 2026-10-27: `118f710..f2380e7` (#28, #30 and #31)
+
+| | SHA | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `118f710bb1944b9c3817c10e8eae3b4274948bec` | 2026-10-25 | fix: review findings from #23, #25 and #26 outside code_id; log the sixth reviews (#27) |
+| Tip | `f2380e7ff4ac4708d9dc8599915feb49397b4c98` | 2026-10-26 | ci: pin dtolnay/rust-toolchain to 683b588 (#31) |
+
+- **Scope:** 5 commits (`git rev-list --count 118f710..f2380e7`) and 27
+  files, +1077/−65 (`git diff --shortstat 118f710 f2380e7`): #28's ten
+  campaign records and CHANGELOG date, #30's three commits (the seventh
+  reviews' logs, `.github/checks/` with its tests, S-025's fix) and #31's
+  action pin, of which 10 files, +567/−55, under `.github/` (the same
+  command with `-- .github`) and none under `crates/`. Base equals the
+  previous entry's Tip. Only the committed range is covered. The last part
+  of step 7e; `f2380e7` is `main`'s tip.
+- **Method:** the `code-review` skill at high effort over the range, which
+  also ran `object.sh` over the 23 commits since `5393f67` and every tag,
+  and `test.sh` and `mutate.sh`; a fresh agent then tried to refute each
+  claim, applying mutants to a copy of `.github/checks/` under mawk, gawk
+  and busybox. Of the code review's 9 claims:
+  - 5 are tracked: W-032 (rules with no case), W-033 from three (the
+    hashes that are not on `main`, "line for line", the stale plan rows and
+    CHANGELOG date) and W-034.
+  - 4 are not tracked: `mutate.sh`'s cost, its first run of `test.sh`,
+    C1 controls in a message and commits with missing headers. The worklist's
+    "Not tracked" gives the reasons; `mutate.sh`'s two share one.
+- **Findings:** 3 in the code worklist, all cleanup: W-032, some rules of
+  the object checks had no case; W-033, the worklists cite commits that are
+  not on `main`, and the plan and CHANGELOG are stale; W-034, the identity
+  and UTC steps still hold their own awk.
+- **Checked, no finding:** the checks in `.github/checks/` are `118f710`'s
+  programs, with S-025's line added and `message.awk`'s exit reversed
+  where the hygiene step calls it; the 23 commits since `5393f67` and `v0.0.1` pass; on
+  `f2380e7`'s CI, `test.sh` ran 321 cases under mawk, gawk and busybox
+  with none wrong and `mutate.sh` killed all 47 mutants; #31 equals
+  Dependabot's #24 and changes no job; nothing under `crates/`, so
+  `code_id` is the same as on `c3d405d`.
+- **Outcome:** no blocker. W-032 and W-033 are fixed in the review PR
+  after #31, the checks applied by hand; W-034 waits until after v0.0.2.
+  Worklist:
+  [`plans/todo/code-review-w-series-4.md`](../../plans/todo/code-review-w-series-4.md).
+- **Carried-over items:** W-028 to W-030 open, waiting until after v0.0.2;
+  W-031 fixed in `9b8cefe` (#30), which its status had as `14989d0`
+  (W-033).
 
 ### 2026-10-25: `c3d405d..118f710` (the review PR after #26)
 

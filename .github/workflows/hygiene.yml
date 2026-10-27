@@ -93,7 +93,8 @@ jobs:
         # only in git's trailer block, must name the project (S-013). A lone
         # carriage return also ends a line, and any byte but a letter, digit,
         # space, tab or colon counts as the hyphen, so a Unicode one cannot hide a
-        # line either (S-018). See .github/checks/message.awk.
+        # line either (S-018); nor can an indented line that git folds into
+        # one (S-028). See .github/checks/message.awk.
         shell: bash
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}

@@ -9,7 +9,8 @@ added S-010 to S-015, all low. The fifth (2026-10-21, `9bf18dc..255353b`,
 #20 to #22) added S-016 to S-020, all low. The sixth (2026-10-25,
 `255353b..c3d405d`, #23, #25 and #26) added S-021 to S-024, all low. The
 seventh (2026-10-25, `c3d405d..118f710`, the review PR after #26) added S-025
-and S-026, both low.
+and S-026, both low. The eighth (2026-10-27, `118f710..f2380e7`, #28, #30 and
+#31) added S-028 and S-029, both low.
 
 IDs are unique across all worklists and continue from the highest S-number used,
 including one that so far appears only in a review log (`SECURITY.md`, "Our own
@@ -557,9 +558,9 @@ that fixed it.
   push was not tested.
 - **Release:** fixed before `v0.0.2` is tagged, applied by hand; not in
   `code_id`.
-- **Status:** fixed in the change after `7f8b3e9`, in
+- **Status:** fixed in `9b8cefe` (#30), in
   `.github/checks/commit-object.awk` (W-031). `.github/checks/test.sh`
-  fails without it, and no commit since `5393f67` fails with it.
+  (`642ebc0`) fails without it, and no commit since `5393f67` fails with it.
 
 ### S-026 · Low · Nothing checks that a commit or tag is signed, or by whom
 
@@ -577,7 +578,7 @@ that fixed it.
   with no check failing. Pushing a tag needs write access and publishing
   needs approval in the `release` environment, so this is about provenance
   and the documented guarantee, not about who can release.
-- **Fix:** commit the project's SSH public key as an allowed-signers file,
+- **Fix:** commit the project's SSH public keys as an allowed-signers file,
   and have `verify` (and the hygiene tag step) run `git -c
   gpg.ssh.allowedSignersFile=<file> verify-tag`; until then, `RELEASING.md`
   says only that a signature, if there is one, must be an SSH block.
@@ -585,4 +586,58 @@ that fixed it.
   under both checks; confirmed by a fresh agent.
 - **Release:** not blocking; the tag step in `RELEASING.md` makes a signed
   tag.
+- **Status:** open. S-029 is a case of it on `main`.
+
+### S-028 · Low · An indented line that git folds into an attribution line passed the hygiene job
+
+- **Where:** `.github/checks/message.awk` (S-013, S-018; moved there by
+  #30 from `hygiene.yml`, where it was the same).
+- **Problem:** git reads a line that starts with a space or tab, right
+  after a trailer, as part of that trailer. A message whose trailer block
+  holds `Reviewed-by: neoblast maintainers <dev@neoblast.dev>` and, on the
+  next line, an indented `Alice Example <alice@example.org>` gives
+  `Reviewed-by: neoblast maintainers <dev@neoblast.dev> Alice Example
+  <alice@example.org>` under `%(trailers:unfold)`, and passed every step:
+  the attribution check read each line alone, and the identity step
+  unfolds only `Co-authored-by` and `Signed-off-by`, which it does catch.
+- **Impact:** privacy, as S-013. It needs a maintainer to write the
+  message; GitHub reads only `Co-authored-by` lines, which were caught.
+- **Fix:** a line that starts with a space or tab and holds more than
+  blanks fails when it follows a `<key>-by:` line, and `object.sh` drops a
+  carriage return before a newline first, so a CRLF message folds as git
+  reads it.
+- **Verified:** reproduced under mawk 1.3.4 by a fresh agent, then by
+  another; the same for `Acked-by`. The CRLF case was found by a third.
+- **Release:** fixed before `v0.0.2` is tagged, applied by hand; not in
+  `code_id`.
+- **Status:** fixed in the review PR after #31. `test.sh` has a folded line
+  after a space, after a tab, in CRLF and in one git writes, which fail,
+  and an indented line after a blank line, which passes; five mutants in
+  `mutate.sh`. No commit since `5393f67` fails.
+
+### S-029 · Low · Three commits reached `main` signed with a key GitHub does not know
+
+- **Where:** `c97c0d2`, `9b8cefe` and `642ebc0` (#30); the `protect-main`
+  ruleset's admin bypass (S-023).
+- **Problem:** the three are signed with the SSH key
+  `SHA256:32dP45eSMmVSt/G/CGvcxl/P+MO3Nwj9xeTh/GSA2wc`, used nowhere else in
+  the history; the root commit, the commits from `36cb370` on and `v0.0.1`
+  use two SSH keys GitHub verifies for the project's account, and the eight
+  from 2026-10-14 and 15 between them carry GitHub's own signature. GitHub
+  shows the three as unverified (`unknown_key`). `protect-main` requires
+  verified signatures, but the fast-forward push goes through the admin
+  bypass, and its rule-suite records that the signature rule failed and was
+  bypassed. Nothing in the hygiene job checks signatures (S-026).
+- **Impact:** provenance: three commits on `main` that no known key vouches
+  for. Their author, committer and content are the project's and were
+  reviewed.
+- **Fix:** the maintainer decides whether the key is the project's: if so,
+  it is added to the project's account, and GitHub then shows the commits
+  as verified; if not, the commits stay as they are, recorded here, since
+  rewriting `main` would break every clone. Before each fast-forward push,
+  `gh api repos/neoblast-org/neoblast/commits/<sha> --jq
+  .commit.verification.verified` must print `true` for every new commit,
+  until S-026's check does this in CI.
+- **Verified:** by two fresh agents, from the signatures and GitHub's API.
+- **Release:** not blocking.
 - **Status:** open.
