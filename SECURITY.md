@@ -20,15 +20,15 @@ publish an advisory within 90 days, and we credit reporters unless you ask us no
 Findings from the maintainers' own reviews and fuzzing are kept private until
 fixed too, if they are of medium severity or higher:
 
-- Their details go into a private draft advisory on GitHub. The public review
-  log names only the finding's ID, its severity and whether it blocks the
-  release.
+- Their details stay with the maintainers, out of the repository. The public
+  review log names only the finding's ID, its severity and whether it blocks
+  the release.
 - The fix's pull request and commit say what changed, not how to exploit it.
   The fix and its test are public while that pull request is open, so it is
   merged promptly. The worklist entry with the details follows once the fix is
   on `main`.
-- A release that ships with such a finding unfixed publishes its advisory with
-  the release.
+- A release that ships with such a finding unfixed publishes an advisory for
+  it with the release.
 
 Findings of low severity may be public before they are fixed.
 

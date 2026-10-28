@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Tests object.sh: what the project makes must pass, and each way a name
-# could ride inside a commit, a tag or a commit message must fail (S-013,
-# S-015, S-017, S-018, S-022, S-025, S-028, W-035). The hygiene job runs
-# it, then mutate.sh, before the checks themselves.
+# could ride inside a commit, a tag, a commit message or a commit's tree
+# must fail (S-013, S-015, S-017, S-018, S-022, S-025, S-028, S-030, S-031,
+# W-035). The hygiene job runs it, then mutate.sh, before the checks
+# themselves.
 #
 #   .github/checks/test.sh        # every case under every awk found
 #   .github/checks/test.sh -v     # and print each case
@@ -139,6 +140,22 @@ if [ "$real" = 1 ]; then
   printf '%s' "fix: a reviewer line folded with a CR"$'\n\nReviewed-by: '"$me"$'\n\r'"$other"$'\n' >"$work/cr-message"
   g commit -q --allow-empty -S --cleanup=verbatim -F "$work/cr-message"
   save_message cr-folded-message HEAD
+  # A certificate's signature carries its key ID and principals (S-030).
+  ssh-keygen -q -t ed25519 -N '' -C '' -f "$work/ca"
+  ssh-keygen -q -t ed25519 -N '' -C '' -f "$work/ckey"
+  ssh-keygen -q -s "$work/ca" -I "$other" -n alice@example.org "$work/ckey.pub"
+  g -c user.signingkey="$work/ckey-cert.pub" commit -q --allow-empty -S -m "fix: signed with a certificate"
+  save cert-signed commit HEAD
+  g -c user.signingkey="$work/ckey-cert.pub" tag -s v9.9.5 -m v9.9.5
+  save cert-tag tag v9.9.5
+  printf 'A readme.\n' >"$repo/README.md"
+  g add README.md
+  g commit -q -S -m "docs: a readme"
+  g ls-tree HEAD >"$work/real/tree"
+  printf '%s %s\n' "$other" "$me" >"$repo/.mailmap"
+  g add .mailmap
+  g commit -q -S -m "docs: a mailmap"
+  g ls-tree HEAD >"$work/real/mailmap-tree"
 fi
 
 run_cases() {
@@ -148,7 +165,28 @@ run_cases() {
   parent="parent $hex"$'\n'
   author="author $me $when"$'\n'
   committer="committer $me $when"$'\n'
-  csig=$'gpgsig -----BEGIN SSH SIGNATURE-----\n U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgJy2p9tl3mZ2G2Rk+TJgwL9C6aP\n AAAAQDnJ+I+WpBqdU2ih4c5TjOVX27iOQRgTv5R2/CKmQeCR5/y5zmL6h27RFiPT9s==\n -----END SSH SIGNATURE-----\n'
+  # A signature as git writes one with a plain ed25519 key, here a throwaway
+  # one (S-030); a certificate's and an ECDSA key's first lines; the second
+  # line with text in the reserved field, over sha256, or with ssh-ed25518
+  # as the signature's type; the first with a = inside, or of version 2.
+  s1='U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAg0nMBCCi7TezaCrfKe1/jNbNRBI'
+  s2='aMvrUYIdW7QcS9TGEAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5'
+  s3='AAAAQGIui2B3WteCUsOpocsTR9V0RWITdvlCLdh2Q8PvuDvU59vDXVu8C3h503nF7Qwkfe'
+  s4='4DB5tjs3LCxzmD2AsWZgc='
+  scert='U1NIU0lHAAAAAQAAAeIAAAAgc3NoLWVkMjU1MTktY2VydC12MDFAb3BlbnNzaC5jb20AAA'
+  secdsa='U1NIU0lHAAAAAQAAAGgAAAATZWNkc2Etc2hhMi1uaXN0cDI1NgAAAAhuaXN0cDI1NgAAAE'
+  s2text='aMvrUYIdW7QcS9TGEAAAADZ2l0AAAAGkFsaWZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5'
+  s1eq='U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAg0nMBCCi7TezaCrfKe1/jNbNRB='
+  s1v2='U1NIU0lHAAAAAgAAADMAAAALc3NoLWVkMjU1MTkAAAAg0nMBCCi7TezaCrfKe1/jNbNRBI'
+  s2sha256='aMvrUYIdW7QcS9TGEAAAADZ2l0AAAAAAAAAAZzaGEyNTYAAABTAAAAC3NzaC1lZDI1NTE5'
+  s2type='aMvrUYIdW7QcS9TGEAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE4'
+  cl() { # lines: a commit's signature lines
+    printf ' %s\n' "$@"
+  }
+  cbegin=$'gpgsig -----BEGIN SSH SIGNATURE-----\n'
+  cend=$' -----END SSH SIGNATURE-----\n'
+  cbody="$(cl "$s1" "$s2" "$s3" "$s4")"$'\n'
+  csig="$cbegin$cbody$cend"
   msg=$'\nfix: a subject\n\nA body\twith a tab.\n\nSigned-off-by: '"$me"$'\n'
   good="$tree$parent$author$committer$csig$msg"
 
@@ -166,8 +204,8 @@ run_cases() {
   expect fail "commit: author not in UTC" "$tree$parent""author $me 1792951223 +0200"$'\n'"$committer$csig$msg" commit
   expect fail "commit: a name after a parent's hash" "$tree""parent $hex $other"$'\n'"$author$committer$csig$msg" commit
   expect fail "commit: a parent line inside another header" "$tree""x-$other parent $hex"$'\n'"$author$committer$csig$msg" commit
-  expect fail "commit: a name before a signature's start" "$tree$parent$author$committer""gpgsig $other"$'\n U1NIU0lH\n -----END SSH SIGNATURE-----\n'"$msg" commit
-  expect fail "commit: a name before a signature's end" "$tree$parent$author$committer"$'gpgsig -----BEGIN SSH SIGNATURE-----\n U1NIU0lH\n '"$other"$' -----END SSH SIGNATURE-----\n'"$msg" commit
+  expect fail "commit: a name before a signature's start" "$tree$parent$author$committer""gpgsig $other"$'\n'"$cbody$cend$msg" commit
+  expect fail "commit: a name before a signature's end" "$tree$parent$author$committer$cbegin$cbody"' '"$other"$' -----END SSH SIGNATURE-----\n'"$msg" commit
   expect fail "commit: an author line inside another header" "$tree$parent""x-$other author $me $when"$'\n'"$author$committer$csig$msg" commit
   expect fail "commit: a NUL in the author line" "$tree$parent""author $me $when~ $other"$'\n'"$committer$csig$msg" commit
   expect fail "commit: a mergetag header" "$tree$parent$author$committer"$'mergetag object '"$hex"$'\n type commit\n tagger '"$other $when"$'\n'"$csig$msg" commit
@@ -175,11 +213,21 @@ run_cases() {
   expect fail "commit: an unknown header" "$tree$parent$author$committer"$'x-reviewer '"$other"$'\n'"$csig$msg" commit
   expect fail "commit: two signatures" "$tree$parent$author$committer$csig$csig$msg" commit
   expect fail "commit: a PGP signature" "$tree$parent$author$committer"$'gpgsig -----BEGIN PGP SIGNATURE-----\n \n iQEzBAABCAAdFiEE\n -----END PGP SIGNATURE-----\n'"$msg" commit
-  expect fail "commit: a name in the signature" "$tree$parent$author$committer"$'gpgsig -----BEGIN SSH SIGNATURE-----\n '"$other"$'\n -----END SSH SIGNATURE-----\n'"$msg" commit
-  expect fail "commit: an address in the signature" "$tree$parent$author$committer"$'gpgsig -----BEGIN SSH SIGNATURE-----\n alice@example.org\n -----END SSH SIGNATURE-----\n'"$msg" commit
-  expect fail "commit: a NUL in a signature line" "$tree$parent$author$committer"$'gpgsig -----BEGIN SSH SIGNATURE-----\n U1NIU0lH~'"$other"$'\n -----END SSH SIGNATURE-----\n'"$msg" commit
+  expect fail "commit: a name in the signature" "$tree$parent$author$committer$cbegin$cbody"' '"$other"$'\n'"$cend$msg" commit
+  expect fail "commit: an address in the signature" "$tree$parent$author$committer$cbegin$cbody"$' alice@example.org\n'"$cend$msg" commit
+  expect fail "commit: a NUL in a signature line" "$tree$parent$author$committer$cbegin$(cl "$s1" "$s2~$other" "$s3" "$s4")"$'\n'"$cend$msg" commit
+  expect fail "commit: a signature by an SSH certificate (S-030)" "$tree$parent$author$committer$cbegin$(cl "$scert" "$s2" "$s3" "$s4")"$'\n'"$cend$msg" commit
+  expect fail "commit: a signature by an ECDSA key" "$tree$parent$author$committer$cbegin$(cl "$secdsa" "$s2" "$s3" "$s4")"$'\n'"$cend$msg" commit
+  expect fail "commit: text in a signature's reserved field (S-030)" "$tree$parent$author$committer$cbegin$(cl "$s1" "$s2text" "$s3" "$s4")"$'\n'"$cend$msg" commit
+  expect fail "commit: a signature four characters longer" "$tree$parent$author$committer$cbegin$(cl "$s1" "$s2" "$s3" AAAA "$s4")"$'\n'"$cend$msg" commit
+  expect fail "commit: a signature of version 2" "$tree$parent$author$committer$cbegin$(cl "$s1v2" "$s2" "$s3" "$s4")"$'\n'"$cend$msg" commit
+  expect fail "commit: a signature over sha256" "$tree$parent$author$committer$cbegin$(cl "$s1" "$s2sha256" "$s3" "$s4")"$'\n'"$cend$msg" commit
+  expect fail "commit: a signature of another type" "$tree$parent$author$committer$cbegin$(cl "$s1" "$s2type" "$s3" "$s4")"$'\n'"$cend$msg" commit
+  expect fail "commit: a signature that does not end in =" "$tree$parent$author$committer$cbegin$(cl "$s1" "$s2" "$s3" "${s4%=}A")"$'\n'"$cend$msg" commit
+  expect fail "commit: a = inside a signature" "$tree$parent$author$committer$cbegin$(cl "$s1eq" "$s2" "$s3" "$s4")"$'\n'"$cend$msg" commit
+  expect fail "commit: a header inside the signature" "$tree$parent$author$committer$cbegin$cbody"$'x-reviewer '"$other"$'\n'"$cend$msg" commit
   expect fail "commit: a line after the signature" "$tree$parent$author$committer$csig"$' '"$other"$'\n'"$msg" commit
-  expect fail "commit: a signature that never ends" "$tree$parent$author$committer"$'gpgsig -----BEGIN SSH SIGNATURE-----\n U1NIU0lH\n' commit
+  expect fail "commit: a signature that never ends" "$tree$parent$author$committer$cbegin$cbody" commit
   expect fail "commit: no message separator" "$tree$parent$author$committer$csig" commit
   expect fail "commit: a NUL in the message (S-025)" "$tree$parent$author$committer$csig"$'\nsubject\n\nhidden~\nCo-authored-by: '"$other"$'\n' commit
   expect fail "commit: a carriage return in the message" "$tree$parent$author$committer$csig"$'\nsubject\r\n' commit
@@ -193,7 +241,13 @@ run_cases() {
   object="object $hex"$'\n'
   type=$'type commit\n'
   tagger="tagger $me $when"$'\n'
-  tsig=$'-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgJy2p9tl3mZ2G2Rk+TJgwL9C6aP\nAAAAQDnJ+I+WpBqdU2ih4c5TjOVX27iOQRgTv5R2/CKmQeCR5/y5zmL6h27RFiPT9s==\n-----END SSH SIGNATURE-----\n'
+  tl() { # lines: a tag's signature lines
+    printf '%s\n' "$@"
+  }
+  tbegin=$'-----BEGIN SSH SIGNATURE-----\n'
+  tend=$'-----END SSH SIGNATURE-----\n'
+  tbody="$(tl "$s1" "$s2" "$s3" "$s4")"$'\n'
+  tsig="$tbegin$tbody$tend"
   tag() { # name: the tag and tagger headers and the message
     printf 'tag %s\n%s\n%s\n' "$1" "$tagger" "$1"
   }
@@ -211,8 +265,8 @@ run_cases() {
   expect fail "tag: a name after the object's hash" "object $hex $other"$'\n'"$type$(tag $v)"$'\n'"$tsig" tag $v
   expect fail "tag: an object line inside another header" "x-$other object $hex"$'\n'"$type$(tag $v)"$'\n'"$tsig" tag $v
   expect fail "tag: a tagger line inside another header" "$object$type"$'tag '"$v"$'\nx-'"$other tagger $me $when"$'\n\n'"$v"$'\n'"$tsig" tag $v
-  expect fail "tag: a name after a signature's start" "$object$type$(tag $v)"$'\n-----BEGIN SSH SIGNATURE----- '"$other"$'\nU1NIU0lH\n-----END SSH SIGNATURE-----\n' tag $v
-  expect fail "tag: a name before a signature's end" "$object$type$(tag $v)"$'\n-----BEGIN SSH SIGNATURE-----\nU1NIU0lH\n'"$other"$' -----END SSH SIGNATURE-----\n' tag $v
+  expect fail "tag: a name after a signature's start" "$object$type$(tag $v)"$'\n-----BEGIN SSH SIGNATURE----- '"$other"$'\n'"$tbody$tend" tag $v
+  expect fail "tag: a name before a signature's end" "$object$type$(tag $v)"$'\n'"$tbegin$tbody$other"$' -----END SSH SIGNATURE-----\n' tag $v
   expect fail "tag: no object" "$type$(tag $v)"$'\n'"$tsig" tag $v
   expect fail "tag: no type" "$object$(tag $v)"$'\n'"$tsig" tag $v
   expect fail "tag: no tag header" "$object$type$tagger"$'\n'"$v"$'\n'"$tsig" tag $v
@@ -237,11 +291,14 @@ run_cases() {
   expect fail "tag: a signature without the name" "$object$type"$'tag '"$v"$'\n'"$tagger"$'\n'"$tsig" tag $v
   expect fail "tag: the name twice" "$object$type$(tag $v)"$'\n'"$v"$'\n'"$tsig" tag $v
   expect fail "tag: a PGP signature" "$object$type$(tag $v)"$'\n-----BEGIN PGP SIGNATURE-----\n\niQEzBAABCAAdFiEE\n-----END PGP SIGNATURE-----\n' tag $v
-  expect fail "tag: a name in the signature" "$object$type$(tag $v)"$'\n-----BEGIN SSH SIGNATURE-----\n'"$other"$'\n-----END SSH SIGNATURE-----\n' tag $v
-  expect fail "tag: an address in the signature" "$object$type$(tag $v)"$'\n-----BEGIN SSH SIGNATURE-----\nalice@example.org\n-----END SSH SIGNATURE-----\n' tag $v
+  expect fail "tag: a name in the signature" "$object$type$(tag $v)"$'\n'"$tbegin$tbody$other"$'\n'"$tend" tag $v
+  expect fail "tag: an address in the signature" "$object$type$(tag $v)"$'\n'"$tbegin$tbody"$'alice@example.org\n'"$tend" tag $v
+  expect fail "tag: a signature by an SSH certificate (S-030)" "$object$type$(tag $v)"$'\n'"$tbegin$(tl "$scert" "$s2" "$s3" "$s4")"$'\n'"$tend" tag $v
+  expect fail "tag: text in a signature's reserved field (S-030)" "$object$type$(tag $v)"$'\n'"$tbegin$(tl "$s1" "$s2text" "$s3" "$s4")"$'\n'"$tend" tag $v
   expect fail "tag: a line after the signature" "$tgood$other"$'\n' tag $v
   expect fail "tag: two signatures" "$tgood$tsig" tag $v
-  expect fail "tag: a signature that never ends" "$object$type$(tag $v)"$'\n-----BEGIN SSH SIGNATURE-----\nU1NIU0lH\n' tag $v
+  expect fail "tag: a signature that never ends" "$object$type$(tag $v)"$'\n'"$tbegin$tbody" tag $v
+  expect fail "tag: a signature with no lines" "$object$type$(tag $v)"$'\n'"$tbegin" tag $v
 
   # --- messages --------------------------------------------------------------
 
@@ -284,6 +341,24 @@ run_cases() {
   expect fail "message: a name after a CR in a reviewer line" "$m"$'\nReviewed-by: '"$me"$'\r '"$other"$'\n' message
   expect fail "message: an underscore as the hyphen" "$m"$'\nCo_authored_by: '"$other"$'\n' message
 
+  # --- trees ---------------------------------------------------------------
+
+  entry() { # mode type name: one line of git ls-tree
+    printf '%s %s %s\t%s\n' "$1" "$2" "$hex" "$3"
+  }
+  # As ls-tree quotes a name with a byte above DEL: café.md.
+  files="$(entry 100644 blob README.md)"$'\n'"$(entry 040000 tree crates)"$'\n'"$(entry 100644 blob '"caf\303\251.md"')"$'\n'
+  expect pass "tree: the project's files" "$files" tree
+  expect pass "tree: a name that ends in .mailmap" "$files$(entry 100644 blob docs.mailmap)" tree
+  expect fail "tree: a .mailmap (S-031)" "$files$(entry 100644 blob .mailmap)" tree
+  expect fail "tree: a .mailmap in capitals" "$files$(entry 100644 blob .MailMap)" tree
+  expect fail "tree: a .mailmap with a trailing dot" "$files$(entry 100644 blob .mailmap.)" tree
+  # As ls-tree quotes a name with a byte above DEL, and as it writes one with
+  # core.quotePath off: U+200C, invisible, with .mailmap.
+  expect fail "tree: a quoted .mailmap" "$files$(entry 100644 blob '".mailmap\342\200\214"')" tree
+  expect fail "tree: a quoted .mailmap after an invisible character" "$files$(entry 100644 blob '"\342\200\214.mailmap"')" tree
+  expect fail "tree: a .mailmap after an invisible character" "$files$(entry 100644 blob $'\342\200\214.mailmap')" tree
+
   # --- objects git writes ----------------------------------------------------
 
   if [ "$real" = 1 ]; then
@@ -304,6 +379,10 @@ run_cases() {
     expect_file fail "git: a co-author in prose (S-013)" "$r/co-author-in-prose" message
     expect_file fail "git: a folded reviewer line (S-028)" "$r/folded-message" message
     expect_file fail "git: a reviewer line folded with a CR (W-035)" "$r/cr-folded-message" message
+    expect_file fail "git: a commit signed with an SSH certificate (S-030)" "$r/cert-signed" commit
+    expect_file fail "git: a tag signed with an SSH certificate (S-030)" "$r/cert-tag" tag v9.9.5
+    expect_file pass "git: a tree" "$r/tree" tree
+    expect_file fail "git: a tree with a .mailmap (S-031)" "$r/mailmap-tree" tree
   fi
 
   # --- usage ---------------------------------------------------------------
@@ -313,6 +392,7 @@ run_cases() {
   expect fail "usage: a commit with an argument" "$good" commit x
   expect fail "usage: a tag with two names" "$tgood" tag $v $v
   expect fail "usage: a message with an argument" "$m" message x
+  expect fail "usage: a tree with an argument" "$files" tree x
 
 }
 

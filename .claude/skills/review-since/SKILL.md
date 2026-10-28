@@ -142,9 +142,9 @@ Side-branch reviews are the exception: see step 5.
   (`SECURITY.md`, "Our own findings"; S-006). Once committed, the log and the
   worklists are public, so for such a finding the entry names only its ID, its
   severity and whether it blocks the release, never where it is or how to
-  trigger it. Hand its details to the user for a private draft advisory
-  instead; its worklist entry follows once the fix is on `main`. To re-check
-  it in step 4, ask the user for the advisory's details. Its ID counts as used
+  trigger it. Hand its details to the user, who keeps them out of the
+  repository; its worklist entry follows once the fix is on `main`. To
+  re-check it in step 4, ask the user for its details. Its ID counts as used
   for the ID rule below, though so far it appears only in a log. Low findings
   may be public before they are fixed.
 - Worklist format: once a worklist of the same kind exists under `plans/`, follow

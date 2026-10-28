@@ -10,7 +10,8 @@ added S-010 to S-015, all low. The fifth (2026-10-21, `9bf18dc..255353b`,
 `255353b..c3d405d`, #23, #25 and #26) added S-021 to S-024, all low. The
 seventh (2026-10-25, `c3d405d..118f710`, the review PR after #26) added S-025
 and S-026, both low. The eighth (2026-10-27, `118f710..f2380e7`, #28, #30 and
-#31) added S-028 and S-029, both low.
+#31) added S-028 and S-029, both low. The ninth (2026-10-28,
+`f2380e7..ee97e24`, #32 and #33) added S-030 to S-032, all low.
 
 IDs are unique across all worklists and continue from the highest S-number used,
 including one that so far appears only in a review log (`SECURITY.md`, "Our own
@@ -648,5 +649,92 @@ that fixed it.
   key is none of the maintainer's, so it is not added to the project's
   account, and the three commits stay as they are. They were most likely
   signed by the hosted environment that made them; work made elsewhere is
-  re-signed with the project's key before it merges. `c618dea` (#32), the
-  first commit after them, is verified.
+  re-signed with the project's key before it merges. `f2380e7` (#31), the
+  first commit after them, and every commit since are verified. (The
+  ninth review corrected this line, which had named `c618dea`.)
+
+### S-030 · Low · A signature made with an SSH certificate carries a name, and the checks pass it
+
+- **Where:** `.github/checks/commit-object.awk` and `tag-object.awk`, the
+  rules for a signature's lines (S-022, `118f710`; moved in `9b8cefe`).
+- **Problem:** an SSH signature embeds the signer's public key. When the
+  key is a certificate, that blob holds the certificate's key ID and
+  principals in clear, such as `Alice Example <alice@example.org>`. The
+  checks allow any base64 line in a signature, so a commit or tag signed
+  with a certificate passes `object.sh` and every hygiene and Release step;
+  the identity step reads only author, committer and trailers.
+- **Impact:** privacy, as S-013: it needs a maintainer to sign with a
+  certificate in place of the project's plain key, which none does today.
+- **Fix:** a signature must be laid out as git writes one with a plain
+  ed25519 key: 173 bytes, SSHSIG version 1, the key, namespace `git`, an
+  empty reserved field, `sha512` and the signature. Every commit since
+  `5393f67` and `v0.0.1` is. Pinning one key would refuse history signed
+  with the project's other keys. S-026's allowed-signers file must list
+  plain keys, never a `cert-authority` line.
+- **Verified:** reproduced by the reviewer, with a throwaway CA and
+  certificate, then by a fresh agent, which also checked the prefix
+  against every signature in the history and tried the fix on a copy.
+- **Release:** not blocking; fixed before the tag.
+- **Status:** fixed in the PR after #33: `.github/checks/ssh-signature.awk`,
+  loaded by the commit and tag checks. A first version checked only the
+  signature's first line; the second agent's review found that text in the
+  reserved field, which OpenSSH reads and then ignores, still passed, and
+  `ssh-keygen -Y check-novalidate` called such a signature good. `test.sh`
+  fails a commit and a tag that git signs with a throwaway certificate, and
+  crafted signatures by a certificate or an ECDSA key, of version 2, over
+  `sha256`, of another signature type, with text in the reserved field, four characters longer, with
+  a `=` inside or not ending in one; the crafted valid one is a real
+  signature by a throwaway key, and each failing case differs from it in
+  one way. A mutant for each part of the layout. The 25 commits since
+  `5393f67` and `v0.0.1` pass. Until S-026, the key's 32 bytes, the
+  signature's 64 and the few bits that share a base64 character with them
+  are unverified and could hold anything.
+
+### S-031 · Low · A committed `.mailmap` would show another name on every project commit
+
+- **Where:** `.github/workflows/hygiene.yml`, the identity step (predates
+  the range).
+- **Problem:** a `.mailmap` in the tree that maps the project's identity to
+  another makes `git log`, `shortlog` and `blame` show that identity on
+  every project commit. The identity step reads `%an` and `%ae`, which
+  ignore the mailmap, and no step refuses the file.
+- **Impact:** privacy, in every clone's history view; it needs a reviewed
+  change that adds the file. GitHub's own pages are believed not to read
+  `.mailmap`.
+- **Fix:** the hygiene job fails a commit whose top-level tree holds a
+  `.mailmap` in any case of its name, with a case and a mutant. The
+  Release workflow needs no step of its own: a tag must be on `main`, every
+  commit of which the hygiene job checks.
+- **Verified:** reproduced by the reviewer, then by a fresh agent.
+- **Release:** not blocking; fixed before the tag.
+- **Status:** fixed in the PR after #33: `.github/checks/tree.awk`, run as
+  `object.sh tree` on `git ls-tree` of every commit since `5393f67` by the
+  step "No mailmap", which fails if `git ls-tree` does. Any top-level name
+  that starts with `.mailmap`, in any case and quoted or not, fails, as a
+  file system could ignore a trailing dot or space or an invisible
+  character; every byte outside ASCII is left out first, as ls-tree
+  writes it in octal or as it is (found by the second agent's reviews).
+  `test.sh` fails `.mailmap`, `.MailMap`, `.mailmap.`, U+200C after or
+  before `.mailmap`, quoted or not, and one git makes, and passes
+  `docs.mailmap` and a quoted `café.md`; eight mutants. No commit since
+  `5393f67` holds one.
+
+### S-032 · Low · The release gate's rule for the tagged commit is stated as a result, not a check
+
+- **Where:** `plans/todo/v0.0.2.md`, criterion 10's amendment and row 8
+  (`c618dea`, `ee97e24`).
+- **Problem:** the gate says the tagged commit changes only logs, plans and
+  the CHANGELOG, "so the logs cover every commit before it", and row 8
+  names "the commit that logs the reviews of the PR after #32". A commit
+  that lands after #33 and before the tag still meets row 8's words, while
+  no log covers it.
+- **Impact:** a release whose tag's parent no review covers, the gap
+  W-037 was meant to close.
+- **Fix:** before tagging, check that the tag's parent is both logs'
+  newest Tip and baseline, that the tag commit has one parent, and that
+  `git diff --name-only <tag>^ <tag>` lists nothing outside `docs/logs/`,
+  `plans/` and `CHANGELOG.md`; the gate and row 8 say so.
+- **Verified:** by a fresh agent, from the plan's text.
+- **Release:** must be fixed before the tag; it changes only `plans/`.
+- **Status:** fixed in the PR after #33, which restates the gate; its
+  checks are run when tagging.

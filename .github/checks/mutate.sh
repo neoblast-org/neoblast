@@ -73,7 +73,7 @@ mutant() { # label file old new
   fi
 }
 
-# --- commit-object.awk (S-022, S-025) --------------------------------------
+# --- commit-object.awk (S-022, S-025, S-030) -------------------------------
 
 c=commit-object.awk
 mutant "commit: any header" $c $'{ bad = 1 }\nEND' $'{ }\nEND'
@@ -81,12 +81,12 @@ mutant "commit: a name after a parent's hash" $c '/^(tree|parent) [0-9a-f]+$/' '
 mutant "commit: a parent line inside another header" $c '/^(tree|parent) ' '/(tree|parent) '
 mutant "commit: any signature start" $c '$0 == "gpgsig -----BEGIN SSH SIGNATURE-----"' '/^gpgsig /'
 mutant "commit: any signature end" $c 'sig && $0 == " -----END SSH SIGNATURE-----"' 'sig && /END/'
+mutant "commit: a signature not checked (S-030)" $c 'if (!ssh_signature_ok(b)) bad = 1; ' ''
 mutant "commit: an author line inside another header" $c '/^(author|committer) ' '/(author|committer) '
 mutant "commit: any author" $c 'committer) neoblast maintainers <dev@neoblast\.dev> [0-9]+' 'committer) .* [0-9]+'
 mutant "commit: any time zone" $c '[0-9]+ \+0000$/' '[0-9]+ [+-][0-9]+$/'
 mutant "commit: two signatures" $c ' && !s++ { sig = 1' ' { sig = 1'
 mutant "commit: any line in a signature" $c 'sig { bad = 1; sig = 0 }' 'sig { next }'
-mutant "commit: any word in a signature" $c '/^ [A-Za-z0-9+\/=]+$/' '/^ [^ ]+$/'
 mutant "commit: no message separator needed" $c 'bad || !body || sig' 'bad || sig'
 mutant "commit: control bytes in a message (S-025)" $c 'body && /[\001-\010\013-\037\177]/ { bad = 1 }' ''
 mutant "commit: backspace in a message" $c '\001-\010' '\001-\007'
@@ -94,7 +94,7 @@ mutant "commit: vertical tab in a message" $c '\013-\037' '\016-\037'
 mutant "commit: DEL in a message" $c '\037\177]' '\037]'
 mutant "commit: bytes above DEL in a message" $c '\037\177]' '\037\177-\377]'
 
-# --- tag-object.awk (S-015, S-017, S-022) ----------------------------------
+# --- tag-object.awk (S-015, S-017, S-022, S-030) ---------------------------
 
 t=tag-object.awk
 mutant "tag: any header" $t $'{ bad = 1 }\nEND' $'{ }\nEND'
@@ -117,11 +117,11 @@ mutant "tag: no message needed" $t ' || m != 1' ''
 mutant "tag: the name twice" $t '!m++ && $0 == name ""' '$0 == name "" && (m = 1)'
 mutant "tag: a message other than the name" $t '!m++ && $0 == name ""' '!m++'
 mutant "tag: the name compared as a number" $t '$0 == name ""' '$0 == name'
-mutant "tag: any word in a signature" $t '/^[A-Za-z0-9+\/=]+$/' '/^[^ ]+$/'
-mutant "tag: lines after the signature" $t '{ part = 3; next }' '{ part = 1; next }'
+mutant "tag: a signature not checked (S-030)" $t 'if (!ssh_signature_ok(b)) bad = 1; ' ''
+mutant "tag: lines after the signature" $t '{ part = 3; if' '{ part = 1; if'
 mutant "tag: a signature that never ends" $t ' || part == 2 }' ' }'
 
-# --- message.awk (S-013, S-018, S-028, W-035) -----------------------------
+# --- message.awk (S-013, S-018, S-028, W-035) ------------------------------
 
 g=message.awk
 mutant "message: only an ASCII hyphen (S-018)" $g '[^a-z0-9 \t:]by' '-by'
@@ -141,6 +141,30 @@ mutant "message: a line of blanks and a CR folds" $g '/^[ \t\r]+[^ \t\r]/' '/^[ 
 mutant "message: a CR does not fold (W-035)" $g '/^[ \t\r]+[^ \t\r]/' '/^[ \t]+[^ \t]/'
 mutant "message: a lone CR does not end a line (S-018)" $g 'split($0, part, "\r")' 'split($0, part, "\n")'
 
+# --- ssh-signature.awk (S-030) ---------------------------------------------
+
+v=ssh-signature.awk
+mutant "signature: any length" $v 'length(s) == 232 &&' '1 &&'
+mutant "signature: any key type (S-030)" $v 'substr(s, 1, 44) == "U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAg" &&' '1 &&'
+mutant "signature: any reserved field (S-030)" $v 'substr(s, 89, 56) == "AAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5AAAA" &&' '1 &&'
+mutant "signature: any characters" $v 's ~ /^[A-Za-z0-9+\/]+=$/' '1'
+mutant "signature: any last character" $v '+=$/' '+.$/'
+mutant "signature: any magic or version" $v 'substr(s, 1, 44) == "U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAg"' 'substr(s, 17, 28) == "ADMAAAALc3NoLWVkMjU1MTkAAAAg"'
+mutant "signature: any hash" $v 'substr(s, 89, 56) == "AAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5AAAA"' 'substr(s, 89, 18) == "AAADZ2l0AAAAAAAAAA"'
+mutant "signature: any signature type" $v 'substr(s, 89, 56) == "AAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5AAAA"' 'substr(s, 89, 32) == "AAADZ2l0AAAAAAAAAAZzaGE1MTIAAABT"'
+
+# --- tree.awk (S-031) ------------------------------------------------------
+
+r=tree.awk
+mutant "tree: a .mailmap (S-031)" $r 'n ~ /^"?\.mailmap/ { bad = 1 }' ''
+mutant "tree: case matters" $r 'tolower($2)' '$2'
+mutant "tree: octal escapes kept" $r 'gsub(/\\[0-7][0-7][0-7]/, "", n)' ''
+mutant "tree: bytes above DEL kept" $r 'gsub(/[\200-\377]/, "", n)' ''
+mutant "tree: only the name .mailmap" $r '/^"?\.mailmap/' '/^"?\.mailmap$/'
+mutant "tree: quoted names pass" $r '/^"?\.mailmap/' '/^\.mailmap/'
+mutant "tree: .mailmap anywhere in a name" $r '/^"?\.mailmap/' '/\.mailmap/'
+mutant "tree: fields split at blanks" $r 'BEGIN { FS = "\t" }' ''
+
 # --- object.sh -------------------------------------------------------------
 
 o=object.sh
@@ -148,6 +172,7 @@ mutant "object.sh: NULs reach the commit check" $o "commit:1) tr '\\000' '\\001'
 mutant "object.sh: commit takes any arguments" $o 'commit:1)' 'commit:*)'
 mutant "object.sh: tag takes any arguments" $o 'tag:2)' 'tag:*)'
 mutant "object.sh: message takes any arguments" $o 'message:1)' 'message:*)'
+mutant "object.sh: tree takes any arguments" $o 'tree:1)' 'tree:*)'
 utf8=$(locale -a 2>/dev/null | grep -i -E '^(C|en_US)\.utf-?8$' | head -n 1 || true)
 if [ -n "$utf8" ] && ! printf '\351' | LC_ALL="$utf8" tr a a >/dev/null 2>&1; then
   mutant "object.sh: the caller's locale (W-036)" $o 'export LC_ALL=C' ':'

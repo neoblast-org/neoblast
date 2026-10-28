@@ -1,6 +1,6 @@
 # Security Review Log
 
-<!-- baseline --> **Next review diffs from:** `f2380e7ff4ac4708d9dc8599915feb49397b4c98` (`main`, recorded 2026-10-27)
+<!-- baseline --> **Next review diffs from:** `ee97e249c20aee06f44a6ebb0da54734d7ed0fff` (`main`, recorded 2026-10-28)
 
 A running record of branch security reviews. Each entry records the exact commit range
 reviewed; the baseline marker line above is the machine-owned frontier the next
@@ -21,6 +21,82 @@ marker line; a frontier-moving entry's Base must equal the previous one's Tip un
 the entry explains why not.
 
 ## Entries
+
+### 2026-10-28 · `f2380e7..ee97e24` (#32 and #33)
+
+| | Commit | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `f2380e7ff4ac4708d9dc8599915feb49397b4c98` | 2026-10-26T20:00:22Z | ci: pin dtolnay/rust-toolchain to 683b588 (#31) |
+| Tip | `ee97e249c20aee06f44a6ebb0da54734d7ed0fff` | 2026-10-28T05:06:18Z | fix: the code review of #32; log it (#33) |
+
+- **Scope:** 2 commits (`git rev-list --count f2380e7..ee97e24`) and 12
+  files, +521/−48 (`git diff --shortstat f2380e7 ee97e24`): the eighth
+  reviews' logs and fixes (#32) and the fixes from the code review of #32
+  (#33), of which 6 files, +98/−27, under `.github/` (the same command
+  with `-- .github`) and none under `crates/`. Base equals the previous
+  entry's Tip. Only the committed range is covered.
+- **Method:** a fresh agent read `.github/` and how both workflows call
+  `object.sh`, compared `message.awk` with `git interpret-trailers --parse`
+  on 16,000 random messages, made commits and tags with git in a throwaway
+  repository, and ran `test.sh` under mawk, gawk, busybox and macOS awk and
+  `mutate.sh`; another read the docs, both commits and #32's and #33's pull
+  requests and timelines through GitHub's API. A third fresh agent tried to
+  refute each finding.
+- **Findings:** 3, all low, in
+  [`plans/todo/security-review-s-series.md`](../../plans/todo/security-review-s-series.md):
+  - **S-030 (Low):** a signature made with an SSH certificate carries a
+    name, and the checks pass it (predates the range).
+  - **S-031 (Low):** a committed `.mailmap` would show another name on
+    every project commit, and no step refuses one (predates the range).
+  - **S-032 (Low):** the release gate's rule for the tagged commit is
+    stated as a result, not a check (#32, #33).
+- **Not tracked:**
+  - A pull request runs its own copy of the checks and workflows, so one
+    that weakens a check passes its own run: no change inside the
+    repository can close that, and every `.github/` change is reviewed as
+    the check itself and applied by hand.
+  - `Co-authored-by` with a no-break space before the colon is no trailer
+    to git and passes; whether GitHub counts it is unknown, and it is no
+    more than a name in prose, which is not checked by design.
+  - S-029's status named `c618dea` as the first commit after the three
+    with the unknown key; it is `f2380e7` (#31), and the line is
+    corrected.
+- **Checked, no finding:**
+  - No message passed `object.sh message` while git read a `-by:` trailer
+    naming anyone else, among the 16,000; the fold rule's blanks are git's
+    (space, tab, CR; not `\v` or `\f`); every CR case also fails
+    `commit-object.awk` first.
+  - `tag-object.awk` compares the name as a string under every awk;
+    `HEAD_SHA` and the tag's ref reach the steps only through quoted
+    environment variables, and a ref name cannot hold a control byte,
+    space or `:`.
+  - `object.sh` sets `LC_ALL=C` for every `tr` and `awk`; `test.sh` and
+    `mutate.sh` touch only `mktemp -d` directories with a cleared git
+    environment.
+  - `test.sh`: 127 cases under each of mawk, gawk, busybox and macOS awk,
+    none wrong; `mutate.sh`: 60 mutants under mawk, none survived.
+  - Both commits are the project's, in UTC, signed off and signed with the
+    project's key; GitHub shows both verified, and both pushes to `main`
+    passed `protect-main` with no bypass.
+  - #32 and #33 were opened and merged as the project, with no comments or
+    reviews, and every timeline actor is the project's account.
+  - Privacy: no names, addresses, paths or session links in the range's
+    text, its commit messages or the two pull requests.
+  - No open finding of medium severity or higher is described in public:
+    S-027 appears only by ID, severity and the release rule.
+- **Outcome:** no blocker. S-030 and S-031 are fixed in the PR after #33,
+  applied by hand, and the same PR restates the gate for S-032. `SECURITY.md`
+  said a private finding's details go into a draft advisory, and S-027's
+  are in none: the maintainer keeps them out of the repository, and the PR
+  after #33 says so in `SECURITY.md`. With no advisory to publish with the
+  release, S-027 is fixed before the tag.
+- **Carried-over items:** S-002 open; S-003 open; S-007 open, with every
+  merge a fast-forward; S-008 open until the GitHub-side copies are
+  removed; S-024 open, its `Cargo.toml` minimum after v0.0.2; S-026 open;
+  S-027 handled privately, not yet fixed; S-028 fixed in `c618dea` (#32)
+  and completed in `ee97e24` (#33, W-035), so `c618dea` is not tagged
+  (W-037); S-029 open until S-026's check runs in CI, the key not added to
+  the project's account.
 
 ### 2026-10-27 · `118f710..f2380e7` (#28, #30 and #31)
 
