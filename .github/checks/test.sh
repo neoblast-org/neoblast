@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Tests object.sh: what the project makes must pass, and each way a name
 # could ride inside a commit, a tag or a commit message must fail (S-013,
-# S-015, S-017, S-018, S-022, S-025, S-028). The hygiene job runs it, then
-# mutate.sh, before the checks themselves.
+# S-015, S-017, S-018, S-022, S-025, S-028, W-035). The hygiene job runs
+# it, then mutate.sh, before the checks themselves.
 #
 #   .github/checks/test.sh        # every case under every awk found
 #   .github/checks/test.sh -v     # and print each case
@@ -58,6 +58,9 @@ me='neoblast maintainers <dev@neoblast.dev>'
 other='Alice Example <alice@example.org>'
 hex=5393f6704b5059c4c8ecfbb6adc01718c13c4455
 when='1792951223 +0000'
+# A UTF-8 locale, where there is one, for the case that needs object.sh to
+# set its own (W-036).
+utf8=$(locale -a 2>/dev/null | grep -i -E '^(C|en_US)\.utf-?8$' | head -n 1 || true)
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
@@ -133,6 +136,9 @@ if [ "$real" = 1 ]; then
   save_message co-author-in-prose HEAD
   g commit -q --allow-empty -S -s -m "fix: a folded reviewer line" -m "Reviewed-by: $me"$'\n '"$other"
   save_message folded-message HEAD
+  printf '%s' "fix: a reviewer line folded with a CR"$'\n\nReviewed-by: '"$me"$'\n\r'"$other"$'\n' >"$work/cr-message"
+  g commit -q --allow-empty -S --cleanup=verbatim -F "$work/cr-message"
+  save_message cr-folded-message HEAD
 fi
 
 run_cases() {
@@ -152,7 +158,7 @@ run_cases() {
   expect pass "commit: an empty message" "$tree$parent$author$committer$csig"$'\n' commit
   # Allowed until a check verifies signatures (S-026).
   expect pass "commit: unsigned" "$tree$parent$author$committer$msg" commit
-  expect pass "commit: a Latin-1 byte in the message" "$tree$parent$author$committer$csig"$'\nfix: caf\351\n' commit
+  LC_ALL="${utf8:-${LC_ALL-}}" expect pass "commit: a Latin-1 byte in the message, in a UTF-8 locale" "$tree$parent$author$committer$csig"$'\nfix: caf\351\n' commit
   expect pass "commit: a UTF-8 message" "$tree$parent$author$committer$csig"$'\nfix: caf\xc3\xa9 \xe2\x80\x94 a subject\n' commit
 
   expect fail "commit: another author" "$tree$parent""author $other $when"$'\n'"$committer$csig$msg" commit
@@ -252,6 +258,7 @@ run_cases() {
   expect pass "message: Reviewed by: with a space (not checked)" "$m"$'\nReviewed by: '"$other"$'\n' message
   expect pass "message: an indented line after a blank line" "$m"$'\nReviewed-by: '"$me"$'\n\n '"$other"$'\n' message
   expect pass "message: a line of blanks after a reviewer line" "$m"$'\nReviewed-by: '"$me"$'\n \t\n' message
+  expect pass "message: a line of blanks and a CR after a reviewer line" "$m"$'\nReviewed-by: '"$me"$'\n \r\n' message
 
   expect fail "message: a co-author" "$m"$'\nCo-authored-by: '"$other"$'\n' message
   expect fail "message: a sign-off by someone else" "$m"$'\nSigned-off-by: '"$other"$'\n' message
@@ -268,6 +275,13 @@ run_cases() {
   expect fail "message: a reviewer line folded onto the next (S-028)" "$m"$'\nReviewed-by: '"$me"$'\n '"$other"$'\n' message
   expect fail "message: a reviewer line folded with a tab" "$m"$'\nReviewed-by: '"$me"$'\n\t'"$other"$'\n' message
   expect fail "message: a reviewer line folded in CRLF" "$m"$'\nReviewed-by: '"$me"$'\r\n '"$other"$'\r\n' message
+  # Git folds each of these too; they once passed, as CRs were turned into
+  # newlines before the fold rule ran (W-035).
+  expect fail "message: folded after two CRs" "$m"$'\nReviewed-by: '"$me"$'\r\r\n '"$other"$'\n' message
+  expect fail "message: folded with a CR" "$m"$'\nReviewed-by: '"$me"$'\n\r'"$other"$'\n' message
+  expect fail "message: folded with a space and a CR" "$m"$'\nReviewed-by: '"$me"$'\n \r'"$other"$'\n' message
+  expect fail "message: folded with a CR and a space" "$m"$'\nReviewed-by: '"$me"$'\n\r '"$other"$'\n' message
+  expect fail "message: a name after a CR in a reviewer line" "$m"$'\nReviewed-by: '"$me"$'\r '"$other"$'\n' message
   expect fail "message: an underscore as the hyphen" "$m"$'\nCo_authored_by: '"$other"$'\n' message
 
   # --- objects git writes ----------------------------------------------------
@@ -289,6 +303,7 @@ run_cases() {
     expect_file fail "git: a co-author trailer" "$r/co-author-message" message
     expect_file fail "git: a co-author in prose (S-013)" "$r/co-author-in-prose" message
     expect_file fail "git: a folded reviewer line (S-028)" "$r/folded-message" message
+    expect_file fail "git: a reviewer line folded with a CR (W-035)" "$r/cr-folded-message" message
   fi
 
   # --- usage ---------------------------------------------------------------

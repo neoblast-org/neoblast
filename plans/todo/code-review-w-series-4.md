@@ -10,8 +10,9 @@ cleanup; none blocks v0.0.2. W-028 to W-030 each change `crates/`, and so every 
 `/review-since` (`c3d405d..118f710`, the review PR after #26) added W-031,
 which is outside `code_id` and can land before the tag. The eighth
 (`118f710..f2380e7`, #28, #30 and #31) added W-032 to W-034, all outside
-`code_id`: W-032 and W-033 are fixed in the review PR after #31, and W-034
-waits until after v0.0.2.
+`code_id`: W-032 and W-033 are fixed in #32 (`c618dea`), and W-034
+waits until after v0.0.2. The ninth (`f2380e7..c618dea`, #32) added W-035
+to W-037, also outside `code_id`, fixed before the tag.
 
 IDs are unique across all worklists and continue from the highest W-number used.
 
@@ -32,8 +33,15 @@ IDs are unique across all worklists and continue from the highest W-number used.
    names the commit `v0.0.2` tags.
 7. W-034: the identity and UTC steps' programs are in `.github/checks/`,
    with cases and mutants.
-8. Each fix that can be reached has a regression test that fails without it,
-   and the golden vectors are unchanged.
+8. W-035: `object.sh message` fails every message in which git folds a
+   line into a `-by:` trailer, carriage returns included, and passes the
+   messages it passes today without one.
+9. W-036: `LC_ALL=C` is set in one place, and what tests its loss is
+   stated as it is.
+10. W-037: the commit `v0.0.2` tags changes nothing under `.github/` or in
+    `code_id`, and both review logs cover every commit before it.
+11. Each fix that can be reached has a regression test that fails without it,
+    and the golden vectors are unchanged.
 
 ## Findings
 
@@ -130,7 +138,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   with no test failing.
 - Remediation: a case and a mutant for each rule.
 - Verified: by a fresh agent, by mutation under mawk, gawk and busybox.
-- Status: fixed in the review PR after #31: cases for two `type`, `tag`
+- Status: fixed in #32 (`c618dea`): cases for two `type`, `tag`
   and `tagger` lines and a UTF-8 message, and mutants that keep each guard
   counting (`++t`) or widen the class. With them, two smaller fixes:
   `tag-object.awk` compares the message to the tag's name as a string, as
@@ -154,7 +162,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Remediation: cite the commits on `main`; tag the review PR after #31;
   date 0.0.2 to the day it is tagged.
 - Verified: by a fresh agent (`git cat-file -t` on each hash).
-- Status: fixed in the review PR after #31.
+- Status: fixed in #32 (`c618dea`).
 
 ### W-034 (cleanup): two hygiene steps still hold their own awk
 
@@ -169,6 +177,82 @@ IDs are unique across all worklists and continue from the highest W-number used.
   W-031 did for the others.
 - Verified: by a fresh agent.
 - Status: open; outside `code_id`, not needed for v0.0.2.
+
+### W-035 (low): a carriage return hides a folded attribution line
+
+- Where: `.github/checks/object.sh`, the message line, and `message.awk`'s
+  fold rule (`c618dea`, S-028).
+- What: git splits a message into lines only at `\n`, and folds a line
+  that starts with a space, tab or carriage return into the trailer above
+  it. `object.sh` first drops one CR before each newline and turns every
+  other CR into a newline, so `message.awk` sees a blank line where git
+  sees none, and its `by` flag is reset. `object.sh message` passes
+  `Reviewed-by: <project>\r\r\n <other>`, `…\n\r<other>`, `…\n \r<other>`
+  and `…\n\r <other>`, each of which `git interpret-trailers --parse`
+  reads as one `Reviewed-by` line naming the other party. S-028's CRLF
+  case uses a single CR, which the pre-pass was written for.
+- Reach: none in CI. `commit-object.awk`'s control-byte class refuses a CR
+  anywhere in a commit, and the hygiene job runs that check over the same
+  commits; the gap is in `object.sh message` on its own, which `test.sh`
+  claims to cover.
+- Remediation: `message.awk` reads git's lines as they are: the fold rule
+  treats CR as a blank (`/^[ \t\r]+[^ \t\r]/`), and the `-by:` rule runs on
+  each part of a line split at CR (S-018). The pre-pass and `tr` go, and
+  with them a process per commit. A case for each input above, and mutants
+  for a fold rule that ignores CR and for a line not split at CR.
+- Verified: by a fresh agent, with `git interpret-trailers --parse` and
+  real commits through both hygiene steps, under macOS awk; a prototype
+  passed `test.sh` and failed all four inputs.
+- Status: fixed in the PR after #32. `message.awk` reads git's lines,
+  folds on a space, tab or carriage return (git does not fold on `\v` or
+  `\f`), and splits each line at a carriage return for the `-by:` rule;
+  `object.sh` passes the message to it as it is. A `-by:` value runs on to
+  the end of git's line, CRs and all, as git reads it: the second agent's
+  review found `Reviewed-by: <project>\r <other>`, which the first version
+  of this fix passed, and `…\r<other>`, which `c618dea` passed too.
+  `test.sh` fails the four inputs above, the CR inside a line, and a commit
+  git writes with a CR-folded line, and passes a line of blanks and a CR;
+  mutants for a fold that ignores CR, a line not split at CR, a value that
+  ends at a CR and a CR that counts replace the two `object.sh` ones. The
+  24 commits since `5393f67` still pass.
+
+### W-036 (cleanup): `LC_ALL=C` is set five times, and its loss is caught only on macOS
+
+- Where: `.github/checks/object.sh`, the `export LC_ALL=C` and the four
+  `LC_ALL=C awk` prefixes; `mutate.sh`'s header (`c618dea`, W-032).
+- What: the export makes the prefixes do nothing, so removing any one of
+  them fails no test. Removing the export fails `test.sh`'s Latin-1 case
+  only with BSD `tr` under a UTF-8 locale: on GitHub's runner GNU `tr`
+  reads bytes in any locale. `mutate.sh`'s header says the Latin-1 case
+  catches it, without saying where.
+- Remediation: keep the export and drop the prefixes; have the header say
+  the case catches the export's loss only on macOS, and, where `locale -a`
+  lists a UTF-8 locale, run that case under it so the result does not
+  depend on the caller's.
+- Verified: by a fresh agent, by mutation on a copy, under UTF-8 and C
+  locales; the Linux side by reasoning.
+- Status: fixed in the PR after #32. `object.sh` sets `LC_ALL=C` once;
+  `test.sh` runs the Latin-1 case under `C.UTF-8` or `en_US.UTF-8` where
+  `locale -a` lists one, and `mutate.sh` removes the export as a mutant
+  only where `tr` refuses a byte outside UTF-8 (macOS's), its header
+  saying why.
+
+### W-037 (low): the amended release gate lets the tagged commit change the release checks
+
+- Where: `plans/todo/v0.0.2.md`, criterion 10's amendment and row 8
+  (`c618dea`).
+- What: the amendment let the commit `v0.0.2` tags be the review PR that
+  logs the last reviews, its own changes reviewed by an agent before merge
+  and logged only by the next `/review-since`. Row 8 named `c618dea`,
+  which changes `tag-object.awk` and `object.sh`; the Release workflow runs
+  both, from that commit, on the tag, while neither review log covered
+  them.
+- Remediation: the tagged commit changes only `docs/logs/`, `plans/` and
+  `CHANGELOG.md`, and logs the reviews of every commit before it; the
+  amendment and row 8 say so. `c618dea` is not tagged.
+- Verified: by a fresh agent, against `release.yml`.
+- Status: fixed in the PR after #32: criterion 10's amendment and rows
+  7e and 8 of `plans/todo/v0.0.2.md` say so.
 
 ## Not tracked
 
@@ -219,3 +303,12 @@ Checked by the same review and left as they are, with the reason:
   - `commit-object.awk` does not require a tree, author or committer: git
     writes no such commit, `git log` fails the step on a commit with no
     tree, and the identity step fails one with no author or committer.
+- From the ninth review (`f2380e7..c618dea`):
+  - The fold rule fails a prose `-by:` line followed by an indented one,
+    where git reads no trailer: like S-013's rule, it applies anywhere in
+    the message, and fails closed.
+  - The git-made folded case does not ask git whether it folds the line:
+    if git stopped folding, the check would only be stricter than it needs
+    to be.
+  - `mutate.sh`'s ten new mutants make it about 40 s slower: as for the
+    eighth review's item on its cost.

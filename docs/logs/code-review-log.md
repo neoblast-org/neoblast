@@ -1,6 +1,6 @@
 # Code Review Log
 
-<!-- baseline --> **Next review diffs from:** `f2380e7ff4ac4708d9dc8599915feb49397b4c98` (`main`, recorded 2026-10-27)
+<!-- baseline --> **Next review diffs from:** `c618dea9e15535f3de44ed34d4e1522d80e756ab` (`main`, recorded 2026-10-27)
 
 A running record of code-review events: branch/pre-PR reviews, review worklists, and
 remediation programmes. Newest entry first. The baseline marker line above is the
@@ -27,6 +27,51 @@ merge-base fallback). Side-branch pre-PR reviews are logged as entries marked
 "frontier unchanged (side branch)" and never move the line.
 
 ## Entries
+
+### 2026-10-27: `f2380e7..c618dea` (#32)
+
+| | SHA | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `f2380e7ff4ac4708d9dc8599915feb49397b4c98` | 2026-10-26 | ci: pin dtolnay/rust-toolchain to 683b588 (#31) |
+| Tip | `c618dea9e15535f3de44ed34d4e1522d80e756ab` | 2026-10-27 | fix: review findings from #28, #30 and #31; log the eighth reviews (#32) |
+
+- **Scope:** 1 commit (`git rev-list --count f2380e7..c618dea`) and 12
+  files, +327/−34 (`git diff --shortstat f2380e7 c618dea`): the fixes for
+  S-028, W-032 and W-033 and the eighth reviews' logs, of which 6 files,
+  +55/−15, under `.github/` (the same command with `-- .github`) and none
+  under `crates/`. Base equals the previous entry's Tip. Only the committed
+  range is covered. The review of the release PR's own changes that
+  `plans/todo/v0.0.2.md` criterion 10's amendment asks for.
+- **Method:** the `code-review` skill over the range, which also ran
+  `object.sh` over the 24 commits since `5393f67`, and `test.sh` and
+  `mutate.sh`; a fresh agent then tried to refute each claim, with crafted
+  messages, `git interpret-trailers --parse` on them, real commits run
+  through both hygiene steps, and mutants applied to a copy of
+  `.github/checks/`, under macOS awk only. Of the code review's 10 claims:
+  - 7 are tracked: W-035 from three (the CR fold gap, its cause, and the
+    pre-pass it needs), W-036 from three (the `LC_ALL=C` export, its
+    prefixes and `mutate.sh`'s claim about them) and W-037.
+  - 3 are not tracked: the fold rule outside git's trailer block, the
+    git-made fold case not asking git, and `mutate.sh`'s cost. The
+    worklist's "Not tracked" gives the reasons.
+- **Findings:** 3 in the code worklist: W-035 (low), a carriage return
+  hides a folded attribution line from `message.awk`; W-036 (cleanup),
+  `LC_ALL=C` is set five times and its test runs only on macOS; W-037
+  (low), the amended release gate lets the tagged commit change the
+  checks the Release workflow runs on it.
+- **Checked, no finding:** the 24 commits since `5393f67` pass both checks;
+  `test.sh` ran 120 cases with none wrong and `mutate.sh` killed all 57
+  mutants under macOS awk, and on `c618dea`'s CI under mawk; W-035 cannot
+  pass the hygiene job, as `commit-object.awk` refuses a carriage return in
+  any commit; nothing under `crates/`, so `code_id` is the same as on
+  `c3d405d`.
+- **Outcome:** no blocker, though W-037 changes what is tagged: `c618dea`
+  is not. W-035 to W-037 are fixed in the next PR, and the commit that logs
+  its reviews, which changes only logs, plans and the CHANGELOG, is the one
+  `v0.0.2` tags. Worklist:
+  [`plans/todo/code-review-w-series-4.md`](../../plans/todo/code-review-w-series-4.md).
+- **Carried-over items:** W-028 to W-030 and W-034 open, waiting until
+  after v0.0.2; W-032 and W-033 fixed in `c618dea` (#32).
 
 ### 2026-10-27: `118f710..f2380e7` (#28, #30 and #31)
 

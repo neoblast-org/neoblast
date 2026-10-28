@@ -610,10 +610,14 @@ that fixed it.
   another; the same for `Acked-by`. The CRLF case was found by a third.
 - **Release:** fixed before `v0.0.2` is tagged, applied by hand; not in
   `code_id`.
-- **Status:** fixed in the review PR after #31. `test.sh` has a folded line
+- **Status:** fixed in #32 (`c618dea`). `test.sh` has a folded line
   after a space, after a tab, in CRLF and in one git writes, which fail,
   and an indented line after a blank line, which passes; five mutants in
-  `mutate.sh`. No commit since `5393f67` fails.
+  `mutate.sh`. No commit since `5393f67` fails. The fix missed a carriage
+  return that git folds as a blank, two before a newline or one at the
+  start of the next line (W-035, found by the code review of #32), and a
+  name after a CR inside the line, which `c618dea` also passed; fixed in
+  the PR after #32, where `message.awk` reads git's lines as they are.
 
 ### S-029 · Low · Three commits reached `main` signed with a key GitHub does not know
 
@@ -640,4 +644,9 @@ that fixed it.
   until S-026's check does this in CI.
 - **Verified:** by two fresh agents, from the signatures and GitHub's API.
 - **Release:** not blocking.
-- **Status:** open.
+- **Status:** open until S-026's check runs in CI. Decided 2026-10-27: the
+  key is none of the maintainer's, so it is not added to the project's
+  account, and the three commits stay as they are. They were most likely
+  signed by the hosted environment that made them; work made elsewhere is
+  re-signed with the project's key before it merges. `c618dea` (#32), the
+  first commit after them, is verified.

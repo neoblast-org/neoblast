@@ -15,9 +15,12 @@
 #   also leaves no message, which `!body` already fails;
 # - dropping `m == 1` from the rule that starts a tag's signature: a tag
 #   whose signature comes first never counts its name, which `m != 1` fails;
-# - removing LC_ALL=C or the NUL translation for tags: they matter only
-#   under a locale or an awk (BSD awk stops a line at a NUL) that the run
-#   may not have (test.sh's Latin-1 case catches the first on macOS);
+# - removing the NUL translation for tags: it matters only under an awk
+#   (BSD awk stops a line at a NUL) that the run may not have;
+# - removing LC_ALL=C where tr takes any byte in a UTF-8 locale (GNU's): no
+#   case then gives another answer under any awk. Where tr refuses one
+#   (macOS's), test.sh's Latin-1 case, run in a UTF-8 locale, fails, so
+#   there it is a mutant below (W-036);
 # - the workflows' own lines around object.sh (an `if !` dropped, say):
 #   test.sh runs object.sh, not the workflows.
 set -euo pipefail
@@ -118,30 +121,37 @@ mutant "tag: any word in a signature" $t '/^[A-Za-z0-9+\/=]+$/' '/^[^ ]+$/'
 mutant "tag: lines after the signature" $t '{ part = 3; next }' '{ part = 1; next }'
 mutant "tag: a signature that never ends" $t ' || part == 2 }' ' }'
 
-# --- message.awk (S-013, S-018, S-028) ------------------------------------
+# --- message.awk (S-013, S-018, S-028, W-035) -----------------------------
 
 g=message.awk
 mutant "message: only an ASCII hyphen (S-018)" $g '[^a-z0-9 \t:]by' '-by'
-mutant "message: case matters" $g 'tolower($0) ~' '$0 ~'
+mutant "message: case matters" $g 'tolower(part[i]) !~' 'part[i] !~'
 mutant "message: no indented lines" $g '/^[ \t]*[^ \t:]*' '/^[^ \t:]*'
 mutant "message: no space before the colon" $g 'by[ \t]*:/' 'by:/'
 mutant "message: any value" $g 'if (v != me) found = 1' 'found = 0'
 mutant "message: a prefix of the project" $g 'if (v != me)' 'if (index(v, me) != 1)'
 mutant "message: trailing blanks count" $g 'sub(/[ \t\r]+$/, "", v)' 'v = v'
-mutant "message: folded lines (S-028)" $g 'by && /^[ \t]+[^ \t]/ { found = 1 }' ''
-mutant "message: a fold after any line" $g '{ by = 0 }' '{ }'
-mutant "message: only a space folds" $g '/^[ \t]+[^ \t]/' '/^ +[^ \t]/'
-mutant "message: a line of blanks folds" $g '/^[ \t]+[^ \t]/' '/^[ \t]+/'
+mutant "message: a trailing CR counts" $g 'sub(/[ \t\r]+$/, "", v)' 'sub(/[ \t]+$/, "", v)'
+mutant "message: a value ends at a CR (W-035)" $g $'    for (j = i + 1; j <= n; j++) v = v "\\r" part[j]\n' ''
+mutant "message: folded lines (S-028)" $g 'by && /^[ \t\r]+[^ \t\r]/ { found = 1 }' ''
+mutant "message: a fold after any line" $g $'  by = 0\n' ''
+mutant "message: only a space folds" $g '/^[ \t\r]+[^ \t\r]/' '/^ +[^ \t\r]/'
+mutant "message: a line of blanks folds" $g '/^[ \t\r]+[^ \t\r]/' '/^[ \t\r]+/'
+mutant "message: a line of blanks and a CR folds" $g '/^[ \t\r]+[^ \t\r]/' '/^[ \t\r]+[^ \t]/'
+mutant "message: a CR does not fold (W-035)" $g '/^[ \t\r]+[^ \t\r]/' '/^[ \t]+[^ \t]/'
+mutant "message: a lone CR does not end a line (S-018)" $g 'split($0, part, "\r")' 'split($0, part, "\n")'
 
 # --- object.sh -------------------------------------------------------------
 
 o=object.sh
 mutant "object.sh: NULs reach the commit check" $o "commit:1) tr '\\000' '\\001' | " 'commit:1) '
-mutant "object.sh: a lone CR does not end a line (S-018)" $o "| tr '\\r' '\\n' | " '| '
-mutant "object.sh: a CR before a newline is kept (S-028)" $o "message:1) LC_ALL=C awk '{ sub(/\\r\$/, \"\") } 1' | " 'message:1) '
 mutant "object.sh: commit takes any arguments" $o 'commit:1)' 'commit:*)'
 mutant "object.sh: tag takes any arguments" $o 'tag:2)' 'tag:*)'
 mutant "object.sh: message takes any arguments" $o 'message:1)' 'message:*)'
+utf8=$(locale -a 2>/dev/null | grep -i -E '^(C|en_US)\.utf-?8$' | head -n 1 || true)
+if [ -n "$utf8" ] && ! printf '\351' | LC_ALL="$utf8" tr a a >/dev/null 2>&1; then
+  mutant "object.sh: the caller's locale (W-036)" $o 'export LC_ALL=C' ':'
+fi
 
 echo "$mutants mutants, $survived survived or stale"
 [ "$survived" -eq 0 ]
