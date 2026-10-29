@@ -1,6 +1,6 @@
 # Code Review Log
 
-<!-- baseline --> **Next review diffs from:** `c618dea9e15535f3de44ed34d4e1522d80e756ab` (`main`, recorded 2026-10-27)
+<!-- baseline --> **Next review diffs from:** `8c34bcaf796de268b55a3d7ed7b46821c8959af8` (`main`, recorded 2026-10-28)
 
 A running record of code-review events: branch/pre-PR reviews, review worklists, and
 remediation programmes. Newest entry first. The baseline marker line above is the
@@ -27,6 +27,49 @@ merge-base fallback). Side-branch pre-PR reviews are logged as entries marked
 "frontier unchanged (side branch)" and never move the line.
 
 ## Entries
+
+### 2026-10-28: `c618dea..8c34bca` (#33 and #36)
+
+| | SHA | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `c618dea9e15535f3de44ed34d4e1522d80e756ab` | 2026-10-27 | fix: review findings from #28, #30 and #31; log the eighth reviews (#32) |
+| Tip | `8c34bcaf796de268b55a3d7ed7b46821c8959af8` | 2026-10-28 | fix: S-030 and S-031; log the security review of #32 and #33 (#36) |
+
+- **Scope:** 2 commits (`git rev-list --count c618dea..8c34bca`) and 16
+  files, +609/−98 (`git diff --shortstat c618dea 8c34bca`): W-035 to
+  W-037's fixes and the code log of #32 (#33), and S-030 and S-031's
+  fixes, `SECURITY.md` and the security log of #32 and #33 (#36), of which
+  9 files, +267/−72, under `.github/` (the same command with `-- .github`)
+  and none under `crates/`. Base equals the previous entry's Tip. Only the
+  committed range is covered.
+- **Method:** the `code-review` skill over the range, which also ran every
+  check over the 26 commits since `5393f67` and every tag, `test.sh`, and
+  mutants of its own; a fresh agent then tried to refute each claim,
+  decoding a real signature, applying mutants to a copy of
+  `.github/checks/` under mawk, gawk, busybox and macOS awk, and timing
+  `mutate.sh` and `message.awk`. Of the code review's 7 claims, all are
+  tracked, the two about `mutate.sh`'s locale together as W-040.
+- **Findings:** 6 in the code worklist, none a weakness CI can reach:
+  W-038 (low), the signature's magic and namespace have no case; W-039
+  (cleanup), a signature with an empty body is not tested; W-040 (low),
+  what `mutate.sh` says about the locale is not true of every awk; W-041
+  (cleanup), two workflow comments predate `ssh-signature.awk`; W-042
+  (low), `message.awk` takes a value in time that grows with the cube of a
+  line's CRs; W-043 (cleanup), `mutate.sh` remakes git's objects for every
+  mutant.
+- **Checked, no finding:** no correctness bug in the range; the 26 commits
+  since `5393f67` and every tag pass every check; `test.sh` ran 153 cases
+  with none wrong under each awk; removing `LC_ALL=C` fails `test.sh` on
+  macOS; on `8c34bca`'s CI the hygiene job ran every step, "No mailmap"
+  among them, and `mutate.sh` killed all 77 mutants; nothing under
+  `crates/`, so `code_id` is the same as on `c3d405d`.
+- **Outcome:** no blocker. W-038 to W-043 change only `.github/` and
+  wait until after v0.0.2, as no fix is needed for the release (W-037).
+  Worklist:
+  [`plans/todo/code-review-w-series-4.md`](../../plans/todo/code-review-w-series-4.md).
+- **Carried-over items:** W-028 to W-030 and W-034 open, waiting until
+  after v0.0.2; W-035 to W-037 fixed in `ee97e24` (#33), which their
+  statuses had as "the PR after #32".
 
 ### 2026-10-27: `f2380e7..c618dea` (#32)
 

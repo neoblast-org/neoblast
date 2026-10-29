@@ -11,7 +11,8 @@ added S-010 to S-015, all low. The fifth (2026-10-21, `9bf18dc..255353b`,
 seventh (2026-10-25, `c3d405d..118f710`, the review PR after #26) added S-025
 and S-026, both low. The eighth (2026-10-27, `118f710..f2380e7`, #28, #30 and
 #31) added S-028 and S-029, both low. The ninth (2026-10-28,
-`f2380e7..ee97e24`, #32 and #33) added S-030 to S-032, all low.
+`f2380e7..ee97e24`, #32 and #33) added S-030 to S-032, all low. The tenth
+(2026-10-28, `ee97e24..8c34bca`, #36) added S-033 and S-034, both low.
 
 IDs are unique across all worklists and continue from the highest S-number used,
 including one that so far appears only in a review log (`SECURITY.md`, "Our own
@@ -176,7 +177,9 @@ that fixed it.
   follows too. One change from the fix above: the worklist entry follows the
   fix's merge instead of landing with it, because every change is first a
   public pull request; that pull request says what changed, not how to
-  exploit it.
+  exploit it. A second, in #36 (`8c34bca`): the details stay with the
+  maintainers rather than in a draft advisory, which is published only
+  with a release that ships such a finding unfixed (`SECURITY.md`).
 
 ### S-007 · Low · GitHub's squash merges replace the project's commit metadata
 
@@ -618,7 +621,7 @@ that fixed it.
   return that git folds as a blank, two before a newline or one at the
   start of the next line (W-035, found by the code review of #32), and a
   name after a CR inside the line, which `c618dea` also passed; fixed in
-  the PR after #32, where `message.awk` reads git's lines as they are.
+  `ee97e24` (#33), where `message.awk` reads git's lines as they are.
 
 ### S-029 · Low · Three commits reached `main` signed with a key GitHub does not know
 
@@ -675,7 +678,7 @@ that fixed it.
   certificate, then by a fresh agent, which also checked the prefix
   against every signature in the history and tried the fix on a copy.
 - **Release:** not blocking; fixed before the tag.
-- **Status:** fixed in the PR after #33: `.github/checks/ssh-signature.awk`,
+- **Status:** fixed in `8c34bca` (#36): `.github/checks/ssh-signature.awk`,
   loaded by the commit and tag checks. A first version checked only the
   signature's first line; the second agent's review found that text in the
   reserved field, which OpenSSH reads and then ignores, still passed, and
@@ -685,10 +688,12 @@ that fixed it.
   `sha256`, of another signature type, with text in the reserved field, four characters longer, with
   a `=` inside or not ending in one; the crafted valid one is a real
   signature by a throwaway key, and each failing case differs from it in
-  one way. A mutant for each part of the layout. The 25 commits since
+  one way. A mutant for each part of the layout but the magic and the
+  namespace (W-038). The 25 commits since
   `5393f67` and `v0.0.1` pass. Until S-026, the key's 32 bytes, the
   signature's 64 and the few bits that share a base64 character with them
-  are unverified and could hold anything.
+  are unverified and could hold anything; so are two whole bytes of the
+  layout (S-034).
 
 ### S-031 · Low · A committed `.mailmap` would show another name on every project commit
 
@@ -707,7 +712,7 @@ that fixed it.
   commit of which the hygiene job checks.
 - **Verified:** reproduced by the reviewer, then by a fresh agent.
 - **Release:** not blocking; fixed before the tag.
-- **Status:** fixed in the PR after #33: `.github/checks/tree.awk`, run as
+- **Status:** fixed in `8c34bca` (#36): `.github/checks/tree.awk`, run as
   `object.sh tree` on `git ls-tree` of every commit since `5393f67` by the
   step "No mailmap", which fails if `git ls-tree` does. Any top-level name
   that starts with `.mailmap`, in any case and quoted or not, fails, as a
@@ -736,5 +741,53 @@ that fixed it.
   `plans/` and `CHANGELOG.md`; the gate and row 8 say so.
 - **Verified:** by a fresh agent, from the plan's text.
 - **Release:** must be fixed before the tag; it changes only `plans/`.
-- **Status:** fixed in the PR after #33, which restates the gate; its
-  checks are run when tagging.
+- **Status:** fixed in #36 (`8c34bca`), which restates the gate; its
+  checks are run when tagging. S-033 corrects its `git diff`, which a
+  rename could get past.
+
+### S-033 · Low · A rename gets past the release gate's file check
+
+- **Where:** `plans/todo/v0.0.2.md`, criterion 10's checks, and S-032's
+  fix (#36, `8c34bca`).
+- **Problem:** the gate checks that the tagged commit changes nothing
+  outside `docs/logs/`, `plans/` and `CHANGELOG.md` with `git diff
+  --name-only`, which detects renames, so a moved file lists only its new
+  path: `git mv .github/workflows/release.yml plans/release.yml` lists
+  only `plans/release.yml`, and so does a rename that also edits the file.
+- **Impact:** a release commit that moves a workflow or a crate's file
+  into `plans/` would pass the gate's check; it is a maintainer's commit,
+  reviewed by an agent before it merges.
+- **Fix:** `git diff --no-renames --name-only <tag>^ <tag> -- .
+  ':!docs/logs/' ':!plans/' ':!CHANGELOG.md'`, run at the top of the work
+  tree, must print nothing; copies, deletions and mode changes are listed
+  either way.
+- **Verified:** reproduced by the reviewer, then by a fresh agent, with git
+  2.54, also with `diff.renames=copies`.
+- **Release:** must be fixed before the tag; it changes only `plans/`.
+- **Status:** fixed in the commit `v0.0.2` tags, which states the check as
+  above; it is run when tagging.
+
+### S-034 · Low · Two bytes of a signature's fixed layout are not checked
+
+- **Where:** `.github/checks/ssh-signature.awk` (#36, `8c34bca`, S-030).
+- **Problem:** the fixed segments end where base64's 3-byte groups do, so
+  the bytes at offsets 65 and 108 (from 0), the namespace length's high
+  byte and the signature length's low byte, are not compared, nor are
+  the two padding bits of the last character before `=`. A signature
+  with either byte changed passes
+  `object.sh` for commits and tags, though OpenSSH refuses it. The comment
+  says only "the few bits that share a base64 character" with the key and
+  signature stay free.
+- **Impact:** two more unchecked bytes beside the key's 32 and the
+  signature's 64, which S-026 already leaves free; nothing that OpenSSH
+  would parse differently.
+- **Fix:** characters 87-88 must decode to a zero byte (`A` at 88, one of
+  `AEIMQUYcgkosw048` at 87), 145-146 to `0x40` (`Q`, then one of `A-P`),
+  and 231 must have its low bits clear; a case and a mutant for each, and
+  the comment names them.
+- **Verified:** reproduced by both reviewers with a throwaway key, then by
+  a fresh agent, which also checked that the fix passes all 26 commits
+  since `5393f67` and `v0.0.1`.
+- **Release:** not blocking; a `.github/` change, so after the tag
+  (W-037), with W-038.
+- **Status:** open.

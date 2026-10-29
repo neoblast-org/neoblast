@@ -1,6 +1,6 @@
 # Security Review Log
 
-<!-- baseline --> **Next review diffs from:** `ee97e249c20aee06f44a6ebb0da54734d7ed0fff` (`main`, recorded 2026-10-28)
+<!-- baseline --> **Next review diffs from:** `8c34bcaf796de268b55a3d7ed7b46821c8959af8` (`main`, recorded 2026-10-28)
 
 A running record of branch security reviews. Each entry records the exact commit range
 reviewed; the baseline marker line above is the machine-owned frontier the next
@@ -21,6 +21,85 @@ marker line; a frontier-moving entry's Base must equal the previous one's Tip un
 the entry explains why not.
 
 ## Entries
+
+### 2026-10-28 · `ee97e24..8c34bca` (#36)
+
+| | Commit | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `ee97e249c20aee06f44a6ebb0da54734d7ed0fff` | 2026-10-28T05:06:18Z | fix: the code review of #32; log it (#33) |
+| Tip | `8c34bcaf796de268b55a3d7ed7b46821c8959af8` | 2026-10-28T18:14:43Z | fix: S-030 and S-031; log the security review of #32 and #33 (#36) |
+
+- **Scope:** 1 commit (`git rev-list --count ee97e24..8c34bca`) and 13
+  files, +391/−60 (`git diff --shortstat ee97e24 8c34bca`): S-030's and
+  S-031's fixes, `SECURITY.md`, the review skill and the security log of
+  #32 and #33, of which 8 files, +205/−41, under `.github/` (the same
+  command with `-- .github`) and none under `crates/`. Base equals the
+  previous entry's Tip. Only the committed range is covered: the code
+  log's entry for `c618dea..8c34bca` was uncommitted when it ran.
+- **Method:** a fresh agent read `.github/` and tried bypasses with objects
+  git makes (`git mktree`, certificates and other key types, rebuilt
+  signatures, names a file system might fold), and probed APFS for code
+  points it folds or ignores; another read the docs, the commit, #36 and
+  its timeline, and #34 and #35, through GitHub's API. A third fresh agent
+  tried to refute each finding.
+- **Findings:** 2, both low, in
+  [`plans/todo/security-review-s-series.md`](../../plans/todo/security-review-s-series.md):
+  - **S-033 (Low):** a rename gets past the release gate's file check, as
+    `git diff --name-only` lists only its new path (#36).
+  - **S-034 (Low):** two bytes of a signature's fixed layout are not
+    checked, though `ssh-signature.awk` says only a few bits are free
+    (#36).
+- **Not tracked:**
+  - A top-level `.maılmap`, with a dotless i, passes `tree.awk`: APFS folds
+    no code point to a letter of `.mailmap` and ignores none in it, and a
+    non-bare repository reads `.mailmap` from the work tree only; whether
+    NTFS's case table maps U+0131 to `I` is unknown and believed not.
+    Refusing a top-level dot-name with a byte outside ASCII would cost
+    nothing; left as hardening a later review may weigh, not tracked.
+  - `8c34bca`'s message has `Open: …` right above `Signed-off-by`, so git
+    reads it as a trailer: it names no one, and the sign-off still counts.
+  - A commit reachable only from a tag: the hygiene job runs on tag pushes
+    too, and the Release workflow refuses a tag whose commit is not on
+    `main`. It does not wait for the hygiene job, so row 8 now says to
+    approve it only once that job has passed on the tag's push.
+  - S-006's fix still said "a private draft advisory"; it now matches
+    `SECURITY.md`.
+- **Checked, no finding:**
+  - Certificates, ECDSA, `sk-` and RSA keys, text in the reserved field, any
+    other length, an empty or unended block, a second `gpgsig` and a header
+    inside one all fail; no free byte makes another valid OpenSSH parse.
+  - `tree.awk` refuses `.mailmap`, `.MAILMAP`, one with U+200C inside and
+    `.mailmap.`; git on macOS applies a work-tree `.MAILMAP`, so the case
+    folding is needed; a mailmap from config cannot be pushed; a gitlink
+    named `.mailmap` is refused by name.
+  - "No mailmap" fails closed, covers merges, takes `HEAD_SHA` through the
+    environment and lists the top level; a tag name cannot inject a
+    workflow command or an `awk -v` escape.
+  - The 26 commits since `5393f67` and `v0.0.1` pass every check.
+  - `SECURITY.md`'s section for outside reporters is unchanged, and no
+    other document still promises a draft advisory.
+  - `8c34bca` is the project's, in UTC, signed off and signed with the
+    project's key; GitHub shows it verified, and its push to `main` passed
+    `protect-main` with no bypass. #36 was opened and merged as the
+    project, with no comments or reviews.
+  - #34 and #35 are Dependabot's, open and unmerged; the range uses neither
+    bump.
+  - Privacy: no names, addresses, paths or session links in the range's
+    text, its commit message or #36.
+  - No open finding of medium severity or higher is described in public:
+    S-027 appears only by ID, severity and the release rule.
+- **Outcome:** no blocker. S-033 is fixed in the commit `v0.0.2` tags,
+  which states the gate's check with `--no-renames`; S-034 changes
+  `.github/` and waits until after v0.0.2, with W-038.
+- **Carried-over items:** S-002 open; S-003 open; S-007 open, with every
+  merge a fast-forward; S-008 open until the GitHub-side copies are
+  removed; S-024 open, its `Cargo.toml` minimum after v0.0.2; S-026 open;
+  S-027 handled privately and open, not shipped in the release, so it
+  does not block v0.0.2 and needs no advisory (`SECURITY.md`), where the
+  previous entry had it fixed before the tag;
+  S-029 open until S-026's check runs in CI; S-030 and S-031 fixed in
+  `8c34bca` (#36), which their statuses had as "the PR after #33"; S-032
+  fixed in `8c34bca`, its check corrected by S-033.
 
 ### 2026-10-28 · `f2380e7..ee97e24` (#32 and #33)
 

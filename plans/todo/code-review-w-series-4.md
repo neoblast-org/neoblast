@@ -12,7 +12,9 @@ which is outside `code_id` and can land before the tag. The eighth
 (`118f710..f2380e7`, #28, #30 and #31) added W-032 to W-034, all outside
 `code_id`: W-032 and W-033 are fixed in #32 (`c618dea`), and W-034
 waits until after v0.0.2. The ninth (`f2380e7..c618dea`, #32) added W-035
-to W-037, also outside `code_id`, fixed before the tag.
+to W-037, also outside `code_id`, fixed before the tag in #33. The tenth
+(`c618dea..8c34bca`, #33 and #36) added W-038 to W-043, all outside
+`code_id` and none a weakness CI can reach; they wait until after v0.0.2.
 
 IDs are unique across all worklists and continue from the highest W-number used.
 
@@ -40,7 +42,12 @@ IDs are unique across all worklists and continue from the highest W-number used.
    stated as it is.
 10. W-037: the commit `v0.0.2` tags changes nothing under `.github/` or in
     `code_id`, and both review logs cover every commit before it.
-11. Each fix that can be reached has a regression test that fails without it,
+11. W-038 to W-043: every part of `ssh-signature.awk`'s layout has a case
+    and a mutant; a signature with an empty body is tested; what `mutate.sh`
+    says about the locale is true under every awk, with one lookup; the
+    workflow comments name `ssh-signature.awk`; `message.awk` takes a value
+    in linear time; `mutate.sh` builds git's objects once.
+12. Each fix that can be reached has a regression test that fails without it,
     and the golden vectors are unchanged.
 
 ## Findings
@@ -203,7 +210,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Verified: by a fresh agent, with `git interpret-trailers --parse` and
   real commits through both hygiene steps, under macOS awk; a prototype
   passed `test.sh` and failed all four inputs.
-- Status: fixed in the PR after #32. `message.awk` reads git's lines,
+- Status: fixed in `ee97e24` (#33). `message.awk` reads git's lines,
   folds on a space, tab or carriage return (git does not fold on `\v` or
   `\f`), and splits each line at a carriage return for the `-by:` rule;
   `object.sh` passes the message to it as it is. A `-by:` value runs on to
@@ -231,7 +238,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   depend on the caller's.
 - Verified: by a fresh agent, by mutation on a copy, under UTF-8 and C
   locales; the Linux side by reasoning.
-- Status: fixed in the PR after #32. `object.sh` sets `LC_ALL=C` once;
+- Status: fixed in `ee97e24` (#33). `object.sh` sets `LC_ALL=C` once;
   `test.sh` runs the Latin-1 case under `C.UTF-8` or `en_US.UTF-8` where
   `locale -a` lists one, and `mutate.sh` removes the export as a mutant
   only where `tr` refuses a byte outside UTF-8 (macOS's), its header
@@ -251,8 +258,88 @@ IDs are unique across all worklists and continue from the highest W-number used.
   `CHANGELOG.md`, and logs the reviews of every commit before it; the
   amendment and row 8 say so. `c618dea` is not tagged.
 - Verified: by a fresh agent, against `release.yml`.
-- Status: fixed in the PR after #32: criterion 10's amendment and rows
+- Status: fixed in `ee97e24` (#33): criterion 10's amendment and rows
   7e and 8 of `plans/todo/v0.0.2.md` say so.
+
+### W-038 (low): two parts of a signature's layout have no case
+
+- Where: `.github/checks/ssh-signature.awk`, the `SSHSIG` magic (characters
+  1-8) and the namespace `git` with its length (87-96) (`8c34bca`, S-030).
+- What: no case changes either, so comparing from character 9, or from 97,
+  leaves `test.sh` at 0 wrong under every awk; a signature in another
+  three-byte namespace would then pass, with three bytes of its own.
+- Remediation: a case with the magic `SSHSIH` and one with the namespace
+  `bob`, and a mutant that skips each.
+- Verified: by a fresh agent, decoding a real signature and applying both
+  mutants under mawk, gawk, busybox and macOS awk.
+- Status: open; after v0.0.2.
+
+### W-039 (cleanup): a signature with an empty body is not tested
+
+- Where: `.github/checks/test.sh`, "tag: a signature with no lines".
+- What: the case sends only the BEGIN line, so it repeats "a signature
+  that never ends" and differs from a passing tag in two ways. A BEGIN line
+  followed by END, which passed before S-030 and now fails every part of
+  `ssh_signature_ok`, is tested for neither commits nor tags.
+- Remediation: the tag case sends BEGIN and END, and a commit case the same.
+- Verified: by a fresh agent.
+- Status: open; after v0.0.2.
+
+### W-040 (low): what `mutate.sh` says about the locale is not true of every awk
+
+- Where: `.github/checks/mutate.sh`, the header's note on `LC_ALL=C` and
+  the W-036 mutant's own locale lookup (`ee97e24`, `8c34bca`).
+- What: the header says that where `tr` takes any byte no case gives
+  another answer without `LC_ALL=C`. Since `tree.awk`, that is false: in a
+  UTF-8 locale macOS awk misses an invisible character before `.mailmap`,
+  and gawk refuses the byte range outright; only mawk and busybox answer
+  the same. `mutate.sh` also repeats `test.sh`'s locale lookup, so the
+  mutant could run under another locale than the case if one changed.
+- Remediation: the header says so, the mutant also runs where the awk is
+  gawk, and `mutate.sh` passes the locale it found to `test.sh`.
+- Verified: by a fresh agent, with the export removed in a copy, under
+  macOS awk in `en_US.UTF-8` and gawk in `C.UTF-8`. CI's mutants run under
+  mawk, where the answer is right.
+- Status: open; after v0.0.2.
+
+### W-041 (cleanup): two workflow comments predate `ssh-signature.awk`
+
+- Where: `.github/workflows/hygiene.yml`, "Tags carry only the project's
+  identity"; `release.yml`, "Tag is the project's, in UTC".
+- What: the hygiene step's comment still says "an SSH-armored block of
+  base64" and its error text leaves out the key; the Release step's names
+  only `tag-object.awk`.
+- Remediation: name the layout and `ssh-signature.awk`, or `object.sh`.
+- Verified: by a fresh agent.
+- Status: open; after v0.0.2.
+
+### W-042 (low): `message.awk` takes a value in time that grows with the cube of a line's CRs
+
+- Where: `.github/checks/message.awk`, the loop that rebuilds the rest of
+  a line after a `-by:` key (`ee97e24`, W-035).
+- What: each matching part copies every later part again. A 72 KB line of
+  `Co-authored-by: x` and a CR, repeated, takes 11 s under mawk and 57 s
+  under busybox; at twice that, macOS awk takes three minutes.
+- Reach: none in CI. Hygiene's commit-headers step runs before the
+  message step and fails a message with a CR (`commit-object.awk`, S-025),
+  which stops the job.
+- Remediation: take `substr($0, off)` from a running offset, and stop at
+  the first part that fails, which makes it linear.
+- Verified: by a fresh agent, timing both versions under all four awks.
+- Status: open; after v0.0.2.
+
+### W-043 (cleanup): `mutate.sh` remakes git's objects for every mutant
+
+- Where: `.github/checks/mutate.sh` and `test.sh` (`8c34bca` adds a
+  certificate authority, a certificate and four more objects).
+- What: each mutant runs all of `test.sh`, which makes a throwaway key and
+  repository each time. A full run takes 66 s in CI's image; with those
+  objects left out, 37 s, and no mutant survives, so none needs them.
+- Remediation: `mutate.sh`'s first `test.sh` run keeps the objects, and
+  later runs reuse them. The eighth and ninth reviews left this cost
+  untracked; it has doubled since.
+- Verified: by a fresh agent, timing both in Docker.
+- Status: open; after v0.0.2.
 
 ## Not tracked
 
