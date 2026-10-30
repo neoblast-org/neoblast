@@ -8,6 +8,15 @@ the frozen v1 byte format).
 
 ## [Unreleased]
 
+### Changed
+
+- `neoblast-erasure` checks every result of an `ErasureCode`: parity that is
+  not `n - k` shards of the shard length, or a missing data shard that
+  `restore` does not return at that length, is `ErasureError::Codec`. Before,
+  a codec that returned too few shards made `reconstruct_data` report
+  `NotEnough` with enough shards held, and one of the wrong length passed
+  (review W-029). `ReedSolomonSimd`, the only codec, returns neither.
+
 ## [0.0.2] - 2026-10-30
 
 Hardening of the offline core, fuzzed again for 24 hours per target with no

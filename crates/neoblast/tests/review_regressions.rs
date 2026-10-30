@@ -501,42 +501,12 @@ fn w018_a_directory_that_cannot_be_made_is_named() {
 /// still made durable (W-017).
 #[test]
 fn s011_an_inconsistent_segment_does_not_stop_heal() {
-    struct Sink {
-        put: Vec<(u32, u16)>,
-        finished: bool,
-    }
-    impl neoblast::ShardSink for Sink {
-        fn put(&mut self, segment: u32, index: u16, _: &[u8]) -> std::io::Result<()> {
-            self.put.push((segment, index));
-            Ok(())
-        }
-        fn finish(&mut self) -> std::io::Result<()> {
-            self.finished = true;
-            Ok(())
-        }
-    }
-    let params = Params {
-        k: 2,
-        n: 4,
-        segment_size: 1024,
-    };
-    let mut sealed = seal_with_key(&[9u8; 3000], params, &[3u8; 32]).unwrap();
-    assert!(sealed.shards.len() > 2);
     // Segment 0's parity no longer matches its data, and the manifest says so.
-    for parity in &mut sealed.shards[0][2..] {
-        parity.iter_mut().for_each(|b| *b ^= 0x5a);
-    }
-    let hashes = sealed
-        .shards
-        .iter()
-        .map(|segment| {
-            segment
-                .iter()
-                .map(|s| neoblast::tree::shard_hash(s))
-                .collect()
-        })
-        .collect();
-    let manifest = neoblast::Manifest::new(*sealed.manifest.header(), hashes).unwrap();
+    let (sealed, manifest) = sealed_as(|shards| {
+        for parity in &mut shards[0][2..] {
+            parity.iter_mut().for_each(|b| *b ^= 0x5a);
+        }
+    });
     let cap = neoblast::FileVerifyCap {
         root: manifest.root(),
     };
@@ -544,10 +514,7 @@ fn s011_an_inconsistent_segment_does_not_stop_heal() {
     store.0.remove(&(0, 0));
     store.0.remove(&(2, 1));
 
-    let mut sink = Sink {
-        put: Vec::new(),
-        finished: false,
-    };
+    let mut sink = Recorder::new(false);
     let err = neoblast::heal_manifest(&cap, &manifest, &store, &mut sink).unwrap_err();
     assert!(
         matches!(

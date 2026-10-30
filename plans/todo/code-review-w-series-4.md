@@ -66,7 +66,15 @@ IDs are unique across all worklists and continue from the highest W-number used.
   helper, and test that an `EIO` is returned without the `fsync` running and
   that `ENOTSUP` runs it. A real `EIO` cannot be made in a test.
 - Verified: by two fresh agents, by mutation.
-- Status: open.
+- Status: fixed in the PR after #37: `full_sync` hands the full sync's
+  result and the plain `fsync` to `after_full_sync`, and
+  `w028_a_failed_full_sync_does_not_run_fsync` checks that an `EIO` is
+  returned without the `fsync` running, that `ENOTSUP` runs it and
+  returns its result, and that a full sync that worked runs nothing more.
+  The fresh agent's mutation (`fsync` after an `EIO`) fails it, as do
+  four more on `after_full_sync`. Runs on Apple systems only, as
+  `after_full_sync` and `F_FULLFSYNC` do (CI's macOS job). Not tested:
+  that `full_sync` hands it the real `fsync`, which no test can observe.
 
 ### W-029 (cleanup): a codec's result is checked only for its count, and only in heal
 
@@ -85,7 +93,16 @@ IDs are unique across all worklists and continue from the highest W-number used.
   is the only codec and heal names it directly; the proptest and the
   `erasure_restore` fuzz target assert full equality, so nothing reaches it
   today.
-- Status: open.
+- Status: fixed in the PR after #37: `encode_parity` and `regenerate` take
+  their parity through `parity`, which returns `Codec` unless the codec
+  gave `n - k` shards of `shard_len` bytes, and `reconstruct_data` returns
+  `Codec` for a missing data shard the codec did not restore or restored
+  at another length. Heal's own count check is gone. Two tests run a
+  codec that returns one shard fewer or one more, or its last shard too
+  long or too short, through `reconstruct_data`, `regenerate` and
+  `encode_segment`, beside the real codec passing the same shards;
+  removing or weakening any of the four checks (`<` for `!=`, one side of
+  a length, only the first shard) fails one.
 
 ### W-030 (cleanup): two copies of the same test helpers
 
@@ -94,7 +111,8 @@ IDs are unique across all worklists and continue from the highest W-number used.
   `s011_an_inconsistent_segment_does_not_stop_heal`.
 - Remediation: `s011` uses `Recorder::new(false)` and `sealed_as`.
 - Verified: by a fresh agent.
-- Status: open.
+- Status: fixed in the PR after #37: `s011` uses `sealed_as` and
+  `Recorder::new(false)`, and asserts as before.
 
 ### W-031 (cleanup): the tag check is written out twice
 

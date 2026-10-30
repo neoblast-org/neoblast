@@ -322,14 +322,10 @@ fn heal_segments(
         if missing.is_empty() {
             continue;
         }
+        // `regenerate` returns n shards of `shard_len` bytes or an error: a
+        // broken codec is `Codec`, not a bad store or publisher (reviews
+        // W-027, W-029).
         let all = match neoblast_erasure::regenerate(&ReedSolomonSimd, k, n, shard_len, &held) {
-            // Fewer than n shards back means a broken codec, not a bad
-            // publisher (review W-027).
-            Ok(all) if all.len() != n => {
-                return Err(Error::Erasure(ErasureError::Codec(
-                    "too few shards rebuilt".into(),
-                )));
-            }
             Ok(all) => all,
             Err(e) => match unrecoverable(e, segment, &held, k) {
                 // Keep repairing the other segments; report this one at the end.

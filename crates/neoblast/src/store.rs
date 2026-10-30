@@ -388,9 +388,22 @@ fn sync_dir(dir: &Path) -> io::Result<()> {
 #[cfg(target_vendor = "apple")]
 fn full_sync(file: &File) -> io::Result<()> {
     use rustix::io::retry_on_intr;
-    match retry_on_intr(|| rustix::fs::fcntl_fullfsync(file)) {
+    after_full_sync(retry_on_intr(|| rustix::fs::fcntl_fullfsync(file)), || {
+        retry_on_intr(|| rustix::fs::fsync(file))
+    })
+}
+
+/// What a full sync's result leaves to do: nothing if it worked, `fsync` if
+/// it [`falls_back`], and otherwise report it without running `fsync`. Kept
+/// apart from the system calls so a test can give it an `EIO` (review W-028).
+#[cfg(target_vendor = "apple")]
+fn after_full_sync(
+    full: rustix::io::Result<()>,
+    fsync: impl FnOnce() -> rustix::io::Result<()>,
+) -> io::Result<()> {
+    match full {
         Err(e) if !falls_back(e) => Err(e.into()),
-        Err(_) => Ok(retry_on_intr(|| rustix::fs::fsync(file))?),
+        Err(_) => Ok(fsync()?),
         Ok(()) => Ok(()),
     }
 }
@@ -630,6 +643,39 @@ mod tests {
         ] {
             assert!(falls_back(e), "{e:?}");
         }
+    }
+
+    /// W-028: [`after_full_sync`], which decides what `full_sync` does after
+    /// its full sync, reports an `EIO` without running the plain `fsync`,
+    /// falls back on `ENOTSUP` and returns what that `fsync` returns, and runs
+    /// nothing more after a full sync that worked. Not tested: a real `EIO`,
+    /// and that `full_sync` hands it the real `fsync`, which no test can
+    /// observe.
+    #[cfg(target_vendor = "apple")]
+    #[test]
+    fn w028_a_failed_full_sync_does_not_run_fsync() {
+        use rustix::io::Errno;
+        let ran = std::cell::Cell::new(0);
+        let fsync = |result: rustix::io::Result<()>| {
+            let ran = &ran;
+            move || {
+                ran.set(ran.get() + 1);
+                result
+            }
+        };
+
+        let err = after_full_sync(Err(Errno::IO), fsync(Ok(()))).unwrap_err();
+        assert_eq!(err.raw_os_error(), Some(Errno::IO.raw_os_error()));
+        assert_eq!(ran.get(), 0);
+
+        after_full_sync(Err(Errno::NOTSUP), fsync(Ok(()))).unwrap();
+        assert_eq!(ran.get(), 1);
+        let err = after_full_sync(Err(Errno::NOTSUP), fsync(Err(Errno::IO))).unwrap_err();
+        assert_eq!(err.raw_os_error(), Some(Errno::IO.raw_os_error()));
+        assert_eq!(ran.get(), 2);
+
+        after_full_sync(Ok(()), fsync(Err(Errno::IO))).unwrap();
+        assert_eq!(ran.get(), 2);
     }
 
     /// Makes the second shard of segment 0 impossible to write, by planting a
