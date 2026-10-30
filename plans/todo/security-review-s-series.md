@@ -497,7 +497,7 @@ that fixed it.
 
 ### S-023 · Low · A commit could reach `main`, and a tag be released, with `deny` failing
 
-- **Where:** the merge rule in `plans/todo/v0.0.2.md`, and `release.yml`'s
+- **Where:** the merge rule in `plans/completed/v0.0.2.md`, and `release.yml`'s
   `verify` job (predates the range).
 - **Problem:** `protect-main` requires `deny` among other checks, but the
   fast-forward push goes through its admin bypass, so only the maintainer's
@@ -726,7 +726,7 @@ that fixed it.
 
 ### S-032 · Low · The release gate's rule for the tagged commit is stated as a result, not a check
 
-- **Where:** `plans/todo/v0.0.2.md`, criterion 10's amendment and row 8
+- **Where:** `plans/completed/v0.0.2.md`, criterion 10's amendment and row 8
   (`c618dea`, `ee97e24`).
 - **Problem:** the gate says the tagged commit changes only logs, plans and
   the CHANGELOG, "so the logs cover every commit before it", and row 8
@@ -742,12 +742,13 @@ that fixed it.
 - **Verified:** by a fresh agent, from the plan's text.
 - **Release:** must be fixed before the tag; it changes only `plans/`.
 - **Status:** fixed in #36 (`8c34bca`), which restates the gate; its
-  checks are run when tagging. S-033 corrects its `git diff`, which a
-  rename could get past.
+  checks held when `v0.0.2` was tagged on `083edfe` (#37), and
+  `RELEASING.md` keeps them for every release. S-033 corrects its
+  `git diff`, which a rename could get past.
 
 ### S-033 · Low · A rename gets past the release gate's file check
 
-- **Where:** `plans/todo/v0.0.2.md`, criterion 10's checks, and S-032's
+- **Where:** `plans/completed/v0.0.2.md`, criterion 10's checks, and S-032's
   fix (#36, `8c34bca`).
 - **Problem:** the gate checks that the tagged commit changes nothing
   outside `docs/logs/`, `plans/` and `CHANGELOG.md` with `git diff
@@ -764,8 +765,9 @@ that fixed it.
 - **Verified:** reproduced by the reviewer, then by a fresh agent, with git
   2.54, also with `diff.renames=copies`.
 - **Release:** must be fixed before the tag; it changes only `plans/`.
-- **Status:** fixed in the commit `v0.0.2` tags, which states the check as
-  above; it is run when tagging.
+- **Status:** fixed in `083edfe` (#37), the commit `v0.0.2` tags, which
+  states the check as above; it printed nothing when `v0.0.2` was tagged.
+  `RELEASING.md` keeps it for every release.
 
 ### S-034 · Low · Two bytes of a signature's fixed layout are not checked
 

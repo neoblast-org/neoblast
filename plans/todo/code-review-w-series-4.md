@@ -158,7 +158,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
 ### W-033 (cleanup): the worklists cite commits that are not on `main`
 
 - Where: W-031's status in this worklist and S-025's in
-  `security-review-s-series.md` (#30); `plans/todo/v0.0.2.md`, rows 7d‴,
+  `security-review-s-series.md` (#30); `plans/completed/v0.0.2.md`, rows 7d‴,
   7e and 8; `CHANGELOG.md`, the date of 0.0.2 (#28).
 - What: `14989d0` and `7f8b3e9` are the branch's commits from before its
   rebase onto #28, which no branch holds; `main` has `9b8cefe` (the fix)
@@ -246,7 +246,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
 
 ### W-037 (low): the amended release gate lets the tagged commit change the release checks
 
-- Where: `plans/todo/v0.0.2.md`, criterion 10's amendment and row 8
+- Where: `plans/completed/v0.0.2.md`, criterion 10's amendment and row 8
   (`c618dea`).
 - What: the amendment let the commit `v0.0.2` tags be the review PR that
   logs the last reviews, its own changes reviewed by an agent before merge
@@ -259,7 +259,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   amendment and row 8 say so. `c618dea` is not tagged.
 - Verified: by a fresh agent, against `release.yml`.
 - Status: fixed in `ee97e24` (#33): criterion 10's amendment and rows
-  7e and 8 of `plans/todo/v0.0.2.md` say so.
+  7e and 8 of `plans/completed/v0.0.2.md` say so.
 
 ### W-038 (low): two parts of a signature's layout have no case
 

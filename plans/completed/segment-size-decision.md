@@ -7,7 +7,7 @@ manifest; heal's RSS steps up 5 MiB between 256 MiB and 1 GiB and no further
 at 2 GiB, while its live heap grows only by the manifest (decision 0009,
 finding 2).
 
-Opened for v0.0.2 (step 6 of `plans/todo/v0.0.2.md`). The heal memory fix
+Opened for v0.0.2 (step 6 of `plans/completed/v0.0.2.md`). The heal memory fix
 on `exp/heal-reuse` lowered heal's peak but did not stop it growing with the
 file (`plans/completed/phase-1-finish.md`, A3 results), so it and this decision
 are not in v0.0.1. At 4 MiB segments, heal on a 1 GiB file already exceeds the
@@ -15,7 +15,7 @@ are not in v0.0.1. At 4 MiB segments, heal on a 1 GiB file already exceeds the
 
 2026-10-16: what grew is found and fixed (#15, #16): heal now grows with the
 file only by its manifest, to the byte (`bench/heal-heap.sh`; Step 5 results
-in `plans/todo/v0.0.2.md`). Its working memory by RSS is still high at 4 MiB
+in `plans/completed/v0.0.2.md`). Its working memory by RSS is still high at 4 MiB
 segments, mostly memory the system allocator keeps after blocks are freed.
 
 ## Success criteria
