@@ -17,17 +17,22 @@
 #   whose signature comes first never counts its name, which `m != 1` fails;
 # - removing the NUL translation for tags: it matters only under an awk
 #   (BSD awk stops a line at a NUL) that the run may not have;
-# - removing LC_ALL=C where tr takes any byte in a UTF-8 locale (GNU's): no
-#   case then gives another answer under any awk. Where tr refuses one
-#   (macOS's), test.sh's Latin-1 case, run in a UTF-8 locale, fails, so
-#   there it is a mutant below (W-036);
+# - removing LC_ALL=C where neither tr nor this run's awk reads a byte
+#   above DEL differently in a UTF-8 locale (GNU's tr with mawk, as in CI):
+#   no case then gives another answer. Where tr refuses one (macOS's), the
+#   Latin-1 case fails; where the awk reads such bytes as characters (macOS
+#   awk) or refuses the byte range (gawk), the UTF-8 tree cases do; there it
+#   is a mutant below (W-036, W-040);
+# - message.awk reading a value from one byte before or after its part's
+#   start: a value is cut at its first colon, the byte before a part is a
+#   CR, and its first is never a colon (W-042);
 # - the workflows' own lines around object.sh (an `if !` dropped, say):
 #   test.sh runs object.sh, not the workflows.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# One awk is enough here: every mutant is caught by cases that do not depend
-# on the awk, and test.sh itself runs them all.
+# One awk is enough here: every mutant but the locale one is caught by cases
+# that do not depend on the awk, and test.sh itself runs them all.
 for a in mawk gawk original-awk nawk awk; do
   if command -v "$a" >/dev/null 2>&1; then
     CHECKS_AWK="$a"
@@ -37,6 +42,13 @@ done
 export CHECKS_AWK
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
+# test.sh's UTF-8 locale, found once here so the locale mutant below runs
+# under the one its cases use (W-040), and git's objects, made by the first
+# run of test.sh and read by the others (W-043).
+CHECKS_UTF8=$(locale -a 2>/dev/null | grep -i -E '^(C|en_US)\.utf-?8$' | head -n 1 || true)
+export CHECKS_UTF8
+mkdir "$work/real"
+export CHECKS_REAL="$work/real"
 mutants=0
 survived=0
 
@@ -125,15 +137,19 @@ mutant "tag: a signature that never ends" $t ' || part == 2 }' ' }'
 
 g=message.awk
 mutant "message: only an ASCII hyphen (S-018)" $g '[^a-z0-9 \t:]by' '-by'
-mutant "message: case matters" $g 'tolower(part[i]) !~' 'part[i] !~'
+mutant "message: case matters" $g 'tolower(part[i]) ~' 'part[i] ~'
 mutant "message: no indented lines" $g '/^[ \t]*[^ \t:]*' '/^[^ \t:]*'
 mutant "message: no space before the colon" $g 'by[ \t]*:/' 'by:/'
-mutant "message: any value" $g 'if (v != me) found = 1' 'found = 0'
-mutant "message: a prefix of the project" $g 'if (v != me)' 'if (index(v, me) != 1)'
-mutant "message: trailing blanks count" $g 'sub(/[ \t\r]+$/, "", v)' 'v = v'
-mutant "message: a trailing CR counts" $g 'sub(/[ \t\r]+$/, "", v)' 'sub(/[ \t]+$/, "", v)'
-mutant "message: a value ends at a CR (W-035)" $g $'    for (j = i + 1; j <= n; j++) v = v "\\r" part[j]\n' ''
-mutant "message: folded lines (S-028)" $g 'by && /^[ \t\r]+[^ \t\r]/ { found = 1 }' ''
+mutant "message: any value" $g $'      if (v !~ /^neoblast maintainers <dev@neoblast\\.dev>[ \\t\\r]*$/) exit 1\n' ''
+mutant "message: a prefix of the project" $g '<dev@neoblast\.dev>[ \t\r]*$/' '<dev@neoblast\.dev>/'
+mutant "message: trailing blanks count" $g '<dev@neoblast\.dev>[ \t\r]*$/' '<dev@neoblast\.dev>$/'
+mutant "message: a trailing CR counts" $g '<dev@neoblast\.dev>[ \t\r]*$/' '<dev@neoblast\.dev>[ \t]*$/'
+mutant "message: any project-like name" $g 'neoblast maintainers <dev@neoblast\.dev>' 'neoblast maintainers <dev@neoblast.dev>'
+mutant "message: a value ends at a CR (W-035)" $g 'v = substr($0, off)' 'v = part[i]'
+mutant "message: a value from the line's start (W-042)" $g $'    off += length(part[i]) + 1\n' ''
+mutant "message: an offset a byte short (W-042)" $g 'off += length(part[i]) + 1' 'off += length(part[i])'
+mutant "message: an offset a byte long (W-042)" $g 'off += length(part[i]) + 1' 'off += length(part[i]) + 2'
+mutant "message: folded lines (S-028)" $g 'by && /^[ \t\r]+[^ \t\r]/ { exit 1 }' ''
 mutant "message: a fold after any line" $g $'  by = 0\n' ''
 mutant "message: only a space folds" $g '/^[ \t\r]+[^ \t\r]/' '/^ +[^ \t\r]/'
 mutant "message: a line of blanks folds" $g '/^[ \t\r]+[^ \t\r]/' '/^[ \t\r]+/'
@@ -149,8 +165,21 @@ mutant "signature: any key type (S-030)" $v 'substr(s, 1, 44) == "U1NIU0lHAAAAAQ
 mutant "signature: any reserved field (S-030)" $v 'substr(s, 89, 56) == "AAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5AAAA" &&' '1 &&'
 mutant "signature: any characters" $v 's ~ /^[A-Za-z0-9+\/]+=$/' '1'
 mutant "signature: any last character" $v '+=$/' '+.$/'
-mutant "signature: any magic or version" $v 'substr(s, 1, 44) == "U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAg"' 'substr(s, 17, 28) == "ADMAAAALc3NoLWVkMjU1MTkAAAAg"'
+mutant "signature: any magic (W-038)" $v 'substr(s, 1, 44) == "U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAg"' 'substr(s, 9, 36) == "AAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAg"'
+mutant "signature: any version" $v 'substr(s, 1, 44) == "U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAg"' 'substr(s, 1, 8) == "U1NIU0lH" && substr(s, 17, 28) == "ADMAAAALc3NoLWVkMjU1MTkAAAAg"'
 mutant "signature: any hash" $v 'substr(s, 89, 56) == "AAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5AAAA"' 'substr(s, 89, 18) == "AAADZ2l0AAAAAAAAAA"'
+mutant "signature: any namespace (W-038)" $v 'substr(s, 89, 56) == "AAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5AAAA"' 'substr(s, 89, 4) == "AAAD" && substr(s, 97, 48) == "AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5AAAA"'
+mutant "signature: the namespace length's high byte, low bits (S-034)" $v ' && substr(s, 88, 1) == "A"' ''
+mutant "signature: the namespace length's high byte, high bits (S-034)" $v 'index("AEIMQUYcgkosw048", substr(s, 87, 1)) && ' ''
+mutant "signature: the signature length's low byte, high bits (S-034)" $v 'substr(s, 145, 1) == "Q" && ' ''
+mutant "signature: the signature length's low byte, low bits (S-034)" $v ' && index("ABCDEFGHIJKLMNOP", substr(s, 146, 1))' ''
+mutant "signature: the namespace length's high byte, its top bit (S-034)" $v 'index("AEIMQUYcgkosw048", substr(s, 87, 1))' 'index("ACEGIKMOQSUWYacegikmoqsuwy02468+", substr(s, 87, 1))'
+mutant "signature: the namespace length's high byte, its second bit (S-034)" $v 'index("AEIMQUYcgkosw048", substr(s, 87, 1))' 'index("ABEFIJMNQRUVYZcdghklopstwx014589", substr(s, 87, 1))'
+mutant "signature: the signature length's low byte, its second bit (S-034)" $v 'index("ABCDEFGHIJKLMNOP", substr(s, 146, 1))' 'index("ABCDEFGHIJKLMNOPghijklmnopqrstuv", substr(s, 146, 1))'
+mutant "signature: the signature length's low byte, its low bit (S-034)" $v 'index("ABCDEFGHIJKLMNOP", substr(s, 146, 1))' 'index("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef", substr(s, 146, 1))'
+mutant "signature: one padding bit (S-034)" $v 'index("AEIMQUYcgkosw048", substr(s, 231, 1))' 'index("ACEGIKMOQSUWYacegikmoqsuwy02468+", substr(s, 231, 1))'
+mutant "signature: the other padding bit (S-034)" $v 'index("AEIMQUYcgkosw048", substr(s, 231, 1))' 'index("ABEFIJMNQRUVYZcdghklopstwx014589", substr(s, 231, 1))'
+mutant "signature: any padding bits (S-034)" $v 'index("AEIMQUYcgkosw048", substr(s, 231, 1)) &&' '1 &&'
 mutant "signature: any signature type" $v 'substr(s, 89, 56) == "AAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5AAAA"' 'substr(s, 89, 32) == "AAADZ2l0AAAAAAAAAAZzaGE1MTIAAABT"'
 
 # --- tree.awk (S-031) ------------------------------------------------------
@@ -164,6 +193,12 @@ mutant "tree: only the name .mailmap" $r '/^"?\.mailmap/' '/^"?\.mailmap$/'
 mutant "tree: quoted names pass" $r '/^"?\.mailmap/' '/^\.mailmap/'
 mutant "tree: .mailmap anywhere in a name" $r '/^"?\.mailmap/' '/\.mailmap/'
 mutant "tree: fields split at blanks" $r 'BEGIN { FS = "\t" }' ''
+mutant "tree: dot-names outside ASCII pass" $r $'n ~ /^"?\\./ && $2 ~ /\\\\[0-7][0-7][0-7]|[\\200-\\377]/ { bad = 1 }\n' ''
+mutant "tree: quoted dot-names outside ASCII pass" $r '/\\[0-7][0-7][0-7]|[\200-\377]/ { bad' '/[\200-\377]/ { bad'
+mutant "tree: raw dot-names outside ASCII pass" $r '/\\[0-7][0-7][0-7]|[\200-\377]/ { bad' '/\\[0-7][0-7][0-7]/ { bad'
+mutant "tree: any name outside ASCII" $r 'n ~ /^"?\./ && ' ''
+mutant "tree: the dot looked for before bytes outside ASCII are left out" $r 'n ~ /^"?\./ && ' '$2 ~ /^"?\./ && '
+mutant "tree: quoted dot-names pass" $r 'n ~ /^"?\./ && ' 'n ~ /^\./ && '
 
 # --- object.sh -------------------------------------------------------------
 
@@ -173,9 +208,11 @@ mutant "object.sh: commit takes any arguments" $o 'commit:1)' 'commit:*)'
 mutant "object.sh: tag takes any arguments" $o 'tag:2)' 'tag:*)'
 mutant "object.sh: message takes any arguments" $o 'message:1)' 'message:*)'
 mutant "object.sh: tree takes any arguments" $o 'tree:1)' 'tree:*)'
-utf8=$(locale -a 2>/dev/null | grep -i -E '^(C|en_US)\.utf-?8$' | head -n 1 || true)
-if [ -n "$utf8" ] && ! printf '\351' | LC_ALL="$utf8" tr a a >/dev/null 2>&1; then
-  mutant "object.sh: the caller's locale (W-036)" $o 'export LC_ALL=C' ':'
+if [ -n "$CHECKS_UTF8" ] && {
+  ! printf '\351' | LC_ALL="$CHECKS_UTF8" tr a a >/dev/null 2>&1 ||
+    ! printf '\342\200\214x\n' | LC_ALL="$CHECKS_UTF8" "$CHECKS_AWK" '{ gsub(/[\200-\377]/, "") } length($0) != 1 { exit 1 }' >/dev/null 2>&1
+}; then
+  mutant "object.sh: the caller's locale (W-036, W-040)" $o 'export LC_ALL=C' ':'
 fi
 
 echo "$mutants mutants, $survived survived or stale"

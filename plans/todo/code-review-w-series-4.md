@@ -14,7 +14,8 @@ which is outside `code_id` and can land before the tag. The eighth
 waits until after v0.0.2. The ninth (`f2380e7..c618dea`, #32) added W-035
 to W-037, also outside `code_id`, fixed before the tag in #33. The tenth
 (`c618dea..8c34bca`, #33 and #36) added W-038 to W-043, all outside
-`code_id` and none a weakness CI can reach; they wait until after v0.0.2.
+`code_id` and none a weakness CI can reach; they waited until after
+v0.0.2 and are fixed in the PR after #37.
 
 IDs are unique across all worklists and continue from the highest W-number used.
 
@@ -272,7 +273,11 @@ IDs are unique across all worklists and continue from the highest W-number used.
   `bob`, and a mutant that skips each.
 - Verified: by a fresh agent, decoding a real signature and applying both
   mutants under mawk, gawk, busybox and macOS awk.
-- Status: open; after v0.0.2.
+- Status: fixed in the PR after #37: `test.sh` fails a signature with the
+  magic `SSHSIH` and one in the namespace `bob`, each differing from the
+  valid one in one way; mutants compare from character 9 and skip
+  characters 93 to 96, and the old "any magic or version" mutant is now
+  "any version".
 
 ### W-039 (cleanup): a signature with an empty body is not tested
 
@@ -283,7 +288,8 @@ IDs are unique across all worklists and continue from the highest W-number used.
   `ssh_signature_ok`, is tested for neither commits nor tags.
 - Remediation: the tag case sends BEGIN and END, and a commit case the same.
 - Verified: by a fresh agent.
-- Status: open; after v0.0.2.
+- Status: fixed in the PR after #37: "tag: a signature with an empty
+  body" sends BEGIN and END, and a commit case does the same.
 
 ### W-040 (low): what `mutate.sh` says about the locale is not true of every awk
 
@@ -300,7 +306,13 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Verified: by a fresh agent, with the export removed in a copy, under
   macOS awk in `en_US.UTF-8` and gawk in `C.UTF-8`. CI's mutants run under
   mawk, where the answer is right.
-- Status: open; after v0.0.2.
+- Status: fixed in the PR after #37: `test.sh` runs "the project's files"
+  and "a .mailmap after an invisible character" in the UTF-8 locale too,
+  which gawk and macOS awk answer wrongly without `LC_ALL=C`; `mutate.sh`
+  finds the locale once and passes it to `test.sh` as `CHECKS_UTF8`, runs
+  the locale mutant where `tr` refuses a byte or its awk does not read
+  bytes as bytes in that locale, and its header says so. With gawk as its
+  awk, 101 mutants run and the locale mutant is caught.
 
 ### W-041 (cleanup): two workflow comments predate `ssh-signature.awk`
 
@@ -311,7 +323,9 @@ IDs are unique across all worklists and continue from the highest W-number used.
   only `tag-object.awk`.
 - Remediation: name the layout and `ssh-signature.awk`, or `object.sh`.
 - Verified: by a fresh agent.
-- Status: open; after v0.0.2.
+- Status: fixed in the PR after #37: both comments name `object.sh`,
+  `tag-object.awk` and `ssh-signature.awk`, and both errors say a
+  signature must be made with a plain ed25519 SSH key.
 
 ### W-042 (low): `message.awk` takes a value in time that grows with the cube of a line's CRs
 
@@ -326,7 +340,19 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Remediation: take `substr($0, off)` from a running offset, and stop at
   the first part that fails, which makes it linear.
 - Verified: by a fresh agent, timing both versions under all four awks.
-- Status: open; after v0.0.2.
+- Status: fixed in the PR after #37: a value is `substr($0, off)` from a
+  running offset and is compared by one anchored match, and the first
+  value that is not the project's ends the check (`exit 1`). The 72 KB
+  line now takes under 0.1 s under mawk, gawk, busybox and macOS awk,
+  against seconds to minutes before, depending on the awk and machine;
+  so do the second agent's 72,000 CRs or spaces after the project's
+  sign-off, which the trailing `sub` had made quadratic, before and
+  after W-035. Old and new give the same answer on 4,000 random
+  messages under all four awks. Two cases pass a sign-off after CRs and
+  a colon, which a value read from the line's start, or an offset a byte
+  short or long, fails; a value read from a byte before or after its
+  part's start is equivalent, as `mutate.sh` says. The time itself is
+  not tested.
 
 ### W-043 (cleanup): `mutate.sh` remakes git's objects for every mutant
 
@@ -339,7 +365,10 @@ IDs are unique across all worklists and continue from the highest W-number used.
   later runs reuse them. The eighth and ninth reviews left this cost
   untracked; it has doubled since.
 - Verified: by a fresh agent, timing both in Docker.
-- Status: open; after v0.0.2.
+- Status: fixed in the PR after #37: `mutate.sh` passes an empty
+  directory as `CHECKS_REAL`; `test.sh`'s first run fills it and the
+  mutants' runs read it. The Docker run of `test.sh` and `mutate.sh`
+  takes 32 s.
 
 ## Not tracked
 

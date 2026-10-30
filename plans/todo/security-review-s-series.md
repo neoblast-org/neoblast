@@ -722,7 +722,15 @@ that fixed it.
   `test.sh` fails `.mailmap`, `.MailMap`, `.mailmap.`, U+200C after or
   before `.mailmap`, quoted or not, and one git makes, and passes
   `docs.mailmap` and a quoted `café.md`; eight mutants. No commit since
-  `5393f67` holds one.
+  `5393f67` holds one. Since the PR after #37, nor may a name that starts
+  with a dot, once bytes outside ASCII are left out, hold one, as written
+  or in octal, so that `.maılmap`, with a dotless i, fails without knowing
+  how a file system folds it (the security log's note on #36), also after
+  U+200C: `test.sh` fails `.gıthub` and U+200C before `.github`, as they
+  are and quoted, beside `.github` passing both ways, `.maılmap` as it is
+  and after U+200C, and a quoted `.mailmap` in ASCII; six mutants. So
+  `é.md` fails too, and a dot-name with a backslash before three digits;
+  the check fails closed, and the project has none.
 
 ### S-032 · Low · The release gate's rule for the tagged commit is stated as a result, not a check
 
@@ -792,4 +800,13 @@ that fixed it.
   since `5393f67` and `v0.0.1`.
 - **Release:** not blocking; a `.github/` change, so after the tag
   (W-037), with W-038.
-- **Status:** open.
+- **Status:** fixed in the PR after #37: `ssh-signature.awk` checks
+  characters 87 and 88, 145 and 146, and 231, and its comment names them.
+  `test.sh` fails a namespace length whose high byte is 0x01, 0x40 or
+  0x80, a signature length whose low byte is 0x44, 0x41 or 0x42, and
+  either padding bit set, each differing from the valid signature in that
+  byte or bit only. OpenSSH 10.3's `ssh-keygen -Y check-novalidate`
+  refuses each of these changes made to a throwaway signature of the same
+  layout, and accepts it unchanged. A mutant for each check, and two for
+  each of the three sets, each letting one more bit through.
+  Every commit since `5393f67` and both tags pass.

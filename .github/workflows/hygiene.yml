@@ -94,9 +94,11 @@ jobs:
         # A .mailmap at the top of the tree, in any case, makes git log,
         # shortlog and blame show other names and addresses for the
         # project's, which the identity step does not see, as it reads the
-        # commits' own (S-031). Every commit after 5393f67 is checked, so
-        # one added and then removed in a pull request fails too. See
-        # .github/checks/tree.awk.
+        # commits' own (S-031). Nor may a top-level name that starts with a
+        # dot, once bytes outside ASCII are left out, hold one, which a file
+        # system could fold into .mailmap. Every commit after 5393f67 is
+        # checked, so one added and then removed in a pull request fails
+        # too. See .github/checks/tree.awk.
         shell: bash
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -110,7 +112,7 @@ jobs:
             fi
           done)
           if [ -n "$bad" ]; then
-            echo "::error::No commit may hold a .mailmap. Re-make these commits:"
+            echo "::error::No commit may hold a .mailmap, nor a top-level name with a byte outside ASCII that starts with a dot once such bytes are left out. Re-make these commits:"
             echo "$bad"; exit 1
           fi
       - name: No attribution lines naming anyone else
@@ -141,10 +143,11 @@ jobs:
         # Every tag must be annotated, by the project, in UTC (S-015), and
         # point at a commit: a tag of a tag would publish the inner tag's
         # identity too (S-017). The tag object is read as it is stored: only
-        # those four headers, and as message only the tag's name and an
-        # SSH-armored block of base64, so no other header or line can hold a
-        # name (S-022). See .github/checks/tag-object.awk. Only tag names are
-        # printed.
+        # those four headers, and as message only the tag's name and, if it
+        # is signed, an SSH signature laid out as a plain ed25519 key's, so
+        # no other header or line can hold a name (S-022, S-030). See
+        # .github/checks/object.sh, which runs tag-object.awk and
+        # ssh-signature.awk (W-041). Only tag names are printed.
         shell: bash
         run: |
           # The tags were fetched: v0.0.1 is there, annotated.
@@ -156,6 +159,6 @@ jobs:
             fi
           done)
           if [ -n "$bad" ]; then
-            echo "::error::Tags must be annotated, of a commit, by neoblast maintainers <dev@neoblast.dev> in UTC, with only their name as message. Re-make these tags:"
+            echo "::error::Tags must be annotated, of a commit, by neoblast maintainers <dev@neoblast.dev> in UTC, with only their name as message, and signed, if at all, with a plain ed25519 SSH key. Re-make these tags:"
             echo "$bad"; exit 1
           fi

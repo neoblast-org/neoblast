@@ -2,12 +2,16 @@
 # Tests object.sh: what the project makes must pass, and each way a name
 # could ride inside a commit, a tag, a commit message or a commit's tree
 # must fail (S-013, S-015, S-017, S-018, S-022, S-025, S-028, S-030, S-031,
-# W-035). The hygiene job runs it, then mutate.sh, before the checks
-# themselves.
+# S-034, W-035, W-038 to W-040, W-042). The hygiene job runs it, then
+# mutate.sh, before the checks themselves.
 #
 #   .github/checks/test.sh        # every case under every awk found
 #   .github/checks/test.sh -v     # and print each case
 #   CHECKS_AWK=mawk .github/checks/test.sh   # under that awk only
+#
+# mutate.sh also sets CHECKS_UTF8, the UTF-8 locale to use (empty for
+# none), and CHECKS_REAL, a directory for git's objects that the first run
+# fills and later runs read.
 #
 # Most cases are built as text, each differing from an allowed one in one
 # way; `~` stands for a NUL. The rest are objects git itself writes, in a
@@ -49,7 +53,9 @@ expect() { # pass|fail label object [object.sh args...]
 expect_file() { # pass|fail label file object.sh args...
   local want="$1" label="$2" file="$3" got=fail
   shift 3
-  if "$here/object.sh" "$@" <"$file" 2>/dev/null; then
+  if [ ! -f "$file" ]; then
+    got="no file"
+  elif "$here/object.sh" "$@" <"$file" 2>/dev/null; then
     got=pass
   fi
   record "$want" "$label" "$got"
@@ -59,18 +65,28 @@ me='neoblast maintainers <dev@neoblast.dev>'
 other='Alice Example <alice@example.org>'
 hex=5393f6704b5059c4c8ecfbb6adc01718c13c4455
 when='1792951223 +0000'
-# A UTF-8 locale, where there is one, for the case that needs object.sh to
-# set its own (W-036).
-utf8=$(locale -a 2>/dev/null | grep -i -E '^(C|en_US)\.utf-?8$' | head -n 1 || true)
+# A UTF-8 locale, where there is one, for the cases that need object.sh to
+# set its own (W-036, W-040); mutate.sh passes the one it found, so its
+# locale mutant runs under the same one (CHECKS_UTF8, empty for none).
+if [ -n "${CHECKS_UTF8+set}" ]; then
+  utf8="$CHECKS_UTF8"
+else
+  utf8=$(locale -a 2>/dev/null | grep -i -E '^(C|en_US)\.utf-?8$' | head -n 1 || true)
+fi
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
 # --- objects git writes ----------------------------------------------------
 
 # Each is saved as git stores it (or, for a message, as the hygiene job reads
-# it) in $work/real/<name>, and checked below under every awk.
+# it) in $real_dir/<name>, and checked below under every awk. mutate.sh
+# passes an empty directory as CHECKS_REAL: the first run fills it and the
+# runs for its mutants read it, as no mutant changes what git writes (W-043).
 real=0
-if command -v ssh-keygen >/dev/null 2>&1; then
+real_dir="${CHECKS_REAL:-$work/real}"
+if [ -n "${CHECKS_REAL-}" ] && [ -e "$CHECKS_REAL/complete" ]; then
+  real=2
+elif command -v ssh-keygen >/dev/null 2>&1; then
   real=1
 elif [ "${CI-}" = true ]; then
   echo "test.sh: ssh-keygen is needed in CI, for the objects git writes" >&2
@@ -85,7 +101,7 @@ if [ "$real" = 1 ]; then
   unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
     GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE \
     GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT GIT_CEILING_DIRECTORIES
-  mkdir "$work/real"
+  mkdir -p "$real_dir"
   ssh-keygen -q -t ed25519 -N '' -C '' -f "$work/key"
   repo="$work/repo"
   g() { # git in the throwaway repository, as the project in UTC, signing with the throwaway key
@@ -97,10 +113,10 @@ if [ "$real" = 1 ]; then
       -c commit.gpgsign=false -c tag.gpgsign=false -c init.defaultBranch=main -c advice.nestedTag=false "$@"
   }
   save() { # name kind rev: the object as stored
-    g cat-file "$2" "$3" >"$work/real/$1"
+    g cat-file "$2" "$3" >"$real_dir/$1"
   }
   save_message() { # name rev: the message as the hygiene job reads it
-    printf '%s\n' "$(g log -1 --format=%B "$2")" >"$work/real/$1"
+    printf '%s\n' "$(g log -1 --format=%B "$2")" >"$real_dir/$1"
   }
   mkdir "$repo"
   g init -q
@@ -151,11 +167,12 @@ if [ "$real" = 1 ]; then
   printf 'A readme.\n' >"$repo/README.md"
   g add README.md
   g commit -q -S -m "docs: a readme"
-  g ls-tree HEAD >"$work/real/tree"
+  g ls-tree HEAD >"$real_dir/tree"
   printf '%s %s\n' "$other" "$me" >"$repo/.mailmap"
   g add .mailmap
   g commit -q -S -m "docs: a mailmap"
-  g ls-tree HEAD >"$work/real/mailmap-tree"
+  g ls-tree HEAD >"$real_dir/mailmap-tree"
+  : >"$real_dir/complete"
 fi
 
 run_cases() {
@@ -168,7 +185,11 @@ run_cases() {
   # A signature as git writes one with a plain ed25519 key, here a throwaway
   # one (S-030); a certificate's and an ECDSA key's first lines; the second
   # line with text in the reserved field, over sha256, or with ssh-ed25518
-  # as the signature's type; the first with a = inside, or of version 2.
+  # as the signature's type; the first with a = inside, of version 2, or
+  # with the magic SSHSIH (W-038); the second in the namespace bob (W-038),
+  # or with the namespace length's high byte 0x01, 0x40 or 0x80; the third
+  # with the signature length's low byte 0x44, 0x41 or 0x42; the last with
+  # either padding bit set (S-034).
   s1='U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAg0nMBCCi7TezaCrfKe1/jNbNRBI'
   s2='aMvrUYIdW7QcS9TGEAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5'
   s3='AAAAQGIui2B3WteCUsOpocsTR9V0RWITdvlCLdh2Q8PvuDvU59vDXVu8C3h503nF7Qwkfe'
@@ -180,6 +201,16 @@ run_cases() {
   s1v2='U1NIU0lHAAAAAgAAADMAAAALc3NoLWVkMjU1MTkAAAAg0nMBCCi7TezaCrfKe1/jNbNRBI'
   s2sha256='aMvrUYIdW7QcS9TGEAAAADZ2l0AAAAAAAAAAZzaGEyNTYAAABTAAAAC3NzaC1lZDI1NTE5'
   s2type='aMvrUYIdW7QcS9TGEAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE4'
+  s1magic='U1NIU0lIAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAg0nMBCCi7TezaCrfKe1/jNbNRBI'
+  s2bob='aMvrUYIdW7QcS9TGEAAAADYm9iAAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5'
+  s2ns1='aMvrUYIdW7QcS9TGEBAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5'
+  s2ns40='aMvrUYIdW7QcS9TGFAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5'
+  s2ns80='aMvrUYIdW7QcS9TGGAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5'
+  s3len44='AAAARGIui2B3WteCUsOpocsTR9V0RWITdvlCLdh2Q8PvuDvU59vDXVu8C3h503nF7Qwkfe'
+  s3len41='AAAAQWIui2B3WteCUsOpocsTR9V0RWITdvlCLdh2Q8PvuDvU59vDXVu8C3h503nF7Qwkfe'
+  s3len42='AAAAQmIui2B3WteCUsOpocsTR9V0RWITdvlCLdh2Q8PvuDvU59vDXVu8C3h503nF7Qwkfe'
+  s4pad='4DB5tjs3LCxzmD2AsWZgd='
+  s4pad2='4DB5tjs3LCxzmD2AsWZge='
   cl() { # lines: a commit's signature lines
     printf ' %s\n' "$@"
   }
@@ -223,6 +254,17 @@ run_cases() {
   expect fail "commit: a signature of version 2" "$tree$parent$author$committer$cbegin$(cl "$s1v2" "$s2" "$s3" "$s4")"$'\n'"$cend$msg" commit
   expect fail "commit: a signature over sha256" "$tree$parent$author$committer$cbegin$(cl "$s1" "$s2sha256" "$s3" "$s4")"$'\n'"$cend$msg" commit
   expect fail "commit: a signature of another type" "$tree$parent$author$committer$cbegin$(cl "$s1" "$s2type" "$s3" "$s4")"$'\n'"$cend$msg" commit
+  expect fail "commit: a signature with another magic (W-038)" "$tree$parent$author$committer$cbegin$(cl "$s1magic" "$s2" "$s3" "$s4")"$'\n'"$cend$msg" commit
+  expect fail "commit: a signature in another namespace (W-038)" "$tree$parent$author$committer$cbegin$(cl "$s1" "$s2bob" "$s3" "$s4")"$'\n'"$cend$msg" commit
+  expect fail "commit: a namespace length with its high byte 0x01 (S-034)" "$tree$parent$author$committer$cbegin$(cl "$s1" "$s2ns1" "$s3" "$s4")"$'\n'"$cend$msg" commit
+  expect fail "commit: a namespace length with its high byte 0x40 (S-034)" "$tree$parent$author$committer$cbegin$(cl "$s1" "$s2ns40" "$s3" "$s4")"$'\n'"$cend$msg" commit
+  expect fail "commit: a namespace length with its high byte 0x80 (S-034)" "$tree$parent$author$committer$cbegin$(cl "$s1" "$s2ns80" "$s3" "$s4")"$'\n'"$cend$msg" commit
+  expect fail "commit: a signature length with its low byte 0x44 (S-034)" "$tree$parent$author$committer$cbegin$(cl "$s1" "$s2" "$s3len44" "$s4")"$'\n'"$cend$msg" commit
+  expect fail "commit: a signature length with its low byte 0x41 (S-034)" "$tree$parent$author$committer$cbegin$(cl "$s1" "$s2" "$s3len41" "$s4")"$'\n'"$cend$msg" commit
+  expect fail "commit: a signature length with its low byte 0x42 (S-034)" "$tree$parent$author$committer$cbegin$(cl "$s1" "$s2" "$s3len42" "$s4")"$'\n'"$cend$msg" commit
+  expect fail "commit: a padding bit set (S-034)" "$tree$parent$author$committer$cbegin$(cl "$s1" "$s2" "$s3" "$s4pad")"$'\n'"$cend$msg" commit
+  expect fail "commit: the other padding bit set (S-034)" "$tree$parent$author$committer$cbegin$(cl "$s1" "$s2" "$s3" "$s4pad2")"$'\n'"$cend$msg" commit
+  expect fail "commit: a signature with an empty body (W-039)" "$tree$parent$author$committer$cbegin$cend$msg" commit
   expect fail "commit: a signature that does not end in =" "$tree$parent$author$committer$cbegin$(cl "$s1" "$s2" "$s3" "${s4%=}A")"$'\n'"$cend$msg" commit
   expect fail "commit: a = inside a signature" "$tree$parent$author$committer$cbegin$(cl "$s1eq" "$s2" "$s3" "$s4")"$'\n'"$cend$msg" commit
   expect fail "commit: a header inside the signature" "$tree$parent$author$committer$cbegin$cbody"$'x-reviewer '"$other"$'\n'"$cend$msg" commit
@@ -298,7 +340,7 @@ run_cases() {
   expect fail "tag: a line after the signature" "$tgood$other"$'\n' tag $v
   expect fail "tag: two signatures" "$tgood$tsig" tag $v
   expect fail "tag: a signature that never ends" "$object$type$(tag $v)"$'\n'"$tbegin$tbody" tag $v
-  expect fail "tag: a signature with no lines" "$object$type$(tag $v)"$'\n'"$tbegin" tag $v
+  expect fail "tag: a signature with an empty body (W-039)" "$object$type$(tag $v)"$'\n'"$tbegin$tend" tag $v
 
   # --- messages --------------------------------------------------------------
 
@@ -316,11 +358,16 @@ run_cases() {
   expect pass "message: an indented line after a blank line" "$m"$'\nReviewed-by: '"$me"$'\n\n '"$other"$'\n' message
   expect pass "message: a line of blanks after a reviewer line" "$m"$'\nReviewed-by: '"$me"$'\n \t\n' message
   expect pass "message: a line of blanks and a CR after a reviewer line" "$m"$'\nReviewed-by: '"$me"$'\n \r\n' message
+  # The value is read from where its key starts, not from the line's start
+  # (W-042).
+  expect pass "message: a sign-off after a CR and a colon" "$m"$'\nNote:\rSigned-off-by: '"$me"$'\n' message
+  expect pass "message: a sign-off after CRs around a colon" "$m"$'\n\r:\r\r\r-by: '"$me"$'\n' message
 
   expect fail "message: a co-author" "$m"$'\nCo-authored-by: '"$other"$'\n' message
   expect fail "message: a sign-off by someone else" "$m"$'\nSigned-off-by: '"$other"$'\n' message
   expect fail "message: the project and someone else" "$m"$'\nSigned-off-by: '"$me"$' and '"$other"$'\n' message
   expect fail "message: a reviewer" "$m"$'\nReviewed-by: '"$other"$'\n' message
+  expect fail "message: an address that only looks like the project's" "$m"$'\nSigned-off-by: neoblast maintainers <dev@neoblastxdev>\n' message
   expect fail "message: an empty value" "$m"$'\nAcked-by:\n' message
   expect fail "message: a key in capitals" "$m"$'\nCO-AUTHORED-BY: '"$other"$'\n' message
   expect fail "message: an indented line" "$m"$'\n  \tCo-authored-by: '"$other"$'\n' message
@@ -358,11 +405,28 @@ run_cases() {
   expect fail "tree: a quoted .mailmap" "$files$(entry 100644 blob '".mailmap\342\200\214"')" tree
   expect fail "tree: a quoted .mailmap after an invisible character" "$files$(entry 100644 blob '"\342\200\214.mailmap"')" tree
   expect fail "tree: a .mailmap after an invisible character" "$files$(entry 100644 blob $'\342\200\214.mailmap')" tree
+  # In a UTF-8 locale, gawk refuses the byte range and macOS awk reads U+200C
+  # as one character, unless object.sh sets LC_ALL=C (W-040).
+  LC_ALL="${utf8:-${LC_ALL-}}" expect pass "tree: the project's files, in a UTF-8 locale" "$files" tree
+  LC_ALL="${utf8:-${LC_ALL-}}" expect fail "tree: a .mailmap after an invisible character, in a UTF-8 locale" "$files$(entry 100644 blob $'\342\200\214.mailmap')" tree
+  # A dot-name with a byte outside ASCII, such as the dotless i in .gıthub,
+  # as it is and as ls-tree quotes it, or after U+200C; a name with a quote
+  # in it is quoted too. Then .maılmap, the name the security review of #36
+  # noted, as it is and after U+200C.
+  expect pass "tree: a dot-name in ASCII" "$files$(entry 040000 tree .github)" tree
+  expect fail "tree: a dot-name with a byte outside ASCII" "$files$(entry 040000 tree $'.g\304\261thub')" tree
+  expect fail "tree: a dot-name after an invisible character" "$files$(entry 040000 tree $'\342\200\214.github')" tree
+  expect pass "tree: a quoted dot-name in ASCII" "$files$(entry 040000 tree '".github\""')" tree
+  expect fail "tree: a quoted dot-name with a byte outside ASCII" "$files$(entry 040000 tree '".g\304\261thub\""')" tree
+  expect fail "tree: a quoted dot-name after an invisible character" "$files$(entry 040000 tree '"\342\200\214.github\""')" tree
+  expect fail "tree: a quoted .mailmap in ASCII" "$files$(entry 100644 blob '".mailmap\""')" tree
+  expect fail "tree: a .maılmap (regression)" "$files$(entry 100644 blob $'.ma\304\261lmap')" tree
+  expect fail "tree: a .maılmap after an invisible character (regression)" "$files$(entry 100644 blob $'\342\200\214.ma\304\261lmap')" tree
 
   # --- objects git writes ----------------------------------------------------
 
-  if [ "$real" = 1 ]; then
-    r="$work/real"
+  if [ "$real" != 0 ]; then
+    r="$real_dir"
     expect_file pass "git: a signed commit" "$r/signed" commit
     expect_file pass "git: an unsigned commit (S-026)" "$r/unsigned" commit
     expect_file pass "git: a merge" "$r/merge" commit
