@@ -23,14 +23,28 @@ jobs:
             echo "::error::These commit messages link to a private tool session. Rewrite them before merging:"
             echo "$bad"; exit 1
           fi
+      - name: Object and message checks pass their tests
+        # The steps below read commits, tags, messages and trees through the
+        # checks in .github/checks/, which the Release workflow shares
+        # (W-031, W-034). Their tests run first, under every awk the runner
+        # has and on objects git itself writes; then every mutation in
+        # mutate.sh must make a test fail.
+        run: |
+          .github/checks/test.sh
+          .github/checks/mutate.sh
       - name: Maintainer commits are recorded in UTC
         # Only commits made on a maintainer's machine are checked. Commits GitHub
         # creates itself (the pull-request test merge, squash merges) have GitHub
         # as committer and carry the account's time zone, so they are skipped.
+        # See .github/checks/utc.awk.
         shell: bash
         run: |
-          bad=$(git log --no-merges --format='%h|%ae|%ce|%ad|%cd' --date=format:%z \
-            | awk -F'|' '$2=="dev@neoblast.dev" && $3!="noreply@github.com" && ($4!="+0000" || $5!="+0000") { print $1 }')
+          bad=$(git log --no-merges --format=%H | while read -r h; do
+            line=$(git log -1 --date=format:%z --format='%ae%x09%ce%x09%ad%x09%cd' "$h") || exit 1
+            if ! printf '%s\n' "$line" | .github/checks/object.sh utc; then
+              git rev-parse --short "$h"
+            fi
+          done)
           if [ -n "$bad" ]; then
             echo "::error::Maintainer commits must use UTC timestamps:"; echo "$bad"; exit 1
           fi
@@ -40,32 +54,25 @@ jobs:
         # Signed-off-by trailer must name the project too (S-008). Merge commits
         # count. A pull request is checked at its own head, which leaves out the
         # test merge GitHub makes. Dependabot's commits fail by design: re-make
-        # the change as a project commit.
+        # the change as a project commit. See .github/checks/identity.awk.
         shell: bash
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           start=5393f6704b5059c4c8ecfbb6adc01718c13c4455
           git rev-parse --verify --quiet "$HEAD_SHA^{commit}" >/dev/null
-          bad=$(git log --date=format:%z "$start..$HEAD_SHA" \
-              --format='%h%x09%an <%ae>%x09%cn <%ce>%x09%ad%x09%cd%x09%(trailers:key=Co-authored-by,key=Signed-off-by,valueonly,unfold,separator=%x3B)' \
-            | awk -F'\t' -v me='neoblast maintainers <dev@neoblast.dev>' '
-                $1 !~ /^[0-9a-f]+$/ || NF != 6 { print "(unparsable line)"; next }
-                { tr = $6; gsub(/neoblast maintainers <dev@neoblast\.dev>/, "", tr); gsub(/[; ]/, "", tr) }
-                $2 != me || $3 != me || $4 != "+0000" || $5 != "+0000" || tr != "" { print $1 }')
+          bad=$(git log --format=%H "$start..$HEAD_SHA" | while read -r h; do
+            line=$(git log -1 --date=format:%z \
+              --format='%an <%ae>%x09%cn <%ce>%x09%ad%x09%cd%x09%(trailers:key=Co-authored-by,key=Signed-off-by,valueonly,unfold,separator=%x3B)' \
+              "$h") || exit 1
+            if ! printf '%s\n' "$line" | .github/checks/object.sh identity; then
+              git rev-parse --short "$h"
+            fi
+          done)
           if [ -n "$bad" ]; then
             echo "::error::Only neoblast maintainers <dev@neoblast.dev>, in UTC, may author, commit, co-author or sign off. Re-make these commits:"
             echo "$bad"; exit 1
           fi
-      - name: Object and message checks pass their tests
-        # The steps that read commit and tag objects as stored, and commit
-        # messages, run the checks in .github/checks/, which the Release
-        # workflow shares (W-031). Their tests run first, under every awk the
-        # runner has and on objects git itself writes; then every mutation in
-        # mutate.sh must make a test fail.
-        run: |
-          .github/checks/test.sh
-          .github/checks/mutate.sh
       - name: Commit headers hold nothing else
         # The step above reads git's parsed fields only. A merge of a signed
         # tag adds a mergetag header holding that tag's tagger, and another

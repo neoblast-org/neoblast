@@ -11,8 +11,9 @@ cleanup; none blocks v0.0.2. W-028 to W-030 each change `crates/`, and so every 
 which is outside `code_id` and can land before the tag. The eighth
 (`118f710..f2380e7`, #28, #30 and #31) added W-032 to W-034, all outside
 `code_id`: W-032 and W-033 are fixed in #32 (`c618dea`), and W-034
-waits until after v0.0.2. The ninth (`f2380e7..c618dea`, #32) added W-035
-to W-037, also outside `code_id`, fixed before the tag in #33. The tenth
+waited until after v0.0.2 and is fixed in the PR after #38. The ninth
+(`f2380e7..c618dea`, #32) added W-035 to W-037, also outside `code_id`,
+fixed before the tag in #33. The tenth
 (`c618dea..8c34bca`, #33 and #36) added W-038 to W-043, all outside
 `code_id` and none a weakness CI can reach; they waited until after
 v0.0.2 and are fixed in the PR after #37.
@@ -202,7 +203,22 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Remediation: move them to `.github/checks/`, with cases and mutants, as
   W-031 did for the others.
 - Verified: by a fresh agent.
-- Status: open; outside `code_id`, not needed for v0.0.2.
+- Status: fixed in the PR after #38: the programs are
+  `.github/checks/identity.awk` and `utc.awk`, run as `object.sh
+  identity` and `object.sh utc` on one commit at a time, as the steps for
+  messages and trees are, with the same rules but three changes, each
+  failing closed: only one line passes; only exactly five or four fields
+  pass, so a tab in a trailer cannot push a name past the fields read,
+  which the old `NF != 6` guard also caught; and the UTC step splits at
+  tabs, not at `|`, so an address with a `|` in it no longer shifts its
+  fields. The tests step now runs before both. `test.sh` has 25 crafted
+  cases, each failing one differing from a passing one in one way, 8 on
+  commits git writes (a sign-off, a merge, a co-author, a commit not in
+  UTC, and one by GitHub as committer in another zone) and 2 for usage;
+  `mutate.sh` has 26 mutants. Every commit passes both steps, as before.
+  Not tested: that the workflow's formats are the ones `test.sh` uses.
+  Nor can a step see a blank line after the one git prints, as `$( )`
+  drops it, as for messages and trees; git prints none here.
 
 ### W-035 (low): a carriage return hides a folded attribution line
 

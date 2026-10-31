@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Tests object.sh: what the project makes must pass, and each way a name
-# could ride inside a commit, a tag, a commit message or a commit's tree
-# must fail (S-013, S-015, S-017, S-018, S-022, S-025, S-028, S-030, S-031,
-# S-034, W-035, W-038 to W-040, W-042). The hygiene job runs it, then
+# could ride inside a commit, a tag, a commit message, a commit's tree or
+# what git log prints of a commit must fail (S-008, S-013, S-015, S-017,
+# S-018, S-022, S-025, S-028, S-030, S-031, S-034, W-034, W-035, W-038 to
+# W-040, W-042). The hygiene job runs it, then
 # mutate.sh, before the checks themselves.
 #
 #   .github/checks/test.sh        # every case under every awk found
@@ -118,11 +119,19 @@ if [ "$real" = 1 ]; then
   save_message() { # name rev: the message as the hygiene job reads it
     printf '%s\n' "$(g log -1 --format=%B "$2")" >"$real_dir/$1"
   }
+  # The formats the hygiene job's identity and UTC steps read (W-034).
+  identity_format='%an <%ae>%x09%cn <%ce>%x09%ad%x09%cd%x09%(trailers:key=Co-authored-by,key=Signed-off-by,valueonly,unfold,separator=%x3B)'
+  utc_format='%ae%x09%ce%x09%ad%x09%cd'
+  save_log() { # name format rev: one commit as the hygiene job reads it
+    printf '%s\n' "$(g log -1 --date=format:%z --format="$2" "$3")" >"$real_dir/$1"
+  }
   mkdir "$repo"
   g init -q
   g commit -q --allow-empty -S -s -m "fix: a subject" -m $'A body\twith a tab.'
   save signed commit HEAD
   save_message signed-message HEAD
+  save_log signed-identity "$identity_format" HEAD
+  save_log signed-utc "$utc_format" HEAD
   g commit -q --allow-empty -m "docs: unsigned"
   save unsigned commit HEAD
   g tag -s v9.9.9 -m v9.9.9
@@ -140,6 +149,7 @@ if [ "$real" = 1 ]; then
   g checkout -q main
   g merge -q --no-ff -S -m "merge: a branch" side
   save merge commit HEAD
+  save_log merge-identity "$identity_format" HEAD
   g reset -q --hard HEAD^
   g merge -q --no-ff -S -m "merge: a signed tag" side-tag
   save mergetag commit HEAD
@@ -147,8 +157,15 @@ if [ "$real" = 1 ]; then
   save encoding commit HEAD
   zone=+0200 g commit -q --allow-empty -S -m "fix: not in UTC"
   save not-utc commit HEAD
+  save_log not-utc-identity "$identity_format" HEAD
+  save_log not-utc-utc "$utc_format" HEAD
+  # As GitHub commits a pull request's test merge: in the account's zone.
+  as_name=GitHub as_email=noreply@github.com zone=+0200 g commit -q --allow-empty -m "Merge a pull request"
+  save_log github-identity "$identity_format" HEAD
+  save_log github-utc "$utc_format" HEAD
   g commit -q --allow-empty -S -s -m "fix: a co-author" --trailer "Co-authored-by: $other"
   save_message co-author-message HEAD
+  save_log co-author-identity "$identity_format" HEAD
   g commit -q --allow-empty -S -s -m "fix: a co-author in prose" -m "Co-authored-by: $other" -m "More prose."
   save_message co-author-in-prose HEAD
   g commit -q --allow-empty -S -s -m "fix: a folded reviewer line" -m "Reviewed-by: $me"$'\n '"$other"
@@ -423,6 +440,44 @@ run_cases() {
   expect fail "tree: a .maılmap (regression)" "$files$(entry 100644 blob $'.ma\304\261lmap')" tree
   expect fail "tree: a .maılmap after an invisible character (regression)" "$files$(entry 100644 blob $'\342\200\214.ma\304\261lmap')" tree
 
+  # --- identities (S-008, W-034) ---------------------------------------------
+
+  # As git log prints a commit for the identity step: author, committer,
+  # their time zones, and the Co-authored-by and Signed-off-by values.
+  t=$'\t'
+  i="$me$t$me$t+0000$t+0000$t"
+  expect pass "identity: the project in UTC, signed off" "$i$me"$'\n' identity
+  expect pass "identity: no trailers" "$i"$'\n' identity
+  expect pass "identity: two trailers by the project" "$i$me;$me"$'\n' identity
+  expect pass "identity: a space between trailers" "$i$me; $me"$'\n' identity
+  expect fail "identity: another author" "$other$t$me$t+0000$t+0000$t$me"$'\n' identity
+  expect fail "identity: another committer" "$me$t$other$t+0000$t+0000$t$me"$'\n' identity
+  expect fail "identity: an author not in UTC" "$me$t$me$t+0200$t+0000$t$me"$'\n' identity
+  expect fail "identity: a committer not in UTC" "$me$t$me$t+0000$t+0200$t$me"$'\n' identity
+  expect fail "identity: a co-author" "$i$me;$other"$'\n' identity
+  expect fail "identity: an address that only looks like the project's" "$i$me;neoblast maintainers <dev@neoblastxdev>"$'\n' identity
+  expect fail "identity: a tab in a trailer" "$i$me$t$other"$'\n' identity
+  expect fail "identity: four fields" "$me$t$me$t+0000$t+0000"$'\n' identity
+  expect fail "identity: two lines" "$i$me"$'\n'"$i$me"$'\n' identity
+  expect fail "identity: nothing" "" identity
+
+  # --- time zones (S-008, W-034) ---------------------------------------------
+
+  # As git log prints a commit for the UTC step: the author's and the
+  # committer's addresses and time zones.
+  d=dev@neoblast.dev
+  expect pass "utc: the project in UTC" "$d$t$d$t+0000$t+0000"$'\n' utc
+  expect pass "utc: someone else, not in UTC" "alice@example.org$t$d$t+0200$t+0000"$'\n' utc
+  expect pass "utc: committed by GitHub, not in UTC" "$d${t}noreply@github.com$t+0000$t+0200"$'\n' utc
+  expect fail "utc: the project, not in UTC" "$d$t$d$t+0200$t+0000"$'\n' utc
+  expect fail "utc: committed not in UTC" "$d$t$d$t+0000$t+0200"$'\n' utc
+  expect fail "utc: an address that only holds GitHub's" "$d${t}noreply@github.com|x$t+0000$t+0200"$'\n' utc
+  expect fail "utc: a space after a time zone" "$d$t$d$t+0000$t+0000 "$'\n' utc
+  expect fail "utc: five fields" "$d$t$d$t+0000$t+0000$t"$'\n' utc
+  expect fail "utc: three fields" "alice@example.org$t$d$t+0200"$'\n' utc
+  expect fail "utc: two lines" "$d$t$d$t+0000$t+0000"$'\n'"$d$t$d$t+0000$t+0000"$'\n' utc
+  expect fail "utc: nothing" "" utc
+
   # --- objects git writes ----------------------------------------------------
 
   if [ "$real" != 0 ]; then
@@ -447,6 +502,14 @@ run_cases() {
     expect_file fail "git: a tag signed with an SSH certificate (S-030)" "$r/cert-tag" tag v9.9.5
     expect_file pass "git: a tree" "$r/tree" tree
     expect_file fail "git: a tree with a .mailmap (S-031)" "$r/mailmap-tree" tree
+    expect_file pass "git: a signed-off commit's identities" "$r/signed-identity" identity
+    expect_file pass "git: a merge's identities" "$r/merge-identity" identity
+    expect_file fail "git: a co-author's identity (S-008)" "$r/co-author-identity" identity
+    expect_file fail "git: identities not in UTC" "$r/not-utc-identity" identity
+    expect_file fail "git: GitHub as committer" "$r/github-identity" identity
+    expect_file pass "git: a commit's time zones" "$r/signed-utc" utc
+    expect_file pass "git: GitHub's commit, not in UTC" "$r/github-utc" utc
+    expect_file fail "git: time zones not in UTC" "$r/not-utc-utc" utc
   fi
 
   # --- usage ---------------------------------------------------------------
@@ -457,6 +520,8 @@ run_cases() {
   expect fail "usage: a tag with two names" "$tgood" tag $v $v
   expect fail "usage: a message with an argument" "$m" message x
   expect fail "usage: a tree with an argument" "$files" tree x
+  expect fail "usage: identities with an argument" "$i$me"$'\n' identity x
+  expect fail "usage: time zones with an argument" "$d$t$d$t+0000$t+0000"$'\n' utc x
 
 }
 
