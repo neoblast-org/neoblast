@@ -200,6 +200,38 @@ mutant "tree: any name outside ASCII" $r 'n ~ /^"?\./ && ' ''
 mutant "tree: the dot looked for before bytes outside ASCII are left out" $r 'n ~ /^"?\./ && ' '$2 ~ /^"?\./ && '
 mutant "tree: quoted dot-names pass" $r 'n ~ /^"?\./ && ' 'n ~ /^\./ && '
 
+# --- identity.awk (S-008, W-034) -------------------------------------------
+
+i=identity.awk
+mutant "identity: any author" $i '$1 != me || ' ''
+mutant "identity: any committer" $i '$2 != me || ' ''
+mutant "identity: the author in any time zone" $i '$3 != "+0000" || ' ''
+mutant "identity: the committer in any time zone" $i '$4 != "+0000" || ' ''
+mutant "identity: any trailers" $i ' || tr != ""' ''
+mutant "identity: the project's trailers kept" $i 'gsub(/neoblast maintainers <dev@neoblast\.dev>/, "", tr); ' ''
+mutant "identity: any project-like trailer" $i 'gsub(/neoblast maintainers <dev@neoblast\.dev>/' 'gsub(/neoblast maintainers <dev@neoblast.dev>/'
+mutant "identity: separators kept" $i 'gsub(/[; ]/, "", tr)' 'tr = tr'
+mutant "identity: spaces kept" $i 'gsub(/[; ]/, "", tr)' 'gsub(/;/, "", tr)'
+mutant "identity: more fields" $i 'NF != 5 {' 'NF < 5 {'
+mutant "identity: fewer fields" $i 'NF != 5 {' 'NF > 5 {'
+mutant "identity: more lines" $i '|| NR != 1 }' '|| NR < 1 }'
+mutant "identity: no line" $i '|| NR != 1 }' '|| NR > 1 }'
+mutant "identity: fields split at blanks" $i 'FS = "\t"; ' ''
+
+# --- utc.awk (S-008, W-034) ------------------------------------------------
+
+u=utc.awk
+mutant "utc: every author" $u '$1 == "dev@neoblast.dev" && ' ''
+mutant "utc: GitHub's commits too" $u '$2 != "noreply@github.com" && ' ''
+mutant "utc: any address holding GitHub's" $u '$2 != "noreply@github.com"' '$2 !~ /noreply@github\.com/'
+mutant "utc: the author in any time zone" $u '$3 != "+0000" || ' ''
+mutant "utc: the committer in any time zone" $u ' || $4 != "+0000"' ''
+mutant "utc: more fields" $u 'NF != 4 {' 'NF < 4 {'
+mutant "utc: fewer fields" $u 'NF != 4 {' 'NF > 4 {'
+mutant "utc: more lines" $u '|| NR != 1 }' '|| NR < 1 }'
+mutant "utc: no line" $u '|| NR != 1 }' '|| NR > 1 }'
+mutant "utc: fields split at blanks" $u 'BEGIN { FS = "\t" }' ''
+
 # --- object.sh -------------------------------------------------------------
 
 o=object.sh
@@ -208,6 +240,8 @@ mutant "object.sh: commit takes any arguments" $o 'commit:1)' 'commit:*)'
 mutant "object.sh: tag takes any arguments" $o 'tag:2)' 'tag:*)'
 mutant "object.sh: message takes any arguments" $o 'message:1)' 'message:*)'
 mutant "object.sh: tree takes any arguments" $o 'tree:1)' 'tree:*)'
+mutant "object.sh: identity takes any arguments" $o 'identity:1)' 'identity:*)'
+mutant "object.sh: utc takes any arguments" $o 'utc:1)' 'utc:*)'
 if [ -n "$CHECKS_UTF8" ] && {
   ! printf '\351' | LC_ALL="$CHECKS_UTF8" tr a a >/dev/null 2>&1 ||
     ! printf '\342\200\214x\n' | LC_ALL="$CHECKS_UTF8" "$CHECKS_AWK" '{ gsub(/[\200-\377]/, "") } length($0) != 1 { exit 1 }' >/dev/null 2>&1
