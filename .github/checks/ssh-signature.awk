@@ -9,8 +9,8 @@
 # are checked too: characters 87 and 88 hold the namespace length's high
 # byte, 145 and 146 the signature length's low byte (0x40), and 231 the
 # padding bits after the last byte (S-034). Only the key and the signature
-# stay free: only verifying the signature would tie them to the project
-# (S-026).
+# stay free here: signed.sh, which verifies the signature, ties them to the
+# project's key for every tag and every commit from f2380e7 on (S-026).
 function ssh_signature_ok(s) {
   return length(s) == 232 &&
     substr(s, 1, 44) == "U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAg" &&

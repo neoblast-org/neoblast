@@ -590,7 +590,40 @@ that fixed it.
   under both checks; confirmed by a fresh agent.
 - **Release:** not blocking; the tag step in `RELEASING.md` makes a signed
   tag.
-- **Status:** open. S-029 is a case of it on `main`.
+- **Status:** fixed in the PR after #39, applied by hand.
+  `.github/allowed_signers` lists one key, the project's
+  (`SHA256:2LjH1DdSXCnd0CCNXdzF5XrJ52pFg8PqF0Z92uhH3aI`), which signed
+  every commit from `f2380e7` on and both tags. `.github/checks/signed.sh`
+  runs `git verify-commit` or `verify-tag` against a given allowed-signers
+  file and prints nothing. It sets the file, `ssh-keygen` and, for OpenPGP
+  and X.509 signatures, `false` on the command line, so neither a git
+  config nor the caller's GnuPG keys change the result, and it never reads
+  the revision as an option. The hygiene job checks every commit from
+  `f2380e7` on and every tag against the file as `main` holds it, so a key
+  that a pull request adds counts only after it merges; the checkout's
+  file is read only while `main` has never held one. The Release workflow
+  checks the tag before anything is published, and `RELEASING.md` has the
+  check run before the tag is pushed. Older commits are not checked: three
+  carry S-029's key, eight GitHub's own signature, and three another key
+  of the account.
+  `test.sh` has 21 cases on commits and tags git writes, signed with a
+  throwaway key, and 5 for usage. A commit or tag signed with the listed
+  key passes. These fail: unsigned; signed with another plain key; signed
+  with the listed key, its message changed; a missing file, commit or tag;
+  a commit given as a tag; `--help` as the revision; OpenPGP and X.509
+  signatures with GnuPG and gpgsm set to call any signature good; and a
+  configured allowed-signers file in place of the given one. A configured
+  `gpg.ssh.program` is not used, and nothing is printed. `mutate.sh` has
+  13 new mutants, one for each part of `signed.sh`.
+  Not tested: the workflows' shell around `signed.sh`, such as which file
+  the step reads, which was run by hand on this repository, with a missing
+  start commit, a missing file and an empty one; `valid-before`; and a
+  signature in another namespace, which git refuses. Left: a retired key
+  must keep its line, with `valid-before`, or the commits it signed fail;
+  that option compares the committer's or tagger's date, which the signer
+  sets, so a retired key that leaks can still sign a backdated commit. A
+  pull request runs its own copy of the step and of `signed.sh`, so a
+  change to either is reviewed as a change to the key.
 
 ### S-028 · Low · An indented line that git folds into an attribution line passed the hygiene job
 
@@ -648,9 +681,12 @@ that fixed it.
   until S-026's check does this in CI.
 - **Verified:** by two fresh agents, from the signatures and GitHub's API.
 - **Release:** not blocking.
-- **Status:** open until S-026's check runs in CI. Decided 2026-10-27: the
-  key is none of the maintainer's, so it is not added to the project's
-  account, and the three commits stay as they are. They were most likely
+- **Status:** fixed with S-026, in the PR after #39: the hygiene job
+  checks every commit from `f2380e7` on against `.github/allowed_signers`,
+  so a commit signed with a key that is not listed fails before it merges.
+  Decided 2026-10-27: the key is none of the maintainer's, so it is not
+  added to the project's account, and the three commits stay as they are,
+  before the check's start. They were most likely
   signed by the hosted environment that made them; work made elsewhere is
   re-signed with the project's key before it merges. `f2380e7` (#31), the
   first commit after them, and every commit since are verified. (The

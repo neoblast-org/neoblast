@@ -38,28 +38,32 @@ All four crates (`neoblast`, `neoblast-format`, `neoblast-crypto`,
 
    Then make the tag, SSH-signed and in UTC, and push it. The hygiene job
    and the Release workflow refuse a tag that is not the project's, not in
-   UTC (S-015), not of a commit (S-017), or with anything but its name and
-   its signature as message (S-022), so check it before pushing. Make it of
+   UTC (S-015), not of a commit (S-017), with anything but its name and its
+   signature as message (S-022), or not signed with a key in
+   `.github/allowed_signers` (S-026), so check it before pushing. Make it of
    the commit, never of an existing tag:
 
    ```sh
    TZ=UTC git tag -s v0.0.2 -m "v0.0.2"
    git for-each-ref refs/tags/v0.0.2 --format='%(objecttype) %(type) %(taggername) %(taggeremail) %(taggerdate:format:%z)'
    git cat-file tag v0.0.2
+   .github/checks/signed.sh .github/allowed_signers tag v0.0.2 && echo signed
    git push origin v0.0.2
    ```
 
    The first check must print `tag commit neoblast maintainers <dev@neoblast.dev> +0000`.
    The second must show only the lines `object`, `type commit`, `tag v0.0.2`
    and `tagger neoblast maintainers <dev@neoblast.dev> … +0000`, a blank
-   line, `v0.0.2` and an SSH signature block.
+   line, `v0.0.2` and an SSH signature block. The third must print `signed`.
    If not, delete the tag with `git tag -d v0.0.2` and make it again. Never
    tag the old tag (`git tag -f v0.0.2 v0.0.2`): that makes a tag of a tag.
 
-3. **Approve.** The `Release` workflow's `verify` job checks five things:
+3. **Approve.** The `Release` workflow's `verify` job checks six things:
    - the tag is on `main`;
    - the tag is annotated, of a commit, by the project in UTC, with only its
      name as message;
+   - the tag is signed with a key in `.github/allowed_signers` as `main`
+     holds it (S-026);
    - the tag matches the version;
    - `cargo deny` passes, so an advisory published since the last merge
      stops the release (S-023);

@@ -1,0 +1,11 @@
+# The SSH keys that may sign the project's commits and tags, as git
+# reads them for verify-commit and verify-tag (gpg.ssh.allowedSignersFile,
+# S-026). One line per key: the principal, then the public key; plain keys
+# only, never a cert-authority line (S-030). The hygiene job checks every
+# commit from f2380e7 on, and every tag, against this file as main holds
+# it. So a new key is added in a commit the current key signs, and a
+# retired key keeps its line, or the commits it signed would fail, with
+# valid-before="YYYYMMDDHHMMZ" (in UTC, with the Z) set later than the last
+# commit or tag it signed: git compares a commit's committer date and a
+# tag's tagger date, which the signer sets.
+dev@neoblast.dev ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICctqfbZd5mdhtkZPkyYMC/Qumj9fpyWpFXUSlZ9u/Vd

@@ -26,8 +26,11 @@
 # - message.awk reading a value from one byte before or after its part's
 #   start: a value is cut at its first colon, the byte before a part is a
 #   CR, and its first is never a colon (W-042);
-# - the workflows' own lines around object.sh (an `if !` dropped, say):
-#   test.sh runs object.sh, not the workflows.
+# - the workflows' own lines around object.sh and signed.sh (an `if !`
+#   dropped, say, or which allowed-signers file the signature step reads):
+#   test.sh runs the checks, not the workflows;
+# - signed.sh's stdout alone left open: git's verify-commit and verify-tag
+#   print only to stderr, which a mutant above opens.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -242,12 +245,30 @@ mutant "object.sh: message takes any arguments" $o 'message:1)' 'message:*)'
 mutant "object.sh: tree takes any arguments" $o 'tree:1)' 'tree:*)'
 mutant "object.sh: identity takes any arguments" $o 'identity:1)' 'identity:*)'
 mutant "object.sh: utc takes any arguments" $o 'utc:1)' 'utc:*)'
+
 if [ -n "$CHECKS_UTF8" ] && {
   ! printf '\351' | LC_ALL="$CHECKS_UTF8" tr a a >/dev/null 2>&1 ||
     ! printf '\342\200\214x\n' | LC_ALL="$CHECKS_UTF8" "$CHECKS_AWK" '{ gsub(/[\200-\377]/, "") } length($0) != 1 { exit 1 }' >/dev/null 2>&1
 }; then
   mutant "object.sh: the caller's locale (W-036, W-040)" $o 'export LC_ALL=C' ':'
 fi
+
+# --- signed.sh (S-026) -----------------------------------------------------
+
+s=signed.sh
+mutant "signed: any signature passes" $s $'fi\nexit 1' $'fi\nexit 0'
+mutant "signed: any object passes" $s '"$verify" --end-of-options "$3"' 'cat-file -e "$3"'
+mutant "signed: a revision read as an option" $s '--end-of-options ' ''
+mutant "signed: a configured ssh program" $s '-c gpg.ssh.program=ssh-keygen ' ''
+mutant "signed: a configured allowed-signers file" $s '-c gpg.ssh.allowedSignersFile="$1" ' ''
+mutant "signed: a configured GnuPG" $s '-c gpg.openpgp.program=false ' ''
+mutant "signed: a configured gpgsm" $s '-c gpg.x509.program=false' ''
+mutant "signed: git's output printed (S-012)" $s ' >/dev/null 2>&1; then' '; then'
+mutant "signed: a commit verified as a tag" $s 'verify=verify-commit' 'verify=verify-tag'
+mutant "signed: a tag verified as a commit" $s 'verify=verify-tag' 'verify=verify-commit'
+mutant "signed: commit takes any arguments" $s 'commit:3)' 'commit:*)'
+mutant "signed: tag takes any arguments" $s 'tag:3)' 'tag:*)'
+mutant "signed: a usage error exits 1" $s 'exit 2' 'exit 1'
 
 echo "$mutants mutants, $survived survived or stale"
 [ "$survived" -eq 0 ]

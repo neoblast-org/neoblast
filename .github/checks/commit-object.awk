@@ -7,7 +7,7 @@
 #   S-030);
 # - a message without control bytes but a tab (S-025): git reads a message
 #   only up to its first NUL, so the message checks would not see the rest.
-# Nothing here verifies the signature (S-026).
+# Nothing here verifies the signature: signed.sh does (S-026).
 body && /[\001-\010\013-\037\177]/ { bad = 1 }
 body { next }
 sig && $0 == " -----END SSH SIGNATURE-----" { sig = 0; if (!ssh_signature_ok(b)) bad = 1; next }

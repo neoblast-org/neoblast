@@ -7,7 +7,7 @@
 #   out as a plain ed25519 key's signature (ssh-signature.awk, S-030).
 # The name is compared as a string, so a message such as 1.0 is not taken for
 # a tag named 1.
-# Nothing here verifies the signature (S-026).
+# Nothing here verifies the signature: signed.sh does (S-026).
 part == 0 && /^object [0-9a-f]+$/ && !o++ { next }
 part == 0 && $0 == "type commit" && !t++ { next }
 part == 0 && $0 == "tag " name && !n++ { next }

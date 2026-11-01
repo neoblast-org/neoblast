@@ -44,6 +44,16 @@ jobs:
           if ! git cat-file tag "$GITHUB_REF" | .github/checks/object.sh tag "$GITHUB_REF_NAME"; then
             echo "::error::The tag must be made of a commit, by neoblast maintainers <dev@neoblast.dev> in UTC, with only its name as message, and signed, if at all, with a plain ed25519 SSH key."; exit 1
           fi
+      - name: Tag is signed with the project's key
+        # As the hygiene job checks (S-026), against .github/allowed_signers
+        # as main holds it, but before anything is published. See
+        # .github/checks/signed.sh.
+        shell: bash
+        run: |
+          git show origin/main:.github/allowed_signers >"$RUNNER_TEMP/allowed_signers"
+          if ! .github/checks/signed.sh "$RUNNER_TEMP/allowed_signers" tag "$GITHUB_REF"; then
+            echo "::error::The tag must be signed with a key in .github/allowed_signers on main."; exit 1
+          fi
       - name: Tag matches the workspace version
         run: |
           versions=$(cargo metadata --no-deps --format-version 1 | jq -r '[.packages[].version] | unique | .[]')

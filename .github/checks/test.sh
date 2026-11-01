@@ -3,7 +3,8 @@
 # could ride inside a commit, a tag, a commit message, a commit's tree or
 # what git log prints of a commit must fail (S-008, S-013, S-015, S-017,
 # S-018, S-022, S-025, S-028, S-030, S-031, S-034, W-034, W-035, W-038 to
-# W-040, W-042). The hygiene job runs it, then
+# W-040, W-042). Tests signed.sh too: only a commit or tag signed with a key
+# in the allowed-signers file passes (S-026). The hygiene job runs it, then
 # mutate.sh, before the checks themselves.
 #
 #   .github/checks/test.sh        # every case under every awk found
@@ -62,6 +63,24 @@ expect_file() { # pass|fail label file object.sh args...
   record "$want" "$label" "$got"
 }
 
+expect_signed() { # pass|fail|usage label signed.sh args...
+  local want="$1" label="$2" got=0 out
+  shift 2
+  # git reads only the throwaway repository, and no config but the caller's
+  # GIT_CONFIG_COUNT, which only a case sets.
+  out=$(GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_DIR="$real_dir/repo/.git" \
+    "$here/signed.sh" "$@" 2>&1) || got=$?
+  case "$got" in
+    0) got=pass ;;
+    1) got=fail ;;
+    2) got=usage ;;
+    *) got="exit $got" ;;
+  esac
+  # Nothing but its usage is printed, so no key or name reaches a log (S-012).
+  if [ -n "$out" ] && [ "$got" != usage ]; then got="$got, and printed"; fi
+  record "$want" "$label" "$got"
+}
+
 me='neoblast maintainers <dev@neoblast.dev>'
 other='Alice Example <alice@example.org>'
 hex=5393f6704b5059c4c8ecfbb6adc01718c13c4455
@@ -80,9 +99,16 @@ trap 'rm -rf "$work"' EXIT
 # --- objects git writes ----------------------------------------------------
 
 # Each is saved as git stores it (or, for a message, as the hygiene job reads
-# it) in $real_dir/<name>, and checked below under every awk. mutate.sh
-# passes an empty directory as CHECKS_REAL: the first run fills it and the
-# runs for its mutants read it, as no mutant changes what git writes (W-043).
+# it) in $real_dir/<name>, and checked below under every awk; signed.sh
+# reads them in $real_dir/repo. mutate.sh passes an empty directory as
+# CHECKS_REAL: the first run fills it and the runs for its mutants read it,
+# as no mutant changes what git writes (W-043).
+#
+# Nothing in the caller's environment may point git at another repository
+# or config, as inside a git hook.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
+  GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE \
+  GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT GIT_CEILING_DIRECTORIES
 real=0
 real_dir="${CHECKS_REAL:-$work/real}"
 if [ -n "${CHECKS_REAL-}" ] && [ -e "$CHECKS_REAL/complete" ]; then
@@ -97,14 +123,9 @@ else
 fi
 
 if [ "$real" = 1 ]; then
-  # Nothing in the caller's environment may point git at another repository,
-  # as inside a git hook.
-  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
-    GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE \
-    GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT GIT_CEILING_DIRECTORIES
   mkdir -p "$real_dir"
   ssh-keygen -q -t ed25519 -N '' -C '' -f "$work/key"
-  repo="$work/repo"
+  repo="$real_dir/repo"
   g() { # git in the throwaway repository, as the project in UTC, signing with the throwaway key
     GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_EDITOR=true TZ=UTC \
       GIT_AUTHOR_NAME='neoblast maintainers' GIT_AUTHOR_EMAIL=dev@neoblast.dev \
@@ -132,8 +153,10 @@ if [ "$real" = 1 ]; then
   save_message signed-message HEAD
   save_log signed-identity "$identity_format" HEAD
   save_log signed-utc "$utc_format" HEAD
+  g update-ref refs/keep/signed HEAD
   g commit -q --allow-empty -m "docs: unsigned"
   save unsigned commit HEAD
+  g update-ref refs/keep/unsigned HEAD
   g tag -s v9.9.9 -m v9.9.9
   save signed-tag tag v9.9.9
   g tag -a v9.9.8 -m v9.9.8
@@ -181,6 +204,32 @@ if [ "$real" = 1 ]; then
   save cert-signed commit HEAD
   g -c user.signingkey="$work/ckey-cert.pub" tag -s v9.9.5 -m v9.9.5
   save cert-tag tag v9.9.5
+  # A good signature by a plain key that only the other allowed-signers
+  # file lists (S-026).
+  ssh-keygen -q -t ed25519 -N '' -C '' -f "$work/okey"
+  g -c user.signingkey="$work/okey" commit -q --allow-empty -S -m "fix: signed with another key"
+  g update-ref refs/keep/other-key HEAD
+  g -c user.signingkey="$work/okey" tag -s v9.9.4 -m v9.9.4
+  printf 'dev@neoblast.dev %s\n' "$(cat "$work/key.pub")" >"$real_dir/signers"
+  printf 'dev@neoblast.dev %s\n' "$(cat "$work/okey.pub")" >"$real_dir/other-signers"
+  # The allowed key's commit with its message changed: a bad signature.
+  g update-ref refs/keep/altered "$(g cat-file commit refs/keep/signed |
+    sed 's/^fix: a subject$/fix: another subject/' | g hash-object -t commit -w --stdin)"
+  # Signatures git hands to GnuPG or gpgsm, which nothing could verify, and
+  # a program that calls any signature good, as a caller's GnuPG holding
+  # the signer's key would.
+  printf '%s\n' '#!/bin/sh' 'cat >/dev/null' "echo '[GNUPG:] NEWSIG'" \
+    "echo '[GNUPG:] GOODSIG 0123456789ABCDEF Someone'" \
+    "echo '[GNUPG:] VALIDSIG 0123456789ABCDEF0123456789ABCDEF01234567 2026-01-01 0 4 0 22 8 00 0123456789ABCDEF0123456789ABCDEF01234567'" \
+    "echo '[GNUPG:] TRUST_ULTIMATE 0 pgp'" >"$real_dir/any-good"
+  chmod +x "$real_dir/any-good"
+  head_tree=$(g rev-parse 'HEAD^{tree}')
+  crafted() { # first last subject: a commit whose signature has those armor lines
+    printf 'tree %s\nauthor %s\ncommitter %s\ngpgsig %s\n iQEz\n %s\n\n%s\n' \
+      "$head_tree" "$me $when" "$me $when" "$1" "$2" "$3" | g hash-object -t commit -w --stdin
+  }
+  g update-ref refs/keep/openpgp "$(crafted '-----BEGIN PGP SIGNATURE-----' '-----END PGP SIGNATURE-----' 'fix: signed with GnuPG')"
+  g update-ref refs/keep/x509 "$(crafted '-----BEGIN SIGNED MESSAGE-----' '-----END SIGNED MESSAGE-----' 'fix: signed with gpgsm')"
   printf 'A readme.\n' >"$repo/README.md"
   g add README.md
   g commit -q -S -m "docs: a readme"
@@ -242,7 +291,7 @@ run_cases() {
   expect pass "commit: the root commit, with no parent" "$tree$author$committer$csig$msg" commit
   expect pass "commit: a merge, with two parents" "$tree$parent$parent$author$committer$csig$msg" commit
   expect pass "commit: an empty message" "$tree$parent$author$committer$csig"$'\n' commit
-  # Allowed until a check verifies signatures (S-026).
+  # Unsigned passes here: signed.sh is what fails it (S-026).
   expect pass "commit: unsigned" "$tree$parent$author$committer$msg" commit
   LC_ALL="${utf8:-${LC_ALL-}}" expect pass "commit: a Latin-1 byte in the message, in a UTF-8 locale" "$tree$parent$author$committer$csig"$'\nfix: caf\351\n' commit
   expect pass "commit: a UTF-8 message" "$tree$parent$author$committer$csig"$'\nfix: caf\xc3\xa9 \xe2\x80\x94 a subject\n' commit
@@ -316,7 +365,7 @@ run_cases() {
   expect pass "tag: signed, as the project, in UTC" "$tgood" tag $v
   expect pass "tag: a name with a slash" "$object$type$(tag rc/v9.9.9)"$'\n'"$tsig" tag rc/v9.9.9
   expect pass "tag: a name that is a number" "$object$type"$'tag 1\n'"$tagger"$'\n1\n'"$tsig" tag 1
-  # Allowed until a check verifies signatures (S-026).
+  # Unsigned passes here: signed.sh is what fails it (S-026).
   expect pass "tag: unsigned" "$object$type$(tag $v)"$'\n' tag $v
 
   expect fail "tag: checked under another name" "$tgood" tag v9.9.8
@@ -510,6 +559,40 @@ run_cases() {
     expect_file pass "git: a commit's time zones" "$r/signed-utc" utc
     expect_file pass "git: GitHub's commit, not in UTC" "$r/github-utc" utc
     expect_file fail "git: time zones not in UTC" "$r/not-utc-utc" utc
+
+    # --- signatures (S-026) --------------------------------------------------
+
+    # signed.sh, on the commits and tags above: $r/signers lists the key
+    # that signed them, $r/other-signers only another plain key.
+    s="$r/signers"
+    expect_signed pass "signed: a commit by the allowed key" "$s" commit refs/keep/signed
+    expect_signed fail "signed: an unsigned commit" "$s" commit refs/keep/unsigned
+    expect_signed fail "signed: a commit by another key" "$s" commit refs/keep/other-key
+    expect_signed pass "signed: a commit by a key the other file allows" "$r/other-signers" commit refs/keep/other-key
+    expect_signed fail "signed: a commit by a key the other file does not allow" "$r/other-signers" commit refs/keep/signed
+    expect_signed fail "signed: no allowed-signers file" "$r/no-signers" commit refs/keep/signed
+    expect_signed fail "signed: no such commit" "$s" commit refs/keep/none
+    expect_signed fail "signed: a commit by the allowed key, its message changed" "$s" commit refs/keep/altered
+    expect_signed fail "signed: a revision read as an option" "$s" commit --help
+    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=gpg.ssh.program GIT_CONFIG_VALUE_0=false \
+      expect_signed pass "signed: a configured ssh program is not used" "$s" commit refs/keep/signed
+    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=gpg.ssh.allowedSignersFile GIT_CONFIG_VALUE_0="$r/other-signers" \
+      expect_signed fail "signed: a configured allowed-signers file is not read" "$s" commit refs/keep/other-key
+    # GnuPG and gpgsm configured to call any signature good.
+    any_good() {
+      GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=gpg.program GIT_CONFIG_VALUE_0="$r/any-good" \
+        GIT_CONFIG_KEY_1=gpg.x509.program GIT_CONFIG_VALUE_1="$r/any-good" "$@"
+    }
+    any_good expect_signed pass "signed: a commit by the allowed key, with any signature called good" "$s" commit refs/keep/signed
+    any_good expect_signed fail "signed: an OpenPGP signature, with any signature called good" "$s" commit refs/keep/openpgp
+    any_good expect_signed fail "signed: an X.509 signature, with any signature called good" "$s" commit refs/keep/x509
+    expect_signed pass "signed: a signed tag of an unsigned commit" "$s" tag v9.9.9
+    expect_signed fail "signed: an unsigned tag" "$s" tag v9.9.8
+    expect_signed fail "signed: a tag by another key" "$s" tag v9.9.4
+    expect_signed pass "signed: a tag by a key the other file allows" "$r/other-signers" tag v9.9.4
+    expect_signed fail "signed: no allowed-signers file, for a tag" "$r/no-signers" tag v9.9.9
+    expect_signed fail "signed: no such tag" "$s" tag refs/tags/none
+    expect_signed fail "signed: a signed commit given as a tag" "$s" tag refs/keep/signed
   fi
 
   # --- usage ---------------------------------------------------------------
@@ -522,6 +605,13 @@ run_cases() {
   expect fail "usage: a tree with an argument" "$files" tree x
   expect fail "usage: identities with an argument" "$i$me"$'\n' identity x
   expect fail "usage: time zones with an argument" "$d$t$d$t+0000$t+0000"$'\n' utc x
+  if [ "$real" != 0 ]; then
+    expect_signed usage "usage: signed, a commit with two revisions" "$s" commit refs/keep/signed refs/keep/signed
+    expect_signed usage "usage: signed, a tag with two names" "$s" tag v9.9.9 v9.9.9
+    expect_signed usage "usage: signed, a commit without its revision" "$s" commit
+    expect_signed usage "usage: signed, another kind" "$s" blob refs/keep/signed
+    expect_signed usage "usage: signed, no arguments"
+  fi
 
 }
 

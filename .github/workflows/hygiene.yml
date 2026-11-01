@@ -169,3 +169,45 @@ jobs:
             echo "::error::Tags must be annotated, of a commit, by neoblast maintainers <dev@neoblast.dev> in UTC, with only their name as message, and signed, if at all, with a plain ed25519 SSH key. Re-make these tags:"
             echo "$bad"; exit 1
           fi
+      - name: Commits and tags are signed with the project's key
+        # Every commit from f2380e7 on, merges too, and every tag must carry a
+        # good SSH signature by a key in .github/allowed_signers (S-026). The
+        # three commits just before f2380e7 are signed with a key that is not
+        # the project's and stay as they are (S-029); the older ones are not
+        # checked. The file is read as main holds it, so a key that a pull
+        # request adds counts only once it has merged; the checkout's is read
+        # only while main has never held the file, and once it has, main
+        # without it fails. A pull request also runs its own copy of this
+        # step and of signed.sh, so a change to either is reviewed as a
+        # change to the key. A pull request is checked at its own head. See
+        # .github/checks/signed.sh. Prints only short hashes and tag names.
+        shell: bash
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          start=f2380e7ff4ac4708d9dc8599915feb49397b4c98
+          git rev-parse --verify --quiet "$HEAD_SHA^{commit}" >/dev/null
+          git rev-parse --verify --quiet 'origin/main^{commit}' >/dev/null
+          # The tags were fetched: v0.0.1 is there, annotated.
+          git rev-parse --verify --quiet 'refs/tags/v0.0.1^{tag}' >/dev/null
+          signers="$RUNNER_TEMP/allowed_signers"
+          held=$(git log -1 --format=%H origin/main -- .github/allowed_signers)
+          if [ -z "$held" ]; then
+            cp .github/allowed_signers "$signers"
+          elif ! git show origin/main:.github/allowed_signers >"$signers" 2>/dev/null; then
+            echo "::error::main no longer holds .github/allowed_signers."; exit 1
+          fi
+          bad=$(git log --format=%H "$start^..$HEAD_SHA" | while read -r h; do
+            if ! .github/checks/signed.sh "$signers" commit "$h"; then
+              git rev-parse --short "$h"
+            fi
+          done)
+          bad_tags=$(git for-each-ref refs/tags --format='%(refname:lstrip=2)' | while read -r name; do
+            if ! .github/checks/signed.sh "$signers" tag "refs/tags/$name"; then
+              printf '%s\n' "$name"
+            fi
+          done)
+          if [ -n "$bad$bad_tags" ]; then
+            echo "::error::Commits from f2380e7 on, and tags, must be signed with a key in .github/allowed_signers on main. Re-sign these:"
+            printf '%s\n' $bad $bad_tags; exit 1
+          fi
