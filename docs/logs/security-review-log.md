@@ -1,6 +1,6 @@
 # Security Review Log
 
-<!-- baseline --> **Next review diffs from:** `8c34bcaf796de268b55a3d7ed7b46821c8959af8` (`main`, recorded 2026-10-28)
+<!-- baseline --> **Next review diffs from:** `805a5ed727555de816d98a76b8711e7be0f9e6b9` (`main`, recorded 2026-11-02)
 
 A running record of branch security reviews. Each entry records the exact commit range
 reviewed; the baseline marker line above is the machine-owned frontier the next
@@ -21,6 +21,80 @@ marker line; a frontier-moving entry's Base must equal the previous one's Tip un
 the entry explains why not.
 
 ## Entries
+
+### 2026-11-02 · `8c34bca..805a5ed` (#37 to #41)
+
+| | Commit | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `8c34bcaf796de268b55a3d7ed7b46821c8959af8` | 2026-10-28T18:14:43Z | fix: S-030 and S-031; log the security review of #32 and #33 (#36) |
+| Tip | `805a5ed727555de816d98a76b8711e7be0f9e6b9` | 2026-11-02T15:31:42Z | fix: neoblast-crypto requires ctutils 0.4.4 or later (S-024) (#41) |
+
+- **Scope:** 8 commits (`git rev-list --count 8c34bca..805a5ed`) and 33
+  files, +1346/−217 (`git diff --shortstat 8c34bca 805a5ed`): the v0.0.2
+  release (#37); the plan's close-out, the action bumps, S-034, W-038 to
+  W-043 and W-028 to W-030 (#38); W-034 (#39); S-026 and S-029 (#40); and
+  S-024 (#41). Of them, 15 files, +597/−103, under `.github/` and 5 files,
+  +220/−54, under `crates/` (the same command with `-- .github` and
+  `-- crates`). Base equals the previous entry's Tip. Only the committed
+  range is covered: the code log's entry for the same range was
+  uncommitted when it ran.
+- **Method:** a fresh agent read `.github/` and tried to get commits and
+  tags past `signed.sh` and the release steps on local clones (other
+  namespaces and principals, signatures over other bytes, a
+  `gpgsig-sha256` header, a second signature, refs that shadow others);
+  another read `crates/`, the lock files and the public text, ran the
+  tests, clippy and `cargo deny`, and read the tag, the release, the
+  crates.io records, the range's commits and #37 to #41 through GitHub's
+  and crates.io's APIs. A third fresh agent tried to refute each finding,
+  and lowered the first from the reviewer's medium to low.
+- **Findings:** 2, both low, in
+  [`plans/todo/security-review-s-series.md`](../../plans/todo/security-review-s-series.md):
+  - **S-035 (Low):** a tag named `origin/main` stands in for `main` in
+    the signature and release steps, as git resolves tags first (#40,
+    and the release workflow before the range).
+  - **S-036 (Low):** the signature step's comment understates what a
+    pull request can change (#40).
+- **Not tracked:**
+  - `heal_segments` no longer checks that `regenerate` returned n shards:
+    `regenerate` now guarantees it, and only a codec bug could break it,
+    which would be reported as a mismatch.
+  - The code review's W-044 (a control byte written as a letter escape
+    before a dot-name) and W-045 (the choice of allowed-signers file has
+    no test) touch S-031's and S-026's checks; they are tracked there.
+- **Checked, no finding:**
+  - `signed.sh` refuses another namespace or principal, a signature over
+    other bytes, a `gpgsig-sha256` header and a second signature;
+    OpenPGP and X.509 go to `false`; `object.sh` refuses a `mergetag` and
+    a second `gpgsig` first. The range from `f2380e7` covers merges, and
+    a commit reachable only from a tag is checked on the tag's push.
+  - `ssh-signature.awk`'s positions for S-034 match SSHSIG's layout.
+  - The changed `neoblast-erasure` and `store.rs` paths: no new panic,
+    unchecked index or allocation from input; a hostile store or manifest
+    cannot reach `Codec`; `after_full_sync` behaves as `full_sync` did.
+    `cargo test --all` (103 passed), clippy and `cargo deny` pass.
+  - The lock files keep `ctutils` 0.4.5 and add only `neoblast-crypto`'s
+    edge. #34 and #35 are closed unmerged; `35a6193` makes their two bumps
+    as a project commit, at the SHAs of the upstream tags.
+  - `v0.0.2` is annotated, signed with the project's key and verified on
+    GitHub, on `083edfe`, which meets the release gate; the release and
+    all four crates are the project's, published from that commit by
+    trusted publishing.
+  - The 8 commits are the project's, in UTC, signed off once, signed with
+    the project's key and verified on GitHub; #37 to #41 were opened and
+    merged by the project, with no reviews or comments.
+  - Privacy: no names, addresses, paths or session links in the range's
+    text, its commit messages or #37 to #41.
+  - No open finding of medium severity or higher is described in public:
+    S-027 appears only by ID, severity and the release rule.
+- **Outcome:** no blocker. S-035 and S-036 change only `.github/` and the
+  worklist.
+- **Carried-over items:** S-002 open; S-003 open; S-007 open, with every
+  merge a fast-forward; S-008 open until the GitHub-side copies are
+  removed; S-024 fixed in `805a5ed` (#41); S-026 and S-029 fixed in
+  `9f7839a` (#40), the signature step passing on its CI and on #41's;
+  S-027 handled privately and open, not shipped in the release; S-033
+  fixed in `083edfe` (#37), the commit `v0.0.2` tags; S-034 fixed in
+  `1f30277` (#38). Their statuses had "the PR after" #37, #39 and #40.
 
 ### 2026-10-28 · `ee97e24..8c34bca` (#36)
 

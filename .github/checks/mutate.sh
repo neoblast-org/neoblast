@@ -26,9 +26,9 @@
 # - message.awk reading a value from one byte before or after its part's
 #   start: a value is cut at its first colon, the byte before a part is a
 #   CR, and its first is never a colon (W-042);
-# - the workflows' own lines around object.sh and signed.sh (an `if !`
-#   dropped, say, or which allowed-signers file the signature step reads):
-#   test.sh runs the checks, not the workflows;
+# - the workflows' own lines around object.sh, signed.sh and
+#   main-signers.sh (an `if !` dropped, say), and the release's "Tag is on
+#   main": test.sh runs the checks, not the workflows;
 # - signed.sh's stdout alone left open: git's verify-commit and verify-tag
 #   print only to stderr, which a mutant above opens.
 set -euo pipefail
@@ -45,10 +45,10 @@ done
 export CHECKS_AWK
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-# test.sh's UTF-8 locale, found once here so the locale mutant below runs
-# under the one its cases use (W-040), and git's objects, made by the first
-# run of test.sh and read by the others (W-043).
-CHECKS_UTF8=$(locale -a 2>/dev/null | grep -i -E '^(C|en_US)\.utf-?8$' | head -n 1 || true)
+# test.sh's UTF-8 locale, which it prints, so the locale mutant below runs
+# under the one its cases use (W-040, W-047), and git's objects, made by the
+# first run of test.sh and read by the others (W-043).
+CHECKS_UTF8=$("$here/test.sh" --utf8-locale)
 export CHECKS_UTF8
 mkdir "$work/real"
 export CHECKS_REAL="$work/real"
@@ -196,9 +196,15 @@ mutant "tree: only the name .mailmap" $r '/^"?\.mailmap/' '/^"?\.mailmap$/'
 mutant "tree: quoted names pass" $r '/^"?\.mailmap/' '/^\.mailmap/'
 mutant "tree: .mailmap anywhere in a name" $r '/^"?\.mailmap/' '/\.mailmap/'
 mutant "tree: fields split at blanks" $r 'BEGIN { FS = "\t" }' ''
-mutant "tree: dot-names outside ASCII pass" $r $'n ~ /^"?\\./ && $2 ~ /\\\\[0-7][0-7][0-7]|[\\200-\\377]/ { bad = 1 }\n' ''
-mutant "tree: quoted dot-names outside ASCII pass" $r '/\\[0-7][0-7][0-7]|[\200-\377]/ { bad' '/[\200-\377]/ { bad'
-mutant "tree: raw dot-names outside ASCII pass" $r '/\\[0-7][0-7][0-7]|[\200-\377]/ { bad' '/\\[0-7][0-7][0-7]/ { bad'
+mutant "tree: dot-names outside ASCII pass" $r $'n ~ /^"?\\./ && $2 ~ /\\\\[0-7][0-7][0-7]|\\\\[abtnvfr]|[\\200-\\377]/ { bad = 1 }\n' ''
+mutant "tree: quoted dot-names outside ASCII pass" $r '/\\[0-7][0-7][0-7]|\\[abtnvfr]|[\200-\377]/ { bad' '/\\[abtnvfr]|[\200-\377]/ { bad'
+mutant "tree: raw dot-names outside ASCII pass" $r '|[\200-\377]/ { bad' '/ { bad'
+mutant "tree: letter escapes kept (W-044)" $r 'gsub(/\\[abtnvfr]/, "", n)' ''
+mutant "tree: a BEL's escape kept (W-044)" $r 'gsub(/\\[abtnvfr]/' 'gsub(/\\[btnvfr]/'
+mutant "tree: a CR's escape kept (W-044)" $r 'gsub(/\\[abtnvfr]/' 'gsub(/\\[abtnvf]/'
+mutant "tree: dot-names with a letter escape pass (W-044)" $r '|\\[abtnvfr]|' '|'
+mutant "tree: dot-names with a BEL's escape pass (W-044)" $r '|\\[abtnvfr]|' '|\\[btnvfr]|'
+mutant "tree: dot-names with a CR's escape pass (W-044)" $r '|\\[abtnvfr]|' '|\\[abtnvf]|'
 mutant "tree: any name outside ASCII" $r 'n ~ /^"?\./ && ' ''
 mutant "tree: the dot looked for before bytes outside ASCII are left out" $r 'n ~ /^"?\./ && ' '$2 ~ /^"?\./ && '
 mutant "tree: quoted dot-names pass" $r 'n ~ /^"?\./ && ' 'n ~ /^\./ && '
@@ -269,6 +275,16 @@ mutant "signed: a tag verified as a commit" $s 'verify=verify-tag' 'verify=verif
 mutant "signed: commit takes any arguments" $s 'commit:3)' 'commit:*)'
 mutant "signed: tag takes any arguments" $s 'tag:3)' 'tag:*)'
 mutant "signed: a usage error exits 1" $s 'exit 2' 'exit 1'
+
+# --- main-signers.sh (S-035, W-045) -----------------------------------------
+
+ms=main-signers.sh
+mutant "main: a tag or branch named origin/main read first (S-035)" $ms 'git show-ref --verify --hash refs/remotes/origin/main' 'git rev-parse --verify --quiet origin/main'
+mutant "main: git's lookup rules for main's full name (S-035)" $ms 'git show-ref --verify --hash refs/remotes/origin/main' 'git rev-parse --verify --quiet refs/remotes/origin/main'
+mutant "main: no file on main passes" $ms '.github/allowed_signers" 2>/dev/null || exit 1' '.github/allowed_signers" 2>/dev/null || exit 0'
+mutant "main: a directory printed as a listing" $ms 'git cat-file blob ' 'git show '
+mutant "main: any arguments" $ms 'if [ $# -ne 0 ]; then' 'if false; then'
+mutant "main: a usage error exits 1" $ms 'exit 2' 'exit 1'
 
 echo "$mutants mutants, $survived survived or stale"
 [ "$survived" -eq 0 ]

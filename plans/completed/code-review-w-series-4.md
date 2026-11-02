@@ -1,6 +1,7 @@
 # Code-review worklist (W-series, part 4)
 
-Status: todo. Opened 2026-10-25 by the sixth `/review-since`
+Status: completed 2026-11-02: every item is fixed on `main`, the last in
+`6f9a2e9` (#39). Opened 2026-10-25 by the sixth `/review-since`
 (`255353b..c3d405d`, #23, #25 and #26), logged in
 `docs/logs/code-review-log.md`, while the v0.0.2 campaign (step 7d″) ran on
 `c3d405d`. Part 3, W-024 to W-027,
@@ -11,12 +12,12 @@ cleanup; none blocks v0.0.2. W-028 to W-030 each change `crates/`, and so every 
 which is outside `code_id` and can land before the tag. The eighth
 (`118f710..f2380e7`, #28, #30 and #31) added W-032 to W-034, all outside
 `code_id`: W-032 and W-033 are fixed in #32 (`c618dea`), and W-034
-waited until after v0.0.2 and is fixed in the PR after #38. The ninth
+waited until after v0.0.2 and is fixed in `6f9a2e9` (#39). The ninth
 (`f2380e7..c618dea`, #32) added W-035 to W-037, also outside `code_id`,
 fixed before the tag in #33. The tenth
 (`c618dea..8c34bca`, #33 and #36) added W-038 to W-043, all outside
 `code_id` and none a weakness CI can reach; they waited until after
-v0.0.2 and are fixed in the PR after #37.
+v0.0.2 and are fixed in `1f30277` (#38).
 
 IDs are unique across all worklists and continue from the highest W-number used.
 
@@ -67,7 +68,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   helper, and test that an `EIO` is returned without the `fsync` running and
   that `ENOTSUP` runs it. A real `EIO` cannot be made in a test.
 - Verified: by two fresh agents, by mutation.
-- Status: fixed in the PR after #37: `full_sync` hands the full sync's
+- Status: fixed in `06bda62` (#38): `full_sync` hands the full sync's
   result and the plain `fsync` to `after_full_sync`, and
   `w028_a_failed_full_sync_does_not_run_fsync` checks that an `EIO` is
   returned without the `fsync` running, that `ENOTSUP` runs it and
@@ -94,7 +95,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   is the only codec and heal names it directly; the proptest and the
   `erasure_restore` fuzz target assert full equality, so nothing reaches it
   today.
-- Status: fixed in the PR after #37: `encode_parity` and `regenerate` take
+- Status: fixed in `06bda62` (#38): `encode_parity` and `regenerate` take
   their parity through `parity`, which returns `Codec` unless the codec
   gave `n - k` shards of `shard_len` bytes, and `reconstruct_data` returns
   `Codec` for a missing data shard the codec did not restore or restored
@@ -112,7 +113,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   `s011_an_inconsistent_segment_does_not_stop_heal`.
 - Remediation: `s011` uses `Recorder::new(false)` and `sealed_as`.
 - Verified: by a fresh agent.
-- Status: fixed in the PR after #37: `s011` uses `sealed_as` and
+- Status: fixed in `06bda62` (#38): `s011` uses `sealed_as` and
   `Recorder::new(false)`, and asserts as before.
 
 ### W-031 (cleanup): the tag check is written out twice
@@ -203,7 +204,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Remediation: move them to `.github/checks/`, with cases and mutants, as
   W-031 did for the others.
 - Verified: by a fresh agent.
-- Status: fixed in the PR after #38: the programs are
+- Status: fixed in `6f9a2e9` (#39): the programs are
   `.github/checks/identity.awk` and `utc.awk`, run as `object.sh
   identity` and `object.sh utc` on one commit at a time, as the steps for
   messages and trees are, with the same rules but three changes, each
@@ -307,7 +308,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   `bob`, and a mutant that skips each.
 - Verified: by a fresh agent, decoding a real signature and applying both
   mutants under mawk, gawk, busybox and macOS awk.
-- Status: fixed in the PR after #37: `test.sh` fails a signature with the
+- Status: fixed in `1f30277` (#38): `test.sh` fails a signature with the
   magic `SSHSIH` and one in the namespace `bob`, each differing from the
   valid one in one way; mutants compare from character 9 and skip
   characters 93 to 96, and the old "any magic or version" mutant is now
@@ -322,7 +323,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   `ssh_signature_ok`, is tested for neither commits nor tags.
 - Remediation: the tag case sends BEGIN and END, and a commit case the same.
 - Verified: by a fresh agent.
-- Status: fixed in the PR after #37: "tag: a signature with an empty
+- Status: fixed in `1f30277` (#38): "tag: a signature with an empty
   body" sends BEGIN and END, and a commit case does the same.
 
 ### W-040 (low): what `mutate.sh` says about the locale is not true of every awk
@@ -340,7 +341,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Verified: by a fresh agent, with the export removed in a copy, under
   macOS awk in `en_US.UTF-8` and gawk in `C.UTF-8`. CI's mutants run under
   mawk, where the answer is right.
-- Status: fixed in the PR after #37: `test.sh` runs "the project's files"
+- Status: fixed in `1f30277` (#38): `test.sh` runs "the project's files"
   and "a .mailmap after an invisible character" in the UTF-8 locale too,
   which gawk and macOS awk answer wrongly without `LC_ALL=C`; `mutate.sh`
   finds the locale once and passes it to `test.sh` as `CHECKS_UTF8`, runs
@@ -357,7 +358,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   only `tag-object.awk`.
 - Remediation: name the layout and `ssh-signature.awk`, or `object.sh`.
 - Verified: by a fresh agent.
-- Status: fixed in the PR after #37: both comments name `object.sh`,
+- Status: fixed in `1f30277` (#38): both comments name `object.sh`,
   `tag-object.awk` and `ssh-signature.awk`, and both errors say a
   signature must be made with a plain ed25519 SSH key.
 
@@ -374,7 +375,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Remediation: take `substr($0, off)` from a running offset, and stop at
   the first part that fails, which makes it linear.
 - Verified: by a fresh agent, timing both versions under all four awks.
-- Status: fixed in the PR after #37: a value is `substr($0, off)` from a
+- Status: fixed in `1f30277` (#38): a value is `substr($0, off)` from a
   running offset and is compared by one anchored match, and the first
   value that is not the project's ends the check (`exit 1`). The 72 KB
   line now takes under 0.1 s under mawk, gawk, busybox and macOS awk,
@@ -399,7 +400,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   later runs reuse them. The eighth and ninth reviews left this cost
   untracked; it has doubled since.
 - Verified: by a fresh agent, timing both in Docker.
-- Status: fixed in the PR after #37: `mutate.sh` passes an empty
+- Status: fixed in `1f30277` (#38): `mutate.sh` passes an empty
   directory as `CHECKS_REAL`; `test.sh`'s first run fills it and the
   mutants' runs read it. The Docker run of `test.sh` and `mutate.sh`
   takes 32 s.

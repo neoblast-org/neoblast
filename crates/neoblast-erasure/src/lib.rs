@@ -239,7 +239,8 @@ pub fn regenerate(
 /// Any present shard whose length is not `shard_len` is an error, even when k
 /// other shards would be enough: it means the caller has a bug or a bad header.
 /// A missing data shard the codec does not restore, or restores at another
-/// length, is [`ErasureError::Codec`] (review W-029).
+/// length, is [`ErasureError::Codec`] (review W-029); a shard it returns that
+/// was not asked for is ignored.
 pub fn reconstruct_data(
     code: &impl ErasureCode,
     k: usize,
@@ -411,20 +412,32 @@ mod tests {
         Drop,
         /// One shard more.
         Extra,
+        /// `restore` only: other bytes for the first shard it was given.
+        Held,
         /// The last shard 64 bytes longer.
         Long,
         /// The last shard 64 bytes shorter.
         Short,
     }
 
-    /// The real codec with one result broken (review W-029).
-    struct Broken(Fault);
+    /// Which result [`Broken`] breaks.
+    #[derive(Clone, Copy, Debug)]
+    enum Part {
+        /// `encode`'s parity.
+        Parity,
+        /// `restore`'s shards.
+        Restore,
+    }
+
+    /// The real codec with one result broken (review W-029), and the other
+    /// left as it is, so a case fails for that result alone (W-046).
+    struct Broken(Part, Fault);
 
     fn break_last(fault: Fault, shard: &mut Vec<u8>) {
         match fault {
             Fault::Long => shard.extend([0u8; 64]),
             Fault::Short => shard.truncate(shard.len() - 64),
-            Fault::Drop | Fault::Extra => {}
+            Fault::Drop | Fault::Extra | Fault::Held => {}
         }
     }
 
@@ -435,10 +448,12 @@ mod tests {
             recovery_count: usize,
         ) -> Result<Vec<Vec<u8>>, ErasureError> {
             let mut parity = ReedSolomonSimd.encode(original, recovery_count)?;
-            match self.0 {
-                Fault::Drop => drop(parity.pop()),
-                Fault::Extra => parity.push(parity[0].clone()),
-                fault => break_last(fault, parity.last_mut().unwrap()),
+            if let Broken(Part::Parity, fault) = *self {
+                match fault {
+                    Fault::Drop => drop(parity.pop()),
+                    Fault::Extra => parity.push(parity[0].clone()),
+                    fault => break_last(fault, parity.last_mut().unwrap()),
+                }
             }
             Ok(parity)
         }
@@ -452,16 +467,23 @@ mod tests {
         ) -> Result<BTreeMap<usize, Vec<u8>>, ErasureError> {
             let mut restored =
                 ReedSolomonSimd.restore(original_count, recovery_count, original, recovery)?;
-            match self.0 {
-                Fault::Drop => drop(restored.pop_last()),
-                Fault::Extra => {
-                    if let Some(first) = restored.values().next().cloned() {
-                        restored.insert(original_count, first);
+            if let Broken(Part::Restore, fault) = *self {
+                match fault {
+                    Fault::Drop => drop(restored.pop_last()),
+                    Fault::Extra => {
+                        if let Some(first) = restored.values().next().cloned() {
+                            restored.insert(original_count, first);
+                        }
                     }
-                }
-                fault => {
-                    if let Some(last) = restored.values_mut().last() {
-                        break_last(fault, last);
+                    Fault::Held => {
+                        if let Some(&(i, bytes)) = original.first() {
+                            restored.insert(i, bytes.iter().map(|b| !b).collect());
+                        }
+                    }
+                    fault => {
+                        if let Some(last) = restored.values_mut().last() {
+                            break_last(fault, last);
+                        }
                     }
                 }
             }
@@ -471,27 +493,47 @@ mod tests {
 
     /// W-029: a codec whose restore drops a shard is a `Codec` error, not
     /// `NotEnough` with enough shards held; one that restores a shard too
-    /// long or too short is one too, not data of that length. An extra
-    /// shard is not asked for, so only `regenerate`'s parity then fails.
+    /// long or too short is one too, not data of that length. A shard that
+    /// was not asked for, past the data or for a data shard held, is
+    /// ignored (W-046). Only `restore` is broken, so `regenerate` fails for
+    /// its restore alone.
     #[test]
     fn w029_a_broken_restore_is_a_codec_error() {
         let shards = encode_segment(&ReedSolomonSimd, b"abcdefgh", 2, 4, 64).unwrap();
         let held = vec![None, Some(shards[1].clone()), Some(shards[2].clone()), None];
-        assert!(reconstruct_data(&ReedSolomonSimd, 2, 4, 64, &held).is_ok());
-        assert!(regenerate(&ReedSolomonSimd, 2, 4, 64, &held).is_ok());
+        assert_eq!(
+            reconstruct_data(&ReedSolomonSimd, 2, 4, 64, &held).as_deref(),
+            Ok(&shards[..2])
+        );
+        assert_eq!(
+            regenerate(&ReedSolomonSimd, 2, 4, 64, &held).as_ref(),
+            Ok(&shards)
+        );
+        for fault in [Fault::Extra, Fault::Held] {
+            let code = Broken(Part::Restore, fault);
+            assert_eq!(
+                reconstruct_data(&code, 2, 4, 64, &held).as_deref(),
+                Ok(&shards[..2]),
+                "{fault:?}"
+            );
+            assert_eq!(
+                regenerate(&code, 2, 4, 64, &held).as_ref(),
+                Ok(&shards),
+                "{fault:?}"
+            );
+        }
         for fault in [Fault::Drop, Fault::Long, Fault::Short] {
+            let code = Broken(Part::Restore, fault);
             assert!(
                 matches!(
-                    reconstruct_data(&Broken(fault), 2, 4, 64, &held),
+                    reconstruct_data(&code, 2, 4, 64, &held),
                     Err(ErasureError::Codec(_))
                 ),
                 "{fault:?}"
             );
-        }
-        for fault in [Fault::Drop, Fault::Extra, Fault::Long, Fault::Short] {
             assert!(
                 matches!(
-                    regenerate(&Broken(fault), 2, 4, 64, &held),
+                    regenerate(&code, 2, 4, 64, &held),
                     Err(ErasureError::Codec(_))
                 ),
                 "{fault:?}"
@@ -501,7 +543,7 @@ mod tests {
 
     /// W-029: parity of the wrong count, or whose last shard is too long or
     /// too short, is a `Codec` error, from `encode_segment` and from
-    /// `regenerate`, which encodes after restoring.
+    /// `regenerate`, which encodes after restoring. Only `encode` is broken.
     #[test]
     fn w029_broken_parity_is_a_codec_error() {
         let shards = encode_segment(&ReedSolomonSimd, b"abcdefgh", 2, 4, 64).unwrap();
@@ -509,16 +551,17 @@ mod tests {
         let held = vec![Some(shards[0].clone()), Some(shards[1].clone()), None, None];
         assert!(regenerate(&ReedSolomonSimd, 2, 4, 64, &held).is_ok());
         for fault in [Fault::Drop, Fault::Extra, Fault::Long, Fault::Short] {
+            let code = Broken(Part::Parity, fault);
             assert!(
                 matches!(
-                    encode_segment(&Broken(fault), b"abcdefgh", 2, 4, 64),
+                    encode_segment(&code, b"abcdefgh", 2, 4, 64),
                     Err(ErasureError::Codec(_))
                 ),
                 "{fault:?}"
             );
             assert!(
                 matches!(
-                    regenerate(&Broken(fault), 2, 4, 64, &held),
+                    regenerate(&code, 2, 4, 64, &held),
                     Err(ErasureError::Codec(_))
                 ),
                 "{fault:?}"

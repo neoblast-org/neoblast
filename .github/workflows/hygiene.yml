@@ -36,6 +36,9 @@ jobs:
         # Only commits made on a maintainer's machine are checked. Commits GitHub
         # creates itself (the pull-request test merge, squash merges) have GitHub
         # as committer and carry the account's time zone, so they are skipped.
+        # After 5393f67, the identity step's rule implies this one; here it
+        # also checks 5393f67 and the commits before it, whose hashes are
+        # fixed (W-048).
         # See .github/checks/utc.awk.
         shell: bash
         run: |
@@ -174,28 +177,25 @@ jobs:
         # good SSH signature by a key in .github/allowed_signers (S-026). The
         # three commits just before f2380e7 are signed with a key that is not
         # the project's and stay as they are (S-029); the older ones are not
-        # checked. The file is read as main holds it, so a key that a pull
-        # request adds counts only once it has merged; the checkout's is read
-        # only while main has never held the file, and once it has, main
-        # without it fails. A pull request also runs its own copy of this
-        # step and of signed.sh, so a change to either is reviewed as a
-        # change to the key. A pull request is checked at its own head. See
-        # .github/checks/signed.sh. Prints only short hashes and tag names.
+        # checked. The file is read as main holds it, from
+        # refs/remotes/origin/main alone (S-035), so a key that a pull request adds counts only once it has
+        # merged, and main without the file fails. A pull request runs its
+        # own copy of this job, every check and workflow included, so its
+        # result is only as good as the review of all it changes under
+        # .github/ (S-036). A pull request is checked at its own head. See
+        # .github/checks/signed.sh and main-signers.sh. Prints only short
+        # hashes and tag names.
         shell: bash
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           start=f2380e7ff4ac4708d9dc8599915feb49397b4c98
           git rev-parse --verify --quiet "$HEAD_SHA^{commit}" >/dev/null
-          git rev-parse --verify --quiet 'origin/main^{commit}' >/dev/null
           # The tags were fetched: v0.0.1 is there, annotated.
           git rev-parse --verify --quiet 'refs/tags/v0.0.1^{tag}' >/dev/null
           signers="$RUNNER_TEMP/allowed_signers"
-          held=$(git log -1 --format=%H origin/main -- .github/allowed_signers)
-          if [ -z "$held" ]; then
-            cp .github/allowed_signers "$signers"
-          elif ! git show origin/main:.github/allowed_signers >"$signers" 2>/dev/null; then
-            echo "::error::main no longer holds .github/allowed_signers."; exit 1
+          if ! .github/checks/main-signers.sh >"$signers"; then
+            echo "::error::No main, or main holds no .github/allowed_signers."; exit 1
           fi
           bad=$(git log --format=%H "$start^..$HEAD_SHA" | while read -r h; do
             if ! .github/checks/signed.sh "$signers" commit "$h"; then

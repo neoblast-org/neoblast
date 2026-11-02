@@ -12,7 +12,9 @@ seventh (2026-10-25, `c3d405d..118f710`, the review PR after #26) added S-025
 and S-026, both low. The eighth (2026-10-27, `118f710..f2380e7`, #28, #30 and
 #31) added S-028 and S-029, both low. The ninth (2026-10-28,
 `f2380e7..ee97e24`, #32 and #33) added S-030 to S-032, all low. The tenth
-(2026-10-28, `ee97e24..8c34bca`, #36) added S-033 and S-034, both low.
+(2026-10-28, `ee97e24..8c34bca`, #36) added S-033 and S-034, both low. The
+eleventh (2026-11-02, `8c34bca..805a5ed`, #37 to #41) added S-035 and
+S-036, both low.
 
 IDs are unique across all worklists and continue from the highest S-number used,
 including one that so far appears only in a review log (`SECURITY.md`, "Our own
@@ -535,7 +537,7 @@ that fixed it.
 - **Verified:** by two fresh agents, with `cargo generate-lockfile` for a
   downstream crate at each `rust-version`.
 - **Release:** not blocking.
-- **Status:** fixed in the PR after #40. `neoblast-crypto` requires
+- **Status:** fixed in `805a5ed` (#41). `neoblast-crypto` requires
   `ctutils = "0.4.4"` through the workspace, with the reason beside the
   blast-radius groups in `Cargo.toml` and in `decisions/README.md`: nothing
   calls it, so no wrapper, and an exact pin would clash with other users of
@@ -603,7 +605,7 @@ that fixed it.
   under both checks; confirmed by a fresh agent.
 - **Release:** not blocking; the tag step in `RELEASING.md` makes a signed
   tag.
-- **Status:** fixed in the PR after #39, applied by hand.
+- **Status:** fixed in `9f7839a` (#40), applied by hand.
   `.github/allowed_signers` lists one key, the project's
   (`SHA256:2LjH1DdSXCnd0CCNXdzF5XrJ52pFg8PqF0Z92uhH3aI`), which signed
   every commit from `f2380e7` on and both tags. `.github/checks/signed.sh`
@@ -635,8 +637,11 @@ that fixed it.
   must keep its line, with `valid-before`, or the commits it signed fail;
   that option compares the committer's or tagger's date, which the signer
   sets, so a retired key that leaks can still sign a backdated commit. A
-  pull request runs its own copy of the step and of `signed.sh`, so a
-  change to either is reviewed as a change to the key.
+  pull request runs its own copy of the whole job, so its result is only
+  as good as the review of all it changes under `.github/` (S-036). Since
+  the PR after #41, `.github/checks/main-signers.sh` reads the file from
+  `refs/remotes/origin/main` alone (S-035), and the checkout's file is no longer
+  read while `main` has never held one (W-045).
 
 ### S-028 · Low · An indented line that git folds into an attribution line passed the hygiene job
 
@@ -694,7 +699,7 @@ that fixed it.
   until S-026's check does this in CI.
 - **Verified:** by two fresh agents, from the signatures and GitHub's API.
 - **Release:** not blocking.
-- **Status:** fixed with S-026, in the PR after #39: the hygiene job
+- **Status:** fixed with S-026, in `9f7839a` (#40): the hygiene job
   checks every commit from `f2380e7` on against `.github/allowed_signers`,
   so a commit signed with a key that is not listed fails before it merges.
   Decided 2026-10-27: the key is none of the maintainer's, so it is not
@@ -771,7 +776,7 @@ that fixed it.
   `test.sh` fails `.mailmap`, `.MailMap`, `.mailmap.`, U+200C after or
   before `.mailmap`, quoted or not, and one git makes, and passes
   `docs.mailmap` and a quoted `café.md`; eight mutants. No commit since
-  `5393f67` holds one. Since the PR after #37, nor may a name that starts
+  `5393f67` holds one. Since `1f30277` (#38), nor may a name that starts
   with a dot, once bytes outside ASCII are left out, hold one, as written
   or in octal, so that `.maılmap`, with a dotless i, fails without knowing
   how a file system folds it (the security log's note on #36), also after
@@ -849,7 +854,7 @@ that fixed it.
   since `5393f67` and `v0.0.1`.
 - **Release:** not blocking; a `.github/` change, so after the tag
   (W-037), with W-038.
-- **Status:** fixed in the PR after #37: `ssh-signature.awk` checks
+- **Status:** fixed in `1f30277` (#38): `ssh-signature.awk` checks
   characters 87 and 88, 145 and 146, and 231, and its comment names them.
   `test.sh` fails a namespace length whose high byte is 0x01, 0x40 or
   0x80, a signature length whose low byte is 0x44, 0x41 or 0x42, and
@@ -859,3 +864,68 @@ that fixed it.
   layout, and accepts it unchanged. A mutant for each check, and two for
   each of the three sets, each letting one more bit through.
   Every commit since `5393f67` and both tags pass.
+
+### S-035 · Low · A tag named `origin/main` stands in for `main` in the signature and release steps
+
+- **Where:** `.github/workflows/hygiene.yml`, "Commits and tags are signed
+  with the project's key" (`9f7839a`, #40, S-026), and
+  `.github/workflows/release.yml`, "Tag is on main" and "Tag is signed
+  with the project's key".
+- **Problem:** the steps name `origin/main`, and git resolves a name in
+  `refs/tags/` before one in `refs/remotes/`. `actions/checkout` with
+  `fetch-depth: 0` fetches every tag on every event, and the tag ruleset
+  covers only `v*`, so a tag named `origin/main` on a commit that adds a
+  key to `allowed_signers` makes the signature step read that file, and
+  "Tag is on main" accept that commit. Reproduced on local clones: with
+  the tag, the hygiene signature step and both release steps pass a
+  commit and tag signed with a key `main` does not hold; without it, all
+  three fail. Git warns only that the name is ambiguous.
+- **Impact:** none beyond what its pusher could already do: pushing a tag
+  takes write access, which also allows changing `.github/checks/`, which
+  both workflows run from the commit they check (S-014), and every release
+  waits for the maintainer's approval. It weakens S-026's "a key counts
+  only once it has merged", and a tag left behind would keep doing so
+  without a change under `.github/` on `main`.
+- **Fix:** read `refs/remotes/origin/main` by its full name, resolved once,
+  in all five places; optionally fail any tag whose name is not a release
+  version, and widen the tag ruleset to every tag.
+- **Verified:** by the reviewer and a fresh agent, on local clones only;
+  the agent read `actions/checkout`'s source at the pinned commit for the
+  tags it fetches, and the rulesets. Not tested: whether GitHub accepts a
+  pushed tag of that name.
+- **Release:** not blocking.
+- **Status:** fixed in the PR after #41. `.github/checks/main-signers.sh`
+  reads `refs/remotes/origin/main` alone, with `git show-ref --verify`,
+  and prints its `.github/allowed_signers`; the hygiene signature step and
+  the release's "Tag is signed" run it, and "Tag is on main" reads the
+  same ref the same way. `git rev-parse` of the full name would still read
+  a tag named `refs/remotes/origin/main` were `main` missing, as the
+  second review of this fix found. `test.sh` passes `main`'s file beside a
+  tag or a branch named `origin/main` and beside a tag named
+  `refs/remotes/origin/main`, and fails a repository with only one of
+  those tags; mutants that read either name with `git rev-parse` fail
+  those cases. Not tested: "Tag is on main", a workflow line. Left: a tag
+  ruleset for every tag, and failing a tag that is not a release version;
+  neither tag name changes anything these steps read.
+
+### S-036 · Low · The signature step's comment understates what a pull request can change
+
+- **Where:** `.github/workflows/hygiene.yml`, the comment above "Commits
+  and tags are signed with the project's key", and S-026's status
+  (`9f7839a`, #40).
+- **Problem:** both say a pull request runs its own copy of the step and
+  of `signed.sh`, "so a change to either is reviewed as a change to the
+  key". The job also runs the pull request's `test.sh`, `mutate.sh`,
+  `object.sh` and awk programs first, and any of them can set the later
+  step's environment or `PATH` (`$GITHUB_ENV`, `$GITHUB_PATH`), so it
+  passes an unsigned commit.
+- **Impact:** none beyond S-014's rule, that changes under `.github/` are
+  reviewed like any other; a pull request can as well change the workflow.
+  The comment only makes the guarantee read as narrower than it is.
+- **Fix:** say that a pull request's result is as good as the review of
+  everything it changes under `.github/`, in the comment and in S-026's
+  status.
+- **Verified:** by the reviewer and a fresh agent, by reading.
+- **Release:** not blocking.
+- **Status:** fixed in the PR after #41, in the step's comment and S-026's
+  status.

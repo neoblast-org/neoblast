@@ -3,13 +3,17 @@
 # could ride inside a commit, a tag, a commit message, a commit's tree or
 # what git log prints of a commit must fail (S-008, S-013, S-015, S-017,
 # S-018, S-022, S-025, S-028, S-030, S-031, S-034, W-034, W-035, W-038 to
-# W-040, W-042). Tests signed.sh too: only a commit or tag signed with a key
-# in the allowed-signers file passes (S-026). The hygiene job runs it, then
+# W-040, W-042, W-044). Tests signed.sh too: only a commit or tag signed
+# with a key in the allowed-signers file passes (S-026); and main-signers.sh:
+# only the file main holds is read, not one a tag or branch called
+# origin/main, or a tag called refs/remotes/origin/main, holds (S-035,
+# W-045). The hygiene job runs it, then
 # mutate.sh, before the checks themselves.
 #
 #   .github/checks/test.sh        # every case under every awk found
 #   .github/checks/test.sh -v     # and print each case
 #   CHECKS_AWK=mawk .github/checks/test.sh   # under that awk only
+#   .github/checks/test.sh --utf8-locale     # print the UTF-8 locale it uses
 #
 # mutate.sh also sets CHECKS_UTF8, the UTF-8 locale to use (empty for
 # none), and CHECKS_REAL, a directory for git's objects that the first run
@@ -26,6 +30,16 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The UTF-8 locale for the cases that need object.sh to set its own (W-036,
+# W-040), where there is one, found only here: mutate.sh asks for it, so its
+# locale mutant runs under the same one (W-047).
+utf8_locale() {
+  locale -a 2>/dev/null | grep -i -E '^(C|en_US)\.utf-?8$' | head -n 1 || true
+}
+if [ "${1-}" = --utf8-locale ]; then
+  utf8_locale
+  exit 0
+fi
 verbose=0
 if [ "${1-}" = -v ]; then verbose=1; fi
 failures=0
@@ -81,17 +95,31 @@ expect_signed() { # pass|fail|usage label signed.sh args...
   record "$want" "$label" "$got"
 }
 
+expect_main() { # pass|fail|usage label repository [main-signers.sh args...]
+  local want="$1" label="$2" dir="$real_dir/main-$3" got=0 out
+  shift 3
+  out=$(GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_DIR="$dir" \
+    "$here/main-signers.sh" "$@" 2>/dev/null) || got=$?
+  # Passing is printing main's file and nothing else; failing, printing nothing.
+  case "$got" in
+    0) if [ "$out" = "main's key" ]; then got=pass; else got="pass, printing another file"; fi ;;
+    1) got=fail ;;
+    2) got=usage ;;
+    *) got="exit $got" ;;
+  esac
+  if [ -n "$out" ] && [ "$got" = fail ]; then got="fail, and printed"; fi
+  record "$want" "$label" "$got"
+}
+
 me='neoblast maintainers <dev@neoblast.dev>'
 other='Alice Example <alice@example.org>'
 hex=5393f6704b5059c4c8ecfbb6adc01718c13c4455
 when='1792951223 +0000'
-# A UTF-8 locale, where there is one, for the cases that need object.sh to
-# set its own (W-036, W-040); mutate.sh passes the one it found, so its
-# locale mutant runs under the same one (CHECKS_UTF8, empty for none).
+# mutate.sh passes the locale it was given (CHECKS_UTF8, empty for none).
 if [ -n "${CHECKS_UTF8+set}" ]; then
   utf8="$CHECKS_UTF8"
 else
-  utf8=$(locale -a 2>/dev/null | grep -i -E '^(C|en_US)\.utf-?8$' | head -n 1 || true)
+  utf8=$(utf8_locale)
 fi
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -238,6 +266,59 @@ if [ "$real" = 1 ]; then
   g add .mailmap
   g commit -q -S -m "docs: a mailmap"
   g ls-tree HEAD >"$real_dir/mailmap-tree"
+  # A .mailmap after a BEL, which ls-tree writes as \a, not in octal (W-044).
+  bel_tree=$(printf '100644 blob %s\t\a.mailmap\n' "$(printf 'x\n' | g hash-object -w --stdin)" | g mktree)
+  g ls-tree "$bel_tree" >"$real_dir/bel-tree"
+  # Repositories for main-signers.sh (S-035, W-045), each with or without
+  # refs/remotes/origin/main, as actions/checkout fetches main, and some
+  # with a tag or a branch named origin/main, which git reads before it, or
+  # a tag named refs/remotes/origin/main, which it reads when main is not
+  # there.
+  gm() { # repository git-args...: git in that bare repository, as the project in UTC
+    local d="$1"
+    shift
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 TZ=UTC \
+      GIT_AUTHOR_NAME='neoblast maintainers' GIT_AUTHOR_EMAIL=dev@neoblast.dev \
+      GIT_COMMITTER_NAME='neoblast maintainers' GIT_COMMITTER_EMAIL=dev@neoblast.dev \
+      GIT_AUTHOR_DATE="@1792951223 +0000" GIT_COMMITTER_DATE="@1792951223 +0000" \
+      git --git-dir="$d" "$@"
+  }
+  signers_commit() { # repository file|dir|none text: a commit whose .github/allowed_signers is a file holding text, a directory, or not there
+    local b t
+    b=$(printf '%s\n' "$3" | gm "$1" hash-object -w --stdin)
+    case "$2" in
+      file) t=$(printf '100644 blob %s\tallowed_signers\n' "$b" | gm "$1" mktree) ;;
+      dir)
+        t=$(printf '100644 blob %s\tkey\n' "$b" | gm "$1" mktree)
+        t=$(printf '040000 tree %s\tallowed_signers\n' "$t" | gm "$1" mktree)
+        ;;
+      none) t=$(printf '100644 blob %s\tCODEOWNERS\n' "$b" | gm "$1" mktree) ;;
+    esac
+    t=$(printf '040000 tree %s\t.github\n' "$t" | gm "$1" mktree)
+    gm "$1" commit-tree -m "fix: allowed signers" "$t"
+  }
+  main_repo() { # name main tag branch: main is file, dir, none or - (no main); tag is yes, full (refs/tags/refs/remotes/origin/main) or no; branch is yes or no
+    local d="$real_dir/main-$1"
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git init -q --bare "$d"
+    if [ "$2" != - ]; then
+      gm "$d" update-ref refs/remotes/origin/main "$(signers_commit "$d" "$2" "main's key")"
+    fi
+    case "$3" in
+      yes) gm "$d" update-ref refs/tags/origin/main "$(signers_commit "$d" file "a tag's key")" ;;
+      full) gm "$d" update-ref refs/tags/refs/remotes/origin/main "$(signers_commit "$d" file "a tag's key")" ;;
+    esac
+    if [ "$4" = yes ]; then
+      gm "$d" update-ref refs/heads/origin/main "$(signers_commit "$d" file "a branch's key")"
+    fi
+  }
+  main_repo held file no no
+  main_repo tag file yes no
+  main_repo branch file no yes
+  main_repo none none no no
+  main_repo dir dir no no
+  main_repo tag-only - yes no
+  main_repo full-tag file full no
+  main_repo full-tag-only - full no
   : >"$real_dir/complete"
 fi
 
@@ -488,6 +569,15 @@ run_cases() {
   expect fail "tree: a quoted .mailmap in ASCII" "$files$(entry 100644 blob '".mailmap\""')" tree
   expect fail "tree: a .maılmap (regression)" "$files$(entry 100644 blob $'.ma\304\261lmap')" tree
   expect fail "tree: a .maılmap after an invisible character (regression)" "$files$(entry 100644 blob $'\342\200\214.ma\304\261lmap')" tree
+  # A control byte before the dot, as ls-tree writes BEL, BS, TAB, LF, VT,
+  # FF and CR: a letter escape, not octal (W-044). Before another name, it
+  # changes nothing.
+  for l in a b t n v f r; do
+    expect pass "tree: a name that ends in .mailmap, after \\$l" "$files$(entry 100644 blob "\"\\${l}docs.mailmap\"")" tree
+    expect fail "tree: a .mailmap after \\$l (W-044)" "$files$(entry 100644 blob "\"\\${l}.mailmap\"")" tree
+    expect fail "tree: a quoted dot-name after \\$l (W-044)" "$files$(entry 040000 tree "\"\\${l}.github\\\"\"")" tree
+  done
+  expect fail "tree: a .maılmap after a BEL (W-044)" "$files$(entry 100644 blob '"\a.ma\304\261lmap"')" tree
 
   # --- identities (S-008, W-034) ---------------------------------------------
 
@@ -551,6 +641,7 @@ run_cases() {
     expect_file fail "git: a tag signed with an SSH certificate (S-030)" "$r/cert-tag" tag v9.9.5
     expect_file pass "git: a tree" "$r/tree" tree
     expect_file fail "git: a tree with a .mailmap (S-031)" "$r/mailmap-tree" tree
+    expect_file fail "git: a tree with a .mailmap after a BEL (W-044)" "$r/bel-tree" tree
     expect_file pass "git: a signed-off commit's identities" "$r/signed-identity" identity
     expect_file pass "git: a merge's identities" "$r/merge-identity" identity
     expect_file fail "git: a co-author's identity (S-008)" "$r/co-author-identity" identity
@@ -593,6 +684,17 @@ run_cases() {
     expect_signed fail "signed: no allowed-signers file, for a tag" "$r/no-signers" tag v9.9.9
     expect_signed fail "signed: no such tag" "$s" tag refs/tags/none
     expect_signed fail "signed: a signed commit given as a tag" "$s" tag refs/keep/signed
+
+    # --- main's allowed-signers file (S-035, W-045) ------------------------
+
+    expect_main pass "main: the file main holds" held
+    expect_main pass "main: not a tag named origin/main (S-035)" tag
+    expect_main pass "main: not a branch named origin/main (S-035)" branch
+    expect_main fail "main: no such file on main" none
+    expect_main fail "main: a directory of that name on main" dir
+    expect_main fail "main: no main, only a tag named origin/main (S-035)" tag-only
+    expect_main pass "main: not a tag named refs/remotes/origin/main (S-035)" full-tag
+    expect_main fail "main: no main, only a tag named refs/remotes/origin/main (S-035)" full-tag-only
   fi
 
   # --- usage ---------------------------------------------------------------
@@ -611,6 +713,7 @@ run_cases() {
     expect_signed usage "usage: signed, a commit without its revision" "$s" commit
     expect_signed usage "usage: signed, another kind" "$s" blob refs/keep/signed
     expect_signed usage "usage: signed, no arguments"
+    expect_main usage "usage: main-signers, an argument" held x
   fi
 
 }

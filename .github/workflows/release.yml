@@ -32,7 +32,12 @@ jobs:
         with:
           toolchain: "1.97.0"
       - name: Tag is on main
-        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+        # refs/remotes/origin/main alone: git would read a tag or a branch
+        # called origin/main first, or a tag called refs/remotes/origin/main
+        # were main missing (S-035).
+        run: |
+          main=$(git show-ref --verify --hash refs/remotes/origin/main)
+          git merge-base --is-ancestor "$GITHUB_SHA" "$main"
       - name: Tag is the project's, in UTC
         # As the hygiene job checks (S-015, S-017, S-022, S-030), with the
         # same checks (.github/checks/object.sh: tag-object.awk and
@@ -46,11 +51,13 @@ jobs:
           fi
       - name: Tag is signed with the project's key
         # As the hygiene job checks (S-026), against .github/allowed_signers
-        # as main holds it, but before anything is published. See
-        # .github/checks/signed.sh.
+        # as main holds it (S-035), but before anything is published. See
+        # .github/checks/signed.sh and main-signers.sh.
         shell: bash
         run: |
-          git show origin/main:.github/allowed_signers >"$RUNNER_TEMP/allowed_signers"
+          if ! .github/checks/main-signers.sh >"$RUNNER_TEMP/allowed_signers"; then
+            echo "::error::No main, or main holds no .github/allowed_signers."; exit 1
+          fi
           if ! .github/checks/signed.sh "$RUNNER_TEMP/allowed_signers" tag "$GITHUB_REF"; then
             echo "::error::The tag must be signed with a key in .github/allowed_signers on main."; exit 1
           fi

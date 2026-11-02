@@ -1,6 +1,6 @@
 # Code Review Log
 
-<!-- baseline --> **Next review diffs from:** `8c34bcaf796de268b55a3d7ed7b46821c8959af8` (`main`, recorded 2026-10-28)
+<!-- baseline --> **Next review diffs from:** `805a5ed727555de816d98a76b8711e7be0f9e6b9` (`main`, recorded 2026-11-02)
 
 A running record of code-review events: branch/pre-PR reviews, review worklists, and
 remediation programmes. Newest entry first. The baseline marker line above is the
@@ -27,6 +27,56 @@ merge-base fallback). Side-branch pre-PR reviews are logged as entries marked
 "frontier unchanged (side branch)" and never move the line.
 
 ## Entries
+
+### 2026-11-02: `8c34bca..805a5ed` (#37 to #41)
+
+| | SHA | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `8c34bcaf796de268b55a3d7ed7b46821c8959af8` | 2026-10-28 | fix: S-030 and S-031; log the security review of #32 and #33 (#36) |
+| Tip | `805a5ed727555de816d98a76b8711e7be0f9e6b9` | 2026-11-02 | fix: neoblast-crypto requires ctutils 0.4.4 or later (S-024) (#41) |
+
+- **Scope:** 8 commits (`git rev-list --count 8c34bca..805a5ed`) and 33
+  files, +1346/−217 (`git diff --shortstat 8c34bca 805a5ed`): the v0.0.2
+  release (#37); the plan's close-out, the action bumps, S-034, W-038 to
+  W-043 and W-028 to W-030 (#38); W-034 (#39); S-026 and S-029 (#40); and
+  S-024 (#41). Of them, 15 files, +597/−103, under `.github/` and 5 files,
+  +220/−54, under `crates/` (the same command with `-- .github` and
+  `-- crates`). Base equals the previous entry's Tip. Only the committed
+  range is covered.
+- **Method:** the `code-review` skill over the range, which also ran
+  `test.sh`, `signed.sh` on every commit from `f2380e7` and every tag, and
+  `neoblast-erasure`'s tests; two fresh agents then tried to refute each
+  claim, one for `.github/` (trees made with `git mktree` run through
+  `object.sh tree`, the steps timed, the ruleset of S-014 read) and one
+  for `crates/` and `Cargo.toml` (four mutants of `neoblast-erasure` on a
+  copy). Of the code review's 10 claims, 6 are tracked and 4 rejected.
+- **Findings:** 6 in a new code worklist, none a weakness CI can be made
+  to miss: W-044 (low), a control byte that `ls-tree` writes as a letter
+  escape hides a dot-name; W-045 (low), the signature step's choice of
+  allowed-signers file has no test; W-046 (cleanup), W-029's restore test
+  does not pin down an extra shard; W-047 (cleanup), the UTF-8 locale is
+  looked up twice; W-048 (cleanup), past `5393f67` the UTC step checks
+  nothing the identity step does not; W-049 (cleanup), `CLAUDE.md` states
+  the blast-radius rule more strictly than its source.
+- **Not tracked,** with the reasons in the worklist: a key
+  that authorizes itself on a push to `main` (the required check reads
+  `main` as it was); the cost of the per-commit steps; the `ctutils`
+  floor check after a yank; and `heal` stopping on a broken codec
+  (W-027's rule).
+- **Checked, no finding:** no correctness bug in the range; the 34
+  commits since `5393f67` and every tag pass every check, `signed.sh`
+  included; `test.sh` ran 239 cases with none wrong; the signature layout
+  positions S-034 checks match SSHSIG.
+- **Outcome:** no blocker. W-046 changes `crates/`, and so `code_id`;
+  the others are outside it.
+  Worklist:
+  [`plans/todo/code-review-w-series-5.md`](../../plans/todo/code-review-w-series-5.md).
+- **Carried-over items:** W-028 to W-030 and W-038 to W-043 fixed in
+  `06bda62` and `1f30277` (#38), and W-034 in `6f9a2e9` (#39), which their
+  statuses had as "the PR after #37" and "the PR after #38". Every item of
+  part 4 is fixed, so it is closed and moved to
+  [`plans/completed/code-review-w-series-4.md`](../../plans/completed/code-review-w-series-4.md);
+  the entries below still link to its old place.
 
 ### 2026-10-28: `c618dea..8c34bca` (#33 and #36)
 
