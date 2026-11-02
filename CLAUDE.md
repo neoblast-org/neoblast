@@ -46,7 +46,9 @@ Keep fmt, clippy, tests, `cargo deny` and the golden vectors green.
   or link version byte, a decision record, a `spec/` update and its own new
   vector file, in the same change. The v1 vector files never change.
 - **Dependencies follow the blast-radius rule** in `decisions/README.md`. A crate
-  with few dependents needs a written reason, an exact pin and a wrapper trait.
+  with few dependents needs a written reason, an exact pin and a wrapper trait;
+  a minimum version of one that nothing calls (`ctutils`, S-024) needs only the
+  written reason.
 - **Secrets** appear only after `#` in links, never in logs or `Debug` output.
 - **No kill switch.** Nothing may let anyone delete another party's shards.
 - **Every fixed bug gets a regression test** (see `crates/neoblast/tests/review_regressions.rs`).

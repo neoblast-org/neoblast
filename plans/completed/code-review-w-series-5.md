@@ -1,6 +1,8 @@
 # Code-review worklist (W-series, part 5)
 
-Status: todo. Opened 2026-11-02 by the eleventh `/review-since`
+Status: completed 2026-11-02: every item is fixed, W-044 to W-048 in
+`e711e5a` (#42) and W-049 in the PR after #42. Opened 2026-11-02 by the
+eleventh `/review-since`
 (`8c34bca..805a5ed`, #37 to #41), logged in
 `docs/logs/code-review-log.md`. Part 4, W-028 to W-043, is closed
 (`plans/completed/code-review-w-series-4.md`). All items are low or
@@ -49,7 +51,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   dot-name that held one, as for octal; cases for `\a.mailmap`,
   `\t.mailmap` and `\a.ma\304\261lmap`, and a mutant.
 - Verified: by a fresh agent, on crafted trees.
-- Status: fixed in the PR after #41. `tree.awk` removes `\\[abtnvfr]`
+- Status: fixed in `e711e5a` (#42). `tree.awk` removes `\\[abtnvfr]`
   with the octal escapes and fails a dot-name that held one. For each of
   the seven letters, `test.sh` passes a name ending in `docs.mailmap`
   after it, and fails `.mailmap` and a quoted `.github` after it; it also
@@ -73,7 +75,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   `main` holding the file, never having held it, and having dropped it;
   and a mutant for each branch.
 - Verified: by a fresh agent.
-- Status: fixed in the PR after #41. `.github/checks/main-signers.sh`
+- Status: fixed in `e711e5a` (#42). `.github/checks/main-signers.sh`
   prints the file as `main` holds it, from `refs/remotes/origin/main`
   alone, read with `git show-ref --verify` (S-035), and both workflows run
   it. The checkout's file is no longer read while `main` has never held
@@ -105,7 +107,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   and returns the data, and give the test codec a mode that breaks only
   `restore`, for the `regenerate` cases.
 - Verified: by a fresh agent, by mutation.
-- Status: fixed in the PR after #41. The test codec is
+- Status: fixed in `e711e5a` (#42). The test codec is
   `Broken(Part, Fault)`, breaking `encode` or `restore` alone.
   `w029_a_broken_restore_is_a_codec_error` asserts the exact data from
   `reconstruct_data` and `regenerate` for the real codec, for an extra
@@ -128,7 +130,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Remediation: keep the lookup in one place, for example a mode of
   `test.sh` that prints it, which `mutate.sh` calls.
 - Verified: by a fresh agent.
-- Status: fixed in the PR after #41. `test.sh --utf8-locale` prints the
+- Status: fixed in `e711e5a` (#42). `test.sh --utf8-locale` prints the
   locale, and both a plain `test.sh` run and `mutate.sh` use it.
 
 ### W-048 (cleanup): past `5393f67`, the UTC step checks nothing the identity step does not
@@ -143,7 +145,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Remediation: drop the step, `utc.awk` and its cases and mutants; or keep
   them and say in the step that they only re-check fixed history.
 - Verified: by a fresh agent.
-- Status: fixed in the PR after #41, by the second remedy: the step's
+- Status: fixed in `e711e5a` (#42), by the second remedy: the step's
   comment says that after `5393f67` the identity step implies it, and
   that it also checks `5393f67` and the commits before it. The step,
   `utc.awk`, its cases and its mutants stay.
@@ -160,7 +162,10 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Remediation: the maintainer's call: reword the line to match the README,
   or name the exception for a minimum that nothing calls.
 - Verified: by a fresh agent.
-- Status: open.
+- Status: fixed in the PR after #42, by the second remedy, as the
+  maintainer chose: `CLAUDE.md` keeps the rule and says that a minimum
+  version of a crate nothing calls needs only the written reason, as
+  `decisions/README.md` records for `ctutils`. Documentation only.
 
 ## Not tracked
 
