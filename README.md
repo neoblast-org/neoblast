@@ -24,11 +24,15 @@ The key sits after `#`, so a web gateway serving the link never sees it.
 ```sh
 cargo install --path crates/neoblast          # or: cargo run -p neoblast --
 
-neoblast seal photo.jpg --out ./store          # prints an nbl://f/... read link
-rm ./store/seg-000000/00{0..9}.shard           # lose shards (up to n - k per segment)
-neoblast heal  'nbl://fv/...' --from ./store   # rebuild them with the verify link only
-neoblast open  'nbl://f/...#...' --from ./store --out photo-copy.jpg
+neoblast seal photo.jpg --out ./store >photo.link   # the nbl://f/... read link
+rm ./store/seg-000000/00{0..9}.shard                # lose shards (up to n - k per segment)
+neoblast heal 'nbl://fv/...' --from ./store         # rebuild them with the verify link only
+neoblast open --from ./store --out photo-copy.jpg <photo.link
 ```
+
+`open` and `heal` read the link from stdin when it is left out or `-`. A read
+link given as an argument works too, but other local users can see it, and
+the shell keeps it in its history.
 
 Defaults are 20-of-50 shards over 1 MiB segments ([decision
 0009](decisions/0009-segment-size.md)). `seal`, `open` and `heal` work one

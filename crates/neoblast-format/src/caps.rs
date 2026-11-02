@@ -11,7 +11,7 @@
 
 use data_encoding::BASE32_NOPAD;
 use thiserror::Error;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 /// Version byte inside every v1 cap payload.
 pub const CAP_VERSION: u8 = 0x01;
@@ -117,10 +117,20 @@ fn encode_versioned(root: &[u8; 32]) -> String {
     encode(&payload)
 }
 
-fn decode(text: &str) -> Result<Vec<u8>, CapError> {
-    BASE32_NOPAD
-        .decode(text.to_ascii_uppercase().as_bytes())
-        .map_err(|_| CapError::Encoding)
+/// Decodes into buffers that are wiped when dropped, as the key fragment
+/// passes through here (review S-003). The output is sized by `decode_len`,
+/// as `decode_mut` requires, and is filled in place, so it is never copied.
+fn decode(text: &str) -> Result<Zeroizing<Vec<u8>>, CapError> {
+    let upper = Zeroizing::new(text.to_ascii_uppercase());
+    let len = BASE32_NOPAD
+        .decode_len(upper.len())
+        .map_err(|_| CapError::Encoding)?;
+    let mut bytes = Zeroizing::new(vec![0u8; len]);
+    let written = BASE32_NOPAD
+        .decode_mut(upper.as_bytes(), &mut bytes)
+        .map_err(|_| CapError::Encoding)?;
+    bytes.truncate(written);
+    Ok(bytes)
 }
 
 fn decode_versioned(text: &str) -> Result<[u8; 32], CapError> {
@@ -180,6 +190,29 @@ mod tests {
             read_key: [2; 32],
         };
         assert!(format!("{cap:?}").contains("redacted"));
+    }
+
+    /// S-003: decoding into wiped buffers keeps every result. A key that is
+    /// not base32, of a length base32 cannot have, or that decodes to other
+    /// than 32 bytes is refused, as before; upper case still parses.
+    #[test]
+    fn s003_key_fragment_errors_are_unchanged() {
+        let cap = FileReadCap {
+            root: [3; 32],
+            read_key: [4; 32],
+        };
+        let link = cap.to_link();
+        let (head, key) = link.split_once('#').unwrap();
+        let parse = |key: &str| FileReadCap::parse(&format!("{head}#{key}"));
+        assert_eq!(parse(key), Ok(cap.clone()));
+        assert_eq!(parse(&key.to_ascii_uppercase()), Ok(cap.clone()));
+        // `1` is not in the alphabet, and 54 characters is a length base32
+        // never has (the key's 52, plus 2); 31, 33 and 0 bytes decode.
+        assert_eq!(parse(&format!("1{}", &key[1..])), Err(CapError::Encoding));
+        assert_eq!(parse(&format!("{key}aa")), Err(CapError::Encoding));
+        assert_eq!(parse(&encode(&[4; 31])), Err(CapError::Payload));
+        assert_eq!(parse(&encode(&[4; 33])), Err(CapError::Payload));
+        assert_eq!(parse(""), Err(CapError::Payload));
     }
 
     #[test]

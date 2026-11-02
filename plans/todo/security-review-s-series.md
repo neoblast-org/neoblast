@@ -107,7 +107,22 @@ that fixed it.
   for convenience, with a warning in `--help`), and decode the key fragment into
   `Zeroizing` buffers.
 - **Release:** not blocking.
-- **Status:** open.
+- **Status:** fixed in the PR after #42. `neoblast open` and `heal` read the
+  link from the first line of stdin, at most 4096 bytes, when it is left
+  out or `-`, into a buffer of that size that is wiped on drop; an argument
+  still works, and `--help` warns about it. `caps.rs` decodes into
+  `Zeroizing` buffers with `decode_mut`, so the uppercase text and the
+  decoded bytes are wiped, on an error too. Tests:
+  `s003_open_and_heal_read_the_link_from_stdin` in
+  `crates/neoblast/tests/cli.rs` (a newline, `-`, CRLF, a last CR, no
+  newline, a second line, an argument with stdin ignored, 4096 bytes pass;
+  4097, empty, a blank line, `-` with nothing and a line not UTF-8 fail;
+  `heal` with a verify link, a read link and an argument; both
+  `--help`s), and
+  `s003_key_fragment_errors_are_unchanged` in `caps.rs`. Not tested, as
+  safe Rust cannot observe it: that the buffers are wiped. Left: the
+  standard library's own stdin buffer, and the terminal's echo of a link
+  pasted at it.
 
 ### S-004 · Low · The nightly fuzz job installs an unpinned `cargo-fuzz`
 
@@ -639,7 +654,7 @@ that fixed it.
   sets, so a retired key that leaks can still sign a backdated commit. A
   pull request runs its own copy of the whole job, so its result is only
   as good as the review of all it changes under `.github/` (S-036). Since
-  the PR after #41, `.github/checks/main-signers.sh` reads the file from
+  `e711e5a` (#42), `.github/checks/main-signers.sh` reads the file from
   `refs/remotes/origin/main` alone (S-035), and the checkout's file is no longer
   read while `main` has never held one (W-045).
 
@@ -894,7 +909,7 @@ that fixed it.
   tags it fetches, and the rulesets. Not tested: whether GitHub accepts a
   pushed tag of that name.
 - **Release:** not blocking.
-- **Status:** fixed in the PR after #41. `.github/checks/main-signers.sh`
+- **Status:** fixed in `e711e5a` (#42). `.github/checks/main-signers.sh`
   reads `refs/remotes/origin/main` alone, with `git show-ref --verify`,
   and prints its `.github/allowed_signers`; the hygiene signature step and
   the release's "Tag is signed" run it, and "Tag is on main" reads the
@@ -927,5 +942,5 @@ that fixed it.
   status.
 - **Verified:** by the reviewer and a fresh agent, by reading.
 - **Release:** not blocking.
-- **Status:** fixed in the PR after #41, in the step's comment and S-026's
+- **Status:** fixed in `e711e5a` (#42), in the step's comment and S-026's
   status.

@@ -417,3 +417,110 @@ fn seal_reads_a_pipe() {
     );
     assert_eq!(fs::read(&recovered).unwrap(), data);
 }
+
+/// Runs `neoblast` with `stdin` as its standard input.
+fn neoblast_stdin(args: &[&str], stdin: &[u8]) -> Output {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_neoblast"))
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    // It stops reading after the first line, or one too long, so a broken
+    // pipe here is no failure.
+    let _ = child.stdin.take().unwrap().write_all(stdin);
+    child.wait_with_output().unwrap()
+}
+
+/// S-003: `open` and `heal` read the link from the first line of stdin
+/// when it is `-` or left out, so it need not be on the command line, where
+/// other local users can see it and the shell keeps it. Each failing case
+/// differs from a passing one in one way.
+#[test]
+fn s003_open_and_heal_read_the_link_from_stdin() {
+    let dir = scratch("cli-link-stdin");
+    let (link, store) = sealed_store(&dir);
+    let store_arg = store.to_str().unwrap();
+    let want = vec![5u8; 50_000];
+    let line = |end: &str| format!("{link}{end}").into_bytes();
+    // A peer hint after `&` is ignored by `parse`, so these lines open the
+    // file at any length: 4096 bytes, the newline included, and one more.
+    let hint = |len: usize| {
+        let mut l = format!("{link}&").into_bytes();
+        l.resize(len - 1, b'a');
+        l.push(b'\n');
+        l
+    };
+    let mut not_utf8 = format!("{link}&").into_bytes();
+    not_utf8.extend(b"\xff\n");
+    let cases = [
+        ("newline", None, line("\n"), None),
+        ("dash", Some("-"), line("\n"), None),
+        ("crlf", None, line("\r\n"), None),
+        ("cr", None, line("\r"), None),
+        ("eof", None, line(""), None),
+        ("two-lines", None, line("\nnot a link\n"), None),
+        (
+            "argument",
+            Some(link.as_str()),
+            b"not a link\n".to_vec(),
+            None,
+        ),
+        ("longest", None, hint(4096), None),
+        ("too-long", None, hint(4097), Some("over 4096 bytes")),
+        ("empty", None, Vec::new(), Some("no link")),
+        ("blank", None, b"\n".to_vec(), Some("no link")),
+        ("dash-empty", Some("-"), Vec::new(), Some("no link")),
+        ("not-utf8", None, not_utf8, Some("not UTF-8")),
+    ];
+    for (name, arg, stdin, error) in cases {
+        let out_path = dir.join(format!("{name}.bin"));
+        let mut args = vec!["open"];
+        args.extend(arg);
+        args.extend(["--from", store_arg, "--out", out_path.to_str().unwrap()]);
+        let out = neoblast_stdin(&args, &stdin);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        match error {
+            None => {
+                assert!(out.status.success(), "{name}: {stderr}");
+                assert_eq!(fs::read(&out_path).unwrap(), want, "{name}");
+            }
+            Some(error) => {
+                assert!(!out.status.success(), "{name}");
+                assert!(stderr.contains(error), "{name}: {stderr}");
+                assert!(!out_path.exists(), "{name}");
+            }
+        }
+    }
+
+    let verify = link.replace("nbl://f/", "nbl://fv/");
+    let verify = verify.split('#').next().unwrap();
+    for (name, arg, stdin) in [
+        ("verify", None, format!("{verify}\n")),
+        ("read", Some("-"), format!("{link}\n")),
+        ("argument", Some(verify), "not a link\n".to_owned()),
+    ] {
+        let mut args = vec!["heal"];
+        args.extend(arg);
+        args.extend(["--from", store_arg]);
+        let out = neoblast_stdin(&args, stdin.as_bytes());
+        assert!(
+            out.status.success(),
+            "heal {name}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    let out = neoblast_stdin(&["heal", "--from", store_arg], b"");
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("no link"));
+
+    // The help says why.
+    for command in ["open", "heal"] {
+        let help = neoblast(&[command, "--help"]);
+        let help = String::from_utf8(help.stdout).unwrap();
+        assert!(help.contains("stdin") && help.contains("history"), "{help}");
+    }
+}

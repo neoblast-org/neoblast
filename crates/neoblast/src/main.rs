@@ -3,7 +3,7 @@
 
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
-use std::io::{BufReader, BufWriter, Read};
+use std::io::{BufRead, BufReader, BufWriter, Read};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -11,6 +11,7 @@ use clap::{Parser, Subcommand};
 use neoblast::store::{DirStore, MAX_MANIFEST_LEN};
 use neoblast::{FileReadCap, FileVerifyCap, Manifest, Params};
 use neoblast_format::HeaderError;
+use zeroize::{Zeroize, Zeroizing};
 
 /// Censorship-resistant storage. Experimental and not audited.
 #[derive(Parser)]
@@ -44,8 +45,10 @@ enum Command {
     },
     /// Rebuild a file from its read link and a shard directory.
     Open {
-        /// The `nbl://f/...` read link.
-        link: String,
+        /// The `nbl://f/...` read link, or `-` to read it from stdin, as when
+        /// left out. Other local users can see a link given here, and the
+        /// shell keeps it in its history; prefer stdin.
+        link: Option<String>,
         /// Directory holding the manifest and shards.
         #[arg(long)]
         from: PathBuf,
@@ -55,8 +58,10 @@ enum Command {
     },
     /// Rebuild missing or corrupt shards. Needs only the verify link, never the key.
     Heal {
-        /// A `nbl://fv/...` verify link (a read link also works).
-        link: String,
+        /// A `nbl://fv/...` verify link (a read link also works), or `-` to
+        /// read it from stdin, as when left out. Other local users can see a
+        /// read link given here, and the shell keeps it in its history.
+        link: Option<String>,
         /// Directory holding the manifest and shards.
         #[arg(long)]
         from: PathBuf,
@@ -132,7 +137,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             println!("{}", cap.to_link());
         }
         Command::Open { link, from, out } => {
-            let cap = FileReadCap::parse(&link)?;
+            let cap = FileReadCap::parse(&link_or_stdin(link)?)?;
             let store = DirStore::new(&from);
             // Taken over, not copied, so the manifest is in memory once.
             let manifest = Manifest::decode_owned(store.read_manifest()?, &cap.root)?;
@@ -142,7 +147,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("recovered {len} bytes to {}", out.display());
         }
         Command::Heal { link, from } => {
-            let cap = FileVerifyCap::parse(&link)?;
+            let cap = FileVerifyCap::parse(&link_or_stdin(link)?)?;
             let store = DirStore::new(&from);
             let manifest = Manifest::decode_owned(store.read_manifest()?, &cap.root)?;
             let rebuilt = neoblast::heal_manifest(&cap, &manifest, &store, &mut store.clone())?;
@@ -150,6 +155,47 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     Ok(())
+}
+
+/// The longest first line of stdin read as a link, its line ending
+/// included. A read link is about 115 bytes; this leaves room for the peer
+/// hints that later versions may add after the key.
+const MAX_LINK_LINE: usize = 4096;
+
+/// The link given, or, when it is `-` or left out, the first line of stdin
+/// without its line ending, `\n`, `\r\n` or a last `\r` (review S-003). A link on the command line can be
+/// seen by other local users and is kept in shell history; one on stdin is
+/// not. The line is read into a buffer already of its largest size, so it is
+/// never moved, and is wiped on drop; the standard library's own stdin
+/// buffer is not.
+fn link_or_stdin(link: Option<String>) -> Result<Zeroizing<String>, Box<dyn std::error::Error>> {
+    if let Some(link) = link.filter(|l| l.as_str() != "-") {
+        return Ok(Zeroizing::new(link));
+    }
+    let mut line = Zeroizing::new(Vec::with_capacity(MAX_LINK_LINE + 1));
+    std::io::stdin()
+        .lock()
+        .take(MAX_LINK_LINE as u64 + 1)
+        .read_until(b'\n', &mut line)?;
+    if line.len() > MAX_LINK_LINE {
+        return Err(format!("the first line of stdin is over {MAX_LINK_LINE} bytes").into());
+    }
+    if line.ends_with(b"\n") {
+        line.pop();
+    }
+    if line.ends_with(b"\r") {
+        line.pop();
+    }
+    if line.is_empty() {
+        return Err("no link: give it as an argument, or on stdin".into());
+    }
+    match String::from_utf8(std::mem::take(&mut *line)) {
+        Ok(link) => Ok(Zeroizing::new(link)),
+        Err(e) => {
+            e.into_bytes().zeroize();
+            Err("the link on stdin is not UTF-8".into())
+        }
+    }
 }
 
 /// Refuses, before anything is written, bad parameters and a file whose
