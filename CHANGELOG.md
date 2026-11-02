@@ -23,6 +23,14 @@ the frozen v1 byte format).
 
 ### Security
 
+- `open` and `heal` rebuild every segment's shards from the k they decode
+  with and check each against the manifest; `open` refuses a file whose
+  shards are not one codeword, and `heal` reports it. Before, a publisher
+  could list one file's data shards with another's parity, so that the data
+  shards opened one content and the parity shards another, from the same
+  link (review S-002, decision 0010). An intact open is about 40% slower,
+  and a manifest that lists a shard of the wrong length can no longer be
+  opened.
 - Parsing a read link decodes its key into buffers that are wiped when
   dropped, and `neoblast` reads a link from stdin into one (review S-003).
 - `neoblast-crypto` requires `ctutils` 0.4.4 or later, which it reaches

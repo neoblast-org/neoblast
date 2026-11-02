@@ -90,3 +90,14 @@ H            = BLAKE3.derive_key("nbl/v1/root", header || content_root)
 `header || shard_hash[0][0..n] || shard_hash[1][0..n] || …` (32 bytes each).
 A manifest is accepted only if it recomputes to the expected `H`. It reveals the
 padded size, the parameters and shard hashes; nothing about content.
+
+## Check the codeword
+
+`H` commits to each shard, not to the `n` shards being one codeword, and the
+publisher holds the read key: listing one file's data shards with another's
+parity would let different sets of `k` shards open different content. So
+before using a segment, an opener or healer MUST rebuild all `n` of its shards
+from the `k` verified ones it decodes with, and compare each with its listed
+`shard_hash`. If one differs, an opener MUST reject the file; a healer MUST
+report the segment and MAY still store the rebuilt shards that match (decision
+0010).

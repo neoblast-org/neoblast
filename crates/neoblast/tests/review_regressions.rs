@@ -530,6 +530,81 @@ fn s011_an_inconsistent_segment_does_not_stop_heal() {
     assert!(sink.finished);
 }
 
+/// S-002: a publisher holds the read key, so they can seal two files of one
+/// length under it and list one's data shards with the other's parity.
+/// Before, the data shards opened the one file and the parity shards the
+/// other. Now open rebuilds every shard from the k it holds and refuses the
+/// file either way, and heal reports it even with nothing missing. The same
+/// shards from one seal pass every step.
+#[test]
+fn s002_shards_that_are_not_one_codeword_are_refused() {
+    let params = Params {
+        k: 2,
+        n: 4,
+        segment_size: 1024,
+    };
+    let other = seal_with_key(&[8u8; 3000], params, &[3u8; 32]).unwrap();
+    for swap in [false, true] {
+        let (sealed, manifest) = sealed_as(|shards| {
+            if swap {
+                for (ours, theirs) in shards.iter_mut().zip(&other.shards) {
+                    ours[2..].clone_from_slice(&theirs[2..]);
+                }
+            }
+        });
+        let read_cap = neoblast::FileReadCap {
+            root: manifest.root(),
+            read_key: [3u8; 32],
+        };
+        let store = MemStore::from_sealed(&sealed);
+        let mut parity_only = MemStore::from_sealed(&sealed);
+        parity_only.0.retain(|&(_, index), _| index >= 2);
+        let mut mixed = MemStore::from_sealed(&sealed);
+        mixed.0.retain(|&(_, index), _| index == 0 || index == 3);
+
+        // From the data shards, from the parity shards alone, and from one
+        // of each.
+        for (from, store, index) in [
+            ("data", &store, 2),
+            ("parity", &parity_only, 0),
+            ("mixed", &mixed, 1),
+        ] {
+            let mut out = Vec::new();
+            let opened = neoblast::open_manifest(&read_cap, &manifest, store, &mut out);
+            if swap {
+                let err = opened.unwrap_err();
+                assert!(
+                    matches!(err, Error::RebuildMismatch { segment: 0, index: i } if i == index),
+                    "{from}: {err}"
+                );
+            } else {
+                assert_eq!(opened.unwrap(), 3000, "{from}");
+                assert_eq!(out, vec![9u8; 3000], "{from}");
+            }
+        }
+
+        let mut sink = Recorder::new(false);
+        let healed = neoblast::heal_manifest(&read_cap.verify_cap(), &manifest, &store, &mut sink);
+        if swap {
+            let err = healed.unwrap_err();
+            assert!(
+                matches!(
+                    err,
+                    Error::RebuildMismatch {
+                        segment: 0,
+                        index: 2
+                    }
+                ),
+                "{err}"
+            );
+        } else {
+            assert_eq!(healed.unwrap(), 0);
+        }
+        assert!(sink.put.is_empty());
+        assert!(sink.finished);
+    }
+}
+
 /// A sink that records what it is given, failing every write and the final
 /// sync when `fail` is set.
 struct Recorder {
@@ -628,7 +703,9 @@ fn w024_an_inconsistent_segment_outranks_a_failed_write() {
 
 /// S-019: a publisher can commit to a shard of the wrong length. Heal and open
 /// treat it as missing, whatever the source returns, instead of handing it to
-/// the decoder, which stopped heal there and hid an earlier lost segment.
+/// the decoder, which stopped heal there and hid an earlier lost segment. No
+/// codeword holds such a shard, so open then refuses the file for it (S-002),
+/// where the decoder would have failed on its length.
 #[test]
 fn s019_a_shard_of_the_wrong_length_counts_as_missing() {
     let (sealed, manifest) = sealed_as(|shards| shards[1][0].extend_from_slice(&[0u8; 64]));
@@ -639,8 +716,17 @@ fn s019_a_shard_of_the_wrong_length_counts_as_missing() {
     // `MemStore` hands back whatever it holds, whatever length is asked for.
     let mut store = MemStore::from_sealed(&sealed);
     let mut out = Vec::new();
-    neoblast::open_manifest(&read_cap, &manifest, &store, &mut out).unwrap();
-    assert_eq!(out, vec![9u8; 3000]);
+    let err = neoblast::open_manifest(&read_cap, &manifest, &store, &mut out).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            Error::RebuildMismatch {
+                segment: 1,
+                index: 0
+            }
+        ),
+        "{err}"
+    );
 
     // Segment 0 is lost; segment 1 must be rebuilt past its long shard.
     for index in 0..3 {

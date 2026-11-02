@@ -43,9 +43,13 @@ pub enum Error {
         /// Shards needed (k).
         need: usize,
     },
-    /// A rebuilt shard did not match its listed hash: the shards the manifest
-    /// lists are not one codeword (review S-002), or there is a bug.
-    #[error("rebuilt shard {index} of segment {segment} does not match the manifest")]
+    /// A shard rebuilt from k verified ones did not match its listed hash:
+    /// the shards the manifest lists are not one codeword, so other shards
+    /// would open other content (review S-002), or there is a bug. `open`
+    /// refuses the file; `heal` repairs what it can, then reports it.
+    #[error(
+        "shard {index} of segment {segment}, rebuilt from the others, does not match the manifest"
+    )]
     RebuildMismatch {
         /// Segment index.
         segment: u32,

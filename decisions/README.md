@@ -15,6 +15,7 @@ decision gets a new record that supersedes the old one.
 | [0007](0007-no-multiformats-cids.md) | Links keep their own version byte, not multiformats CIDs | Accepted |
 | [0008](0008-crate-names-and-publishing.md) | Crate names (`neoblast-*`) and publishing | Accepted |
 | [0009](0009-segment-size.md) | Default segment size: 1 MiB | Accepted |
+| [0010](0010-check-the-whole-codeword.md) | Open and heal check the whole codeword | Accepted |
 
 ## How a question becomes a decision
 

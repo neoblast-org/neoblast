@@ -91,7 +91,25 @@ that fixed it.
   different choice would have repaired it. Only the manifest's author can
   cause this, and the fix above covers it.
 - **Release:** not blocking.
-- **Status:** open.
+- **Status:** fixed in the PR after #43, by both remedies, as the
+  maintainer chose (decision 0010). `open_manifest` and `heal_manifest`
+  rebuild every segment's n shards from the k verified ones and compare
+  each with the manifest (`first_mismatch` in `stream.rs`); `open` refuses
+  the file with `RebuildMismatch`, and `heal` checks every segment, even
+  one with nothing missing, still stores rebuilt shards that match, and
+  reports the first that does not. `spec/header.md` ("Check the codeword")
+  and `spec/threat-model.md` (rule 4) state it. Regression test:
+  `s002_shards_that_are_not_one_codeword_are_refused` in
+  `review_regressions.rs`, on one file's data shards listed with another's
+  parity under the same key: with the code before, the data shards opened
+  the one file and the parity shards the other; now opening from the data
+  shards, from the parity shards, or from one of each, and a heal with
+  nothing missing, all fail, and the same shards from one seal pass. It
+  fails with the check removed from `open`, from `heal`, or with heal
+  skipping intact segments again. `s019_a_shard_of_the_wrong_length_counts_as_missing`
+  now expects `open` to refuse that file. An intact open is about 40%
+  slower and an intact heal about 50%; working memory stays within
+  decision 0009's 32 MiB (measurements in decision 0010).
 
 ### S-003 · Low · The read key passes through argv and unwiped copies
 

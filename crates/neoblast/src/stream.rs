@@ -10,7 +10,8 @@
 //! [`open`](crate::open) and [`heal`](crate::heal) are thin wrappers over
 //! these functions, so both paths produce identical bytes.
 //!
-//! [`open_stream`] writes each segment as soon as it is verified and decrypted.
+//! [`open_stream`] writes each segment as soon as it is verified, checked as
+//! one codeword (review S-002) and decrypted.
 //! Every segment is authenticated on its own (AEAD with the header as associated
 //! data and the index and last-segment flag in the nonce), so nothing unverified
 //! is ever written. If a later segment cannot be recovered, though, the output so
@@ -152,8 +153,12 @@ fn seal_segments(
 /// [`Manifest::decode_owned`] holds the manifest once.
 ///
 /// Fetches shards in index order and stops at the first k that match the
-/// manifest, so an intact file is read from its data shards alone. On error,
-/// `out` may already hold the verified start of the file (see the module docs).
+/// manifest, so an intact file is read from its data shards alone. Each
+/// segment's other shards are rebuilt from those k and must be the ones the
+/// manifest lists, or the file is refused with [`Error::RebuildMismatch`]:
+/// so any k shards that match the manifest open the same content, or none
+/// do (review S-002). On error, `out` may already hold the verified start of
+/// the file (see the module docs).
 pub fn open_stream(
     cap: &FileReadCap,
     manifest_bytes: &[u8],
@@ -191,21 +196,21 @@ pub fn open_manifest(
         let shard_len = shard_len(&header, segment)?;
         let held = first_k_verified(manifest, segment, source, k, shard_len);
         let cipher_len = segment_len(header.segment_cipher_len(segment))?;
-        let data: Vec<Vec<u8>> = if held.iter().take(k).all(Option::is_some) {
-            // Every data shard is here: no decoding.
-            held.into_iter().take(k).flatten().collect()
-        } else {
-            // Decode first and free the shards fetched for it before the output
-            // buffer is allocated.
-            let data = neoblast_erasure::reconstruct_data(&ReedSolomonSimd, k, n, shard_len, &held)
-                .map_err(|e| unrecoverable(e, segment, &held, k))?;
-            drop(held);
-            data
-        };
-        let mut buf = Zeroizing::new(Vec::with_capacity(k.saturating_mul(shard_len)));
-        for shard in data {
-            buf.extend_from_slice(&shard);
+        // All n shards, rebuilt from the k verified ones (with every data
+        // shard held, only the parity is computed), and checked against the
+        // manifest (review S-002). The shards fetched are freed before the
+        // output buffer is allocated.
+        let all = neoblast_erasure::regenerate(&ReedSolomonSimd, k, n, shard_len, &held)
+            .map_err(|e| unrecoverable(e, segment, &held, k))?;
+        if let Some(index) = first_mismatch(manifest, segment, &held, &all) {
+            return Err(Error::RebuildMismatch { segment, index });
         }
+        drop(held);
+        let mut buf = Zeroizing::new(Vec::with_capacity(k.saturating_mul(shard_len)));
+        for shard in all.iter().take(k) {
+            buf.extend_from_slice(shard);
+        }
+        drop(all);
         buf.truncate(cipher_len);
         cipher.open_in_place(segment, &mut buf)?;
 
@@ -243,13 +248,16 @@ pub fn open_manifest(
 /// many shards were rebuilt. Decodes a copy of `manifest_bytes`;
 /// [`heal_manifest`] with [`Manifest::decode_owned`] holds the manifest once.
 ///
+/// Every segment is rebuilt from k verified shards, even one with nothing
+/// missing, and its shards checked against the manifest, as [`open_stream`]
+/// does: a publisher can commit to shards that are not one codeword, so that
+/// different shards open different content (reviews S-002 and S-011).
 /// A segment with fewer than k good shards is skipped, and so is a shard that
 /// `sink` fails to store (review W-003) or a rebuilt shard that does not match
-/// the manifest, which a publisher can cause by committing to shards that are
-/// not one codeword (reviews S-002 and S-011); everything else is still
-/// repaired. Then the first segment that could not be repaired is returned, as
-/// [`Error::Unrecoverable`] or [`Error::RebuildMismatch`], since the file is
-/// lost or inconsistent there; failing that, the sink's first error.
+/// the manifest; everything else is still repaired. Then the first segment
+/// that could not be repaired or is inconsistent is returned, as
+/// [`Error::Unrecoverable`] or [`Error::RebuildMismatch`]; failing that, the
+/// sink's first error.
 ///
 /// Shards that fail their hash check are ignored rather than aborting the heal
 /// (code-review issue 2), so one bad peer cannot block repair.
@@ -319,9 +327,7 @@ fn heal_segments(
     for segment in 0..header.segment_count() {
         let shard_len = shard_len(&header, segment)?;
         let (held, missing) = verify_all(manifest, segment, source, k, shard_len);
-        if missing.is_empty() {
-            continue;
-        }
+        // Rebuilt even with nothing missing, to check it (review S-002).
         // `regenerate` returns n shards of `shard_len` bytes or an error: a
         // broken codec is `Codec`, not a bad store or publisher (reviews
         // W-027, W-029).
@@ -336,16 +342,19 @@ fn heal_segments(
                 other => return Err(other),
             },
         };
+        // Not one codeword: keep repairing the others (review S-011) and
+        // report the first shard that differs at the end.
+        if let Some(index) = first_mismatch(manifest, segment, &held, &all) {
+            lost(first_failure, Error::RebuildMismatch { segment, index });
+        }
         drop(held);
         for index in missing {
             let listed = manifest.shard_hash(segment, index);
-            // Not the shard the manifest lists: keep repairing the others
-            // (review S-011) and report this one at the end.
+            // Not the shard the manifest lists, and reported above: not stored.
             let Some(bytes) = all
                 .get(usize::from(index))
                 .filter(|b| listed == Some(&tree::shard_hash(b)))
             else {
-                lost(first_failure, Error::RebuildMismatch { segment, index });
                 continue;
             };
             match sink.put(segment, index, bytes) {
@@ -358,6 +367,27 @@ fn heal_segments(
         }
     }
     Ok(())
+}
+
+/// The first of a segment's `all` shards, rebuilt from the verified ones in
+/// `held`, that is not the shard the manifest lists. Then the shards it lists
+/// are not one codeword, and other k of them would decode to other content
+/// (review S-002). The shards in `held` are not hashed again: the k of them
+/// that `all` was rebuilt from determine it, and it passes through each, as
+/// any k shards of a Reed-Solomon codeword fix it. That trusts the codec,
+/// which the Leopard vectors check (decision 0006).
+fn first_mismatch(
+    manifest: &Manifest,
+    segment: u32,
+    held: &[Option<Vec<u8>>],
+    all: &[Vec<u8>],
+) -> Option<u16> {
+    (0..manifest.header().n()).find(|&index| {
+        let i = usize::from(index);
+        held.get(i).is_none_or(Option::is_none)
+            && manifest.shard_hash(segment, index)
+                != all.get(i).map(|s| tree::shard_hash(s)).as_ref()
+    })
 }
 
 /// Fetches shards in index order and keeps the first `k` that match the

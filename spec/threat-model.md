@@ -22,6 +22,9 @@ adversaries. It does **not** hide who published or read something.
 1. No message type, key or API may delete another party's shards. Only lease expiry removes data.
 2. Nodes MUST take every parameter from a header verified against the file root.
 3. Secrets MUST only appear after `#` in links.
+4. A link pins one content, even against its publisher: any `k` shards that
+   match a file's manifest open the same bytes, or the file is refused
+   ([header.md](header.md#check-the-codeword), decision 0010).
 
 ## Scenario tests
 
