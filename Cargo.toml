@@ -38,6 +38,14 @@ data-encoding = "2.11"
 # Its parity bytes are part of the on-disk format. They match Leopard-RS, checked
 # by neoblast-erasure's leopard_fixtures test (decision 0006).
 reed-solomon-simd = "=3.1.0"
+# Small blast radius (about 60 reverse deps), but only a minimum, never called:
+# chacha20poly1305 reaches it through poly1305 and universal-hash, which accept any
+# 0.4, and before 0.4.4 code meant to run in constant time might not
+# (RUSTSEC-2026-0385). A program that uses neoblast-crypto resolves it itself, so
+# the floor is set here (review S-024). No exact pin and no wrapper: nothing calls
+# it, and an exact pin would clash with other users of 0.4. Remove it when
+# chacha20poly1305 no longer uses ctutils 0.4.
+ctutils = "0.4.4"
 
 neoblast-format = { path = "crates/neoblast-format", version = "0.0.2" }
 neoblast-crypto = { path = "crates/neoblast-crypto", version = "0.0.2" }

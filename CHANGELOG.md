@@ -17,6 +17,14 @@ the frozen v1 byte format).
   `NotEnough` with enough shards held, and one of the wrong length passed
   (review W-029). `ReedSolomonSimd`, the only codec, returns neither.
 
+### Security
+
+- `neoblast-crypto` requires `ctutils` 0.4.4 or later, which it reaches
+  through `chacha20poly1305`. A program that uses the crates as a library
+  can no longer resolve 0.4.2 or 0.4.3, where code meant to run in constant
+  time might not (RUSTSEC-2026-0385), even where cargo honours a
+  `rust-version` below 1.87 (review S-024).
+
 ## [0.0.2] - 2026-10-30
 
 Hardening of the offline core, fuzzed again for 24 hours per target with no

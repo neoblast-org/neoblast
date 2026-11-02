@@ -31,4 +31,4 @@ decision gets a new record that supersedes the old one.
 - **Medium** (100–1,000, or backed by a large organisation but pre-1.0): use behind our own types; pin exact versions.
 - **Small** (fewer than 100, one maintainer, stale, or churning pre-1.0): question it. Can we vendor it (under ~2,000 lines)? Does its output reach the wire or disk format (then the spec must define those bytes and tests must cross-check)? Can a large-radius crate do the job?
 
-Currently flagged small: `reed-solomon-simd` (its parity bytes are part of the format; cross-checked against Leopard-RS by decision 0006), and later `mainline`, `pkarr` and `bao-tree`.
+Currently flagged small: `reed-solomon-simd` (its parity bytes are part of the format; cross-checked against Leopard-RS by decision 0006); `ctutils`, held only to a minimum that `neoblast-crypto` never calls, so it has no exact pin and no wrapper (review S-024); and later `mainline`, `pkarr` and `bao-tree`.

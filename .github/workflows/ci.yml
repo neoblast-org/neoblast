@@ -63,7 +63,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: "1.97.0"
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+      # cargo deny reads our lock file only. A program that uses the crates
+      # resolves ctutils itself, so neoblast-crypto must refuse the versions
+      # RUSTSEC-2026-0385 flags: it lists ctutils ^0.4.4 as a normal dependency
+      # (not dev, not optional, every target), 0.4.4 resolves, and 0.4.3 fails
+      # on its requirement.
+      - name: Library users resolve ctutils 0.4.4 or later (S-024)
+        run: |
+          set -eo pipefail
+          if ! cargo metadata --no-deps --format-version 1 | jq -e '[.packages[]
+              | select(.name == "neoblast-crypto").dependencies[]
+              | select(.name == "ctutils" and .kind == null and .optional == false
+                       and .target == null and .req == "^0.4.4")] | length == 1' >/dev/null; then
+            echo "::error::neoblast-crypto must list ctutils ^0.4.4 as a normal dependency, not optional and for every target (S-024)."
+            exit 1
+          fi
+          cargo update -p ctutils --precise 0.4.4 --dry-run
+          if out=$(cargo update -p ctutils --precise 0.4.3 --dry-run 2>&1); then
+            echo "::error::ctutils 0.4.3 resolves: neoblast-crypto must require 0.4.4 or later (S-024)."
+            exit 1
+          fi
+          if ! grep -qF 'required by package `neoblast-crypto ' <<<"$out"; then
+            printf '%s\n' "$out"
+            echo "::error::ctutils 0.4.3 failed, but not on neoblast-crypto's requirement (S-024)."
+            exit 1
+          fi
 
   msrv:
     runs-on: ubuntu-latest

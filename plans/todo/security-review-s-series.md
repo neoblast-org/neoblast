@@ -531,11 +531,24 @@ that fixed it.
 - **Fix:** the CHANGELOG tells library users how to update `ctutils` to
   0.4.4 or later. A minimum in `neoblast-crypto` would be a new direct
   dependency (the blast-radius rule in `decisions/README.md`) and changes
-  `code_id`, so it waits until after v0.0.2.
+  `code_id`, so it waited until after v0.0.2 (see Status).
 - **Verified:** by two fresh agents, with `cargo generate-lockfile` for a
   downstream crate at each `rust-version`.
 - **Release:** not blocking.
-- **Status:** open. The CHANGELOG note is in the review PR after #26.
+- **Status:** fixed in the PR after #40. `neoblast-crypto` requires
+  `ctutils = "0.4.4"` through the workspace, with the reason beside the
+  blast-radius groups in `Cargo.toml` and in `decisions/README.md`: nothing
+  calls it, so no wrapper, and an exact pin would clash with other users of
+  0.4. All three lock files list it. The CI `deny` job checks that
+  `neoblast-crypto` lists `ctutils ^0.4.4` as a normal, non-optional
+  dependency for every target, that `cargo update -p ctutils --precise
+  0.4.4` resolves, and that 0.4.3 fails on `neoblast-crypto`'s requirement;
+  on the commit before, the step fails, as it does with the requirement
+  moved to dev-dependencies, made optional, limited to one target, or set
+  to 0.4.3 or 0.4.5. A downstream
+  crate with `rust-version = "1.86"` and edition 2024 now resolves 0.4.7,
+  where it resolved 0.4.2. `code_id` changes, so fuzz hours start again.
+  The CHANGELOG note is in the review PR after #26 and in `[Unreleased]`.
 
 ### S-025 · Low · A NUL in a commit message hides the rest of it from the message checks
 
