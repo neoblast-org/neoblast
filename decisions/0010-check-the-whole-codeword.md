@@ -79,6 +79,12 @@ and the v1 vectors are unchanged.
   both now pay the codec's fixed memory.
 - Bad: a file whose manifest lists a shard of the wrong length cannot be
   opened at all; before, that shard counted as missing (S-019).
+- Bad, found by the next security review (S-037, 2026-11-03): the check
+  holds a segment's n shards at once, which a publisher can make about
+  4 GiB (2-of-128 with 64 MiB segments). At the defaults it is 2.6 MB. An
+  intact open or heal used to hold at most k shards; decoding from parity
+  already held n. Checking the rebuilt shards one at a time would remove
+  this, and waits until after v0.0.3.
 
 ## Considered options
 

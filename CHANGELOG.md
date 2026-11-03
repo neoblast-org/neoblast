@@ -13,7 +13,9 @@ the frozen v1 byte format).
 - `neoblast open` and `heal` read the link from the first line of stdin when
   it is left out or `-`, so a read link need not be on the command line,
   where other local users can see it and the shell keeps it; `--help` says
-  so. Giving it as an argument still works (review S-003).
+  so. Giving it as an argument still works (review S-003). Stdin must be a
+  file or a pipe: at a terminal they refuse at once, rather than wait with
+  no prompt and show the link as it is typed (review W-050).
 - `neoblast-erasure` checks every result of an `ErasureCode`: parity that is
   not `n - k` shards of the shard length, or a missing data shard that
   `restore` does not return at that length, is `ErasureError::Codec`. Before,
@@ -32,7 +34,8 @@ the frozen v1 byte format).
   and a manifest that lists a shard of the wrong length can no longer be
   opened.
 - Parsing a read link decodes its key into buffers that are wiped when
-  dropped, and `neoblast` reads a link from stdin into one (review S-003).
+  dropped, and `neoblast` reads a link from stdin into one (review S-003);
+  a copy the compiler leaves on the stack on the way is not wiped (review W-055).
 - `neoblast-crypto` requires `ctutils` 0.4.4 or later, which it reaches
   through `chacha20poly1305`. A program that uses the crates as a library
   can no longer resolve 0.4.2 or 0.4.3, where code meant to run in constant

@@ -24,20 +24,24 @@ The key sits after `#`, so a web gateway serving the link never sees it.
 ```sh
 cargo install --path crates/neoblast          # or: cargo run -p neoblast --
 
-neoblast seal photo.jpg --out ./store >photo.link   # the nbl://f/... read link
+(umask 077; neoblast seal photo.jpg --out ./store >photo.link)   # the read link
 rm ./store/seg-000000/00{0..9}.shard                # lose shards (up to n - k per segment)
 neoblast heal 'nbl://fv/...' --from ./store         # rebuild them with the verify link only
 neoblast open --from ./store --out photo-copy.jpg <photo.link
 ```
 
-`open` and `heal` read the link from stdin when it is left out or `-`. A read
-link given as an argument works too, but other local users can see it, and
-the shell keeps it in its history.
+Anyone who can read `photo.link` can decrypt the file, so `umask 077` makes
+it readable by you alone (review W-051). `open` and `heal` read the link from
+stdin, a file or a pipe, when it is left out or `-`. A read link given as an
+argument works too, but other local users can see it, and the shell keeps it
+in its history.
 
 Defaults are 20-of-50 shards over 1 MiB segments ([decision
 0009](decisions/0009-segment-size.md)). `seal`, `open` and `heal` work one
 segment at a time, so the memory they allocate does not grow with the file
-size, apart from the manifest's shard hashes (about 0.16% of the file). Heal's
+size, apart from the manifest's shard hashes (about 0.16% of the file). It
+grows with a segment's n shards instead: 2.6 MB at the defaults, but up to
+about 4 GiB for parameters a publisher may choose (review S-037). Heal's
 measured peak still steps up a few MiB between a 256 MiB and a 1 GiB file
 (decision 0009, finding 2).
 The network (Phase 2), storage swaps and leases (Phase 3) and blind search

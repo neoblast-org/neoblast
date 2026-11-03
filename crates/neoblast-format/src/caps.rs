@@ -119,7 +119,8 @@ fn encode_versioned(root: &[u8; 32]) -> String {
 
 /// Decodes into buffers that are wiped when dropped, as the key fragment
 /// passes through here (review S-003). The output is sized by `decode_len`,
-/// as `decode_mut` requires, and is filled in place, so it is never copied.
+/// as `decode_mut` requires, and is filled in place, so it is never
+/// reallocated, which would leave a copy behind.
 fn decode(text: &str) -> Result<Zeroizing<Vec<u8>>, CapError> {
     let upper = Zeroizing::new(text.to_ascii_uppercase());
     let len = BASE32_NOPAD
@@ -141,6 +142,9 @@ fn decode_versioned(text: &str) -> Result<[u8; 32], CapError> {
     }
 }
 
+/// The 32 bytes are returned by value, for [`FileReadCap`] to hold and wipe
+/// on drop; a copy that the compiler leaves on the stack on the way is not
+/// wiped (review W-055).
 fn decode_32(text: &str) -> Result<[u8; 32], CapError> {
     decode(text)?
         .as_slice()

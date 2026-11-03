@@ -14,7 +14,8 @@ and S-026, both low. The eighth (2026-10-27, `118f710..f2380e7`, #28, #30 and
 `f2380e7..ee97e24`, #32 and #33) added S-030 to S-032, all low. The tenth
 (2026-10-28, `ee97e24..8c34bca`, #36) added S-033 and S-034, both low. The
 eleventh (2026-11-02, `8c34bca..805a5ed`, #37 to #41) added S-035 and
-S-036, both low.
+S-036, both low. The twelfth (2026-11-03, `805a5ed..0572592`, #42 to
+#45) added S-037, low.
 
 IDs are unique across all worklists and continue from the highest S-number used,
 including one that so far appears only in a review log (`SECURITY.md`, "Our own
@@ -91,7 +92,7 @@ that fixed it.
   different choice would have repaired it. Only the manifest's author can
   cause this, and the fix above covers it.
 - **Release:** not blocking.
-- **Status:** fixed in the PR after #43, by both remedies, as the
+- **Status:** fixed in `ecc91cb` (#44), by both remedies, as the
   maintainer chose (decision 0010). `open_manifest` and `heal_manifest`
   rebuild every segment's n shards from the k verified ones and compare
   each with the manifest (`first_mismatch` in `stream.rs`); `open` refuses
@@ -125,7 +126,7 @@ that fixed it.
   for convenience, with a warning in `--help`), and decode the key fragment into
   `Zeroizing` buffers.
 - **Release:** not blocking.
-- **Status:** fixed in the PR after #42. `neoblast open` and `heal` read the
+- **Status:** fixed in `ef16ebb` (#43). `neoblast open` and `heal` read the
   link from the first line of stdin, at most 4096 bytes, when it is left
   out or `-`, into a buffer of that size that is wiped on drop; an argument
   still works, and `--help` warns about it. `caps.rs` decodes into
@@ -962,3 +963,34 @@ that fixed it.
 - **Release:** not blocking.
 - **Status:** fixed in `e711e5a` (#42), in the step's comment and S-026's
   status.
+
+### S-037 · Low · A publisher can make an intact open or heal hold n shards of up to 32 MiB per segment
+
+- **Where:** `crates/neoblast/src/stream.rs`, `open_manifest` and
+  `heal_segments`, which now rebuild every segment's n shards
+  (`ecc91cb`, #44, S-002).
+- **Problem:** before S-002, an intact open held only the k data shards,
+  and a heal with nothing missing decoded nothing. Both now hold all n
+  shards of a segment, plus the codec's buffers. The header allows k = 2,
+  n = 128 and 64 MiB segments, so one segment's shards can be 128 × 32 MiB,
+  about 4 GiB. Measured on an 8 MiB file sealed at 2-of-128 with 8 MiB
+  segments (release builds, `/usr/bin/time -l`): an intact open went from
+  20 MB to 0.9 to 1.1 GB, and an intact heal from 16 MB to 1.1 GB.
+- **Impact:** a reader or a storage node healing such a file can run out of
+  memory. The publisher already chooses the parameters, and the old code
+  reached the same scale as soon as a shard was missing (a heal with one
+  shard missing peaked at 1.3 GB at `805a5ed`), which anyone holding a
+  store can arrange; S-002 removes the cheap intact case, it adds no new
+  scale. No confidentiality or integrity is lost.
+- **Fix:** document that memory grows with n × the shard length; then
+  either refuse a header over a memory budget (a reader's policy, which
+  needs a decision, since it refuses some v1 files), or check the rebuilt
+  shards one at a time against the manifest, which keeps S-002's check
+  without holding all n (a streaming `ErasureCode`).
+- **Verified:** by the reviewer and a fresh agent, each on release builds of
+  `805a5ed` and `0572592`.
+- **Release:** not blocking.
+- **Status:** open. Documented in the PR after #45: `spec/header.md`
+  ("Check the codeword"), decision 0010's consequences and the README give
+  the scaling and its bound. The code change waits until after v0.0.3, as
+  it would restart the campaign.

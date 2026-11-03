@@ -198,19 +198,20 @@ pub fn open_manifest(
         let cipher_len = segment_len(header.segment_cipher_len(segment))?;
         // All n shards, rebuilt from the k verified ones (with every data
         // shard held, only the parity is computed), and checked against the
-        // manifest (review S-002). The shards fetched are freed before the
-        // output buffer is allocated.
-        let all = neoblast_erasure::regenerate(&ReedSolomonSimd, k, n, shard_len, &held)
+        // manifest (review S-002). Then the shards fetched and the parity
+        // are freed before the output buffer is allocated, and each data
+        // shard once it is copied in (review W-052).
+        let mut all = neoblast_erasure::regenerate(&ReedSolomonSimd, k, n, shard_len, &held)
             .map_err(|e| unrecoverable(e, segment, &held, k))?;
         if let Some(index) = first_mismatch(manifest, segment, &held, &all) {
             return Err(Error::RebuildMismatch { segment, index });
         }
         drop(held);
+        all.truncate(k);
         let mut buf = Zeroizing::new(Vec::with_capacity(k.saturating_mul(shard_len)));
-        for shard in all.iter().take(k) {
-            buf.extend_from_slice(shard);
+        for shard in all {
+            buf.extend_from_slice(&shard);
         }
-        drop(all);
         buf.truncate(cipher_len);
         cipher.open_in_place(segment, &mut buf)?;
 
@@ -344,16 +345,19 @@ fn heal_segments(
         };
         // Not one codeword: keep repairing the others (review S-011) and
         // report the first shard that differs at the end.
-        if let Some(index) = first_mismatch(manifest, segment, &held, &all) {
+        let mismatch = first_mismatch(manifest, segment, &held, &all);
+        if let Some(index) = mismatch {
             lost(first_failure, Error::RebuildMismatch { segment, index });
         }
         drop(held);
         for index in missing {
             let listed = manifest.shard_hash(segment, index);
-            // Not the shard the manifest lists, and reported above: not stored.
+            // Not the shard the manifest lists, and reported above: not
+            // stored. With no mismatch, `first_mismatch` has already found
+            // every missing shard to be the one listed (review W-054).
             let Some(bytes) = all
                 .get(usize::from(index))
-                .filter(|b| listed == Some(&tree::shard_hash(b)))
+                .filter(|b| mismatch.is_none() || listed == Some(&tree::shard_hash(b)))
             else {
                 continue;
             };

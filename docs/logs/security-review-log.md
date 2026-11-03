@@ -1,6 +1,6 @@
 # Security Review Log
 
-<!-- baseline --> **Next review diffs from:** `805a5ed727555de816d98a76b8711e7be0f9e6b9` (`main`, recorded 2026-11-02)
+<!-- baseline --> **Next review diffs from:** `0572592f6469c003a8ba9f7c14ca9fd0ef910a42` (`main`, recorded 2026-11-03)
 
 A running record of branch security reviews. Each entry records the exact commit range
 reviewed; the baseline marker line above is the machine-owned frontier the next
@@ -21,6 +21,78 @@ marker line; a frontier-moving entry's Base must equal the previous one's Tip un
 the entry explains why not.
 
 ## Entries
+
+### 2026-11-03 · `805a5ed..0572592` (#42 to #45)
+
+| | Commit | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `805a5ed727555de816d98a76b8711e7be0f9e6b9` | 2026-11-02T15:31:42Z | fix: neoblast-crypto requires ctutils 0.4.4 or later (S-024) (#41) |
+| Tip | `0572592f6469c003a8ba9f7c14ca9fd0ef910a42` | 2026-11-03T13:50:05Z | chore: bump to 0.0.3; plan the release (#45) |
+
+- **Scope:** 5 commits (`git rev-list --count 805a5ed..0572592`) and 30
+  files, +1275/−158 (`git diff --shortstat 805a5ed 0572592`): the
+  eleventh reviews' fixes (#42); S-003 and W-049 (#43); S-002 (#44); and
+  the 0.0.3 bump with the release plan (#45). Of them, 6 files, +189/−39,
+  under `.github/` and 7 files, +422/−73, under `crates/` (the same
+  command with `-- .github` and `-- crates`). Base equals the previous
+  entry's Tip. Only the committed range is covered. This is step 2 of
+  `plans/todo/v0.0.3.md`.
+- **Method:** a fresh agent reviewed the range diff on a scratch clone: it
+  tried to make the signature and release steps read another signers file
+  (tags and branches named `origin/main`, `refs/remotes/origin/main` and
+  main's own hash, a symlink), built every control byte before `.mailmap`
+  with `git mktree`, mutated `first_mismatch`, read the stdin link path,
+  and measured `open` and `heal` at both ends of the range on release
+  builds. A second fresh agent reproduced the finding's measurements and
+  checked its severity.
+- **Findings:** 1, low, in
+  [`plans/todo/security-review-s-series.md`](../../plans/todo/security-review-s-series.md):
+  - **S-037 (Low):** a publisher can make an intact open or heal hold n
+    shards of up to 32 MiB per segment, about 4 GiB, as S-002's check
+    rebuilds every segment; the old code reached the same scale whenever
+    a shard was missing (#44).
+- **Not tracked:**
+  - On Windows, a console keeps a link pasted at it in its input history,
+    as the terminal's echo already noted under S-003; W-050 now refuses a
+    terminal on stdin.
+  - A link file in UTF-16 or with a byte-order mark is refused cleanly: a
+    usability point, not a security one.
+  - A backslash, a quote or a leading space before `.mailmap` passes
+    `tree.awk`; nothing reads such a name as `.mailmap`, and Git for
+    Windows refuses the first two in paths.
+  - The code review's W-050 (a terminal on stdin) and W-051 (a link file
+    others may read) touch S-003; they are tracked in the code log.
+- **Checked, no finding:**
+  - `first_k_verified` and `verify_all` hold at most k shards, so
+    `regenerate` decodes from exactly k, which fix the codeword; every
+    shard not held is hashed; nothing out of range can make a missing
+    hash compare equal; `open` checks before it decrypts or writes, and
+    the CLI leaves no output file. A hostile store cannot make an honest
+    file fail the check, nor two sets of k shards open different content.
+    A mutant of `first_mismatch` fails the S-002 test.
+  - The stdin link is bounded, never reallocated, wiped on error, and no
+    error message holds input; `decode_mut` cannot reach its panic.
+  - `main-signers.sh` and "Tag is on main" read only
+    `refs/remotes/origin/main`; a symlinked `allowed_signers` fails
+    closed; every control byte before `.mailmap` fails `tree.awk`;
+    `test.sh` passes 271 cases.
+  - The 5 commits are the project's, in UTC, signed off once and signed
+    with the project's key; `cargo test --all` (106 passed) at the Tip.
+  - Nothing under `.github/`, `docs/`, `plans/`, `spec/`, `fuzz/` or
+    `bench/` is in the published crates (`cargo package --list`); the
+    workflows' triggers, permissions, environment and pins are unchanged.
+  - Privacy: no names, addresses, paths or session links in the range's
+    text or its commit messages.
+  - No open finding of medium severity or higher is described in public:
+    S-027 appears only by ID, severity and the release rule.
+- **Outcome:** no blocker. S-037 is documented in the PR after #45, and
+  its code change waits until after v0.0.3.
+- **Carried-over items:** S-002 fixed in `ecc91cb` (#44); S-003 fixed in
+  `ef16ebb` (#43); S-007 open, with every merge a fast-forward; S-008 open
+  until the GitHub-side copies are removed; S-027 handled privately and
+  open, and the maintainer is checking that it is not shipped in v0.0.3,
+  which the release waits for; S-035 and S-036 fixed in `e711e5a` (#42). Their statuses had
+  "the PR after" #41, #42 and #43.
 
 ### 2026-11-02 · `8c34bca..805a5ed` (#37 to #41)
 

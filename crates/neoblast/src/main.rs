@@ -3,7 +3,7 @@
 
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
-use std::io::{BufRead, BufReader, BufWriter, Read};
+use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -45,9 +45,9 @@ enum Command {
     },
     /// Rebuild a file from its read link and a shard directory.
     Open {
-        /// The `nbl://f/...` read link, or `-` to read it from stdin, as when
-        /// left out. Other local users can see a link given here, and the
-        /// shell keeps it in its history; prefer stdin.
+        /// The `nbl://f/...` read link, or `-` to read it from stdin (a file
+        /// or a pipe), as when left out. Other local users can see a link
+        /// given here, and the shell keeps it in its history; prefer stdin.
         link: Option<String>,
         /// Directory holding the manifest and shards.
         #[arg(long)]
@@ -59,8 +59,9 @@ enum Command {
     /// Rebuild missing or corrupt shards. Needs only the verify link, never the key.
     Heal {
         /// A `nbl://fv/...` verify link (a read link also works), or `-` to
-        /// read it from stdin, as when left out. Other local users can see a
-        /// read link given here, and the shell keeps it in its history.
+        /// read it from stdin (a file or a pipe), as when left out. Other
+        /// local users can see a read link given here, and the shell keeps it
+        /// in its history.
         link: Option<String>,
         /// Directory holding the manifest and shards.
         #[arg(long)]
@@ -163,14 +164,19 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
 const MAX_LINK_LINE: usize = 4096;
 
 /// The link given, or, when it is `-` or left out, the first line of stdin
-/// without its line ending, `\n`, `\r\n` or a last `\r` (review S-003). A link on the command line can be
-/// seen by other local users and is kept in shell history; one on stdin is
-/// not. The line is read into a buffer already of its largest size, so it is
-/// never moved, and is wiped on drop; the standard library's own stdin
-/// buffer is not.
+/// without its line ending, `\n`, `\r\n` or a last `\r` (review S-003). A
+/// link on the command line can be seen by other local users and is kept in
+/// shell history; one on stdin is not. Stdin must be a file or a pipe, not a
+/// terminal, which would wait with no prompt and show the link as it is
+/// typed or pasted (review W-050). The line is read into a buffer already of
+/// its largest size, so it is never moved, and is wiped on drop; the
+/// standard library's own stdin buffer is not.
 fn link_or_stdin(link: Option<String>) -> Result<Zeroizing<String>, Box<dyn std::error::Error>> {
     if let Some(link) = link.filter(|l| l.as_str() != "-") {
         return Ok(Zeroizing::new(link));
+    }
+    if std::io::stdin().is_terminal() {
+        return Err("no link: give it as an argument, or on stdin from a file or a pipe".into());
     }
     let mut line = Zeroizing::new(Vec::with_capacity(MAX_LINK_LINE + 1));
     std::io::stdin()

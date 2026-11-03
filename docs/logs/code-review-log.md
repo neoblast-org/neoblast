@@ -1,6 +1,6 @@
 # Code Review Log
 
-<!-- baseline --> **Next review diffs from:** `805a5ed727555de816d98a76b8711e7be0f9e6b9` (`main`, recorded 2026-11-02)
+<!-- baseline --> **Next review diffs from:** `0572592f6469c003a8ba9f7c14ca9fd0ef910a42` (`main`, recorded 2026-11-03)
 
 A running record of code-review events: branch/pre-PR reviews, review worklists, and
 remediation programmes. Newest entry first. The baseline marker line above is the
@@ -27,6 +27,50 @@ merge-base fallback). Side-branch pre-PR reviews are logged as entries marked
 "frontier unchanged (side branch)" and never move the line.
 
 ## Entries
+
+### 2026-11-03: `805a5ed..0572592` (#42 to #45)
+
+| | SHA | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `805a5ed727555de816d98a76b8711e7be0f9e6b9` | 2026-11-02 | fix: neoblast-crypto requires ctutils 0.4.4 or later (S-024) (#41) |
+| Tip | `0572592f6469c003a8ba9f7c14ca9fd0ef910a42` | 2026-11-03 | chore: bump to 0.0.3; plan the release (#45) |
+
+- **Scope:** 5 commits (`git rev-list --count 805a5ed..0572592`) and 30
+  files, +1275/−158 (`git diff --shortstat 805a5ed 0572592`): the
+  eleventh reviews' fixes (#42); S-003 and W-049 (#43); S-002 (#44); and
+  the 0.0.3 bump with the release plan (#45). Of them, 6 files, +189/−39,
+  under `.github/` and 7 files, +422/−73, under `crates/` (the same
+  command with `-- .github` and `-- crates`). Base equals the previous
+  entry's Tip. Only the committed range is covered. This is step 2 of
+  `plans/todo/v0.0.3.md`.
+- **Method:** the `code-review` skill over the range, at high effort; a
+  fresh agent then tried to refute each claim, reading the code at the
+  Tip and running a mutant of `heal_segments` on a copy. Of the review's
+  8 claims, 6 are tracked and 2 rejected.
+- **Findings:** 6 in a new code worklist, none a weakness CI can be made
+  to miss: W-050 (low), with no link and a terminal on stdin, `open` and
+  `heal` wait silently; W-051 (low), the README's quick-start writes the
+  read link to a file others may read; W-052 (cleanup), `open` keeps the
+  rebuilt parity while it fills the output; W-053 (cleanup), `regenerate`
+  copies the data shards an intact open used to move; W-054 (cleanup),
+  `heal` hashes each missing rebuilt shard twice; W-055 (low), the key's
+  last copy on the way out of `decode` is not wiped.
+- **Not tracked,** with the reasons in the worklist: a missing test for
+  heal storing an inconsistent segment's matching shards (a mutant fails
+  the S-019 test), and the removed fallback to the checkout's signers
+  file (W-045's intent).
+- **Checked, no finding:** no correctness bug in the range;
+  `cargo test --all` (106 passed) at the Tip; the bump changes only the
+  `neoblast-*` versions.
+- **Outcome:** no blocker. W-050 to W-052, W-054 and W-055 are fixed, and
+  W-053 won't be, in the PR after #45, before the v0.0.3 campaign; W-050,
+  W-052, W-054 and W-055 change `crates/`, and so `code_id`. Worklist:
+  [`plans/completed/code-review-w-series-6.md`](../../plans/completed/code-review-w-series-6.md),
+  closed in the same PR.
+- **Carried-over items:** W-044 to W-048 fixed in `e711e5a` (#42) and
+  W-049 in `5d2cdf6` (#43). Part 5 closed and moved to
+  [`plans/completed/code-review-w-series-5.md`](../../plans/completed/code-review-w-series-5.md)
+  in #43; the entry below still links to its old place.
 
 ### 2026-11-02: `8c34bca..805a5ed` (#37 to #41)
 

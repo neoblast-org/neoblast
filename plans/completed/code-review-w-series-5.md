@@ -1,7 +1,7 @@
 # Code-review worklist (W-series, part 5)
 
 Status: completed 2026-11-02: every item is fixed, W-044 to W-048 in
-`e711e5a` (#42) and W-049 in the PR after #42. Opened 2026-11-02 by the
+`e711e5a` (#42) and W-049 in `5d2cdf6` (#43). Opened 2026-11-02 by the
 eleventh `/review-since`
 (`8c34bca..805a5ed`, #37 to #41), logged in
 `docs/logs/code-review-log.md`. Part 4, W-028 to W-043, is closed
@@ -162,7 +162,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Remediation: the maintainer's call: reword the line to match the README,
   or name the exception for a minimum that nothing calls.
 - Verified: by a fresh agent.
-- Status: fixed in the PR after #42, by the second remedy, as the
+- Status: fixed in `5d2cdf6` (#43), by the second remedy, as the
   maintainer chose: `CLAUDE.md` keeps the rule and says that a minimum
   version of a crate nothing calls needs only the written reason, as
   `decisions/README.md` records for `ctutils`. Documentation only.
