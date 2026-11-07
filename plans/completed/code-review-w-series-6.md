@@ -1,7 +1,7 @@
 # Code-review worklist (W-series, part 6)
 
 Status: completed 2026-11-03: every item is fixed, or won't be fixed with
-its reason, in the PR after #45. Opened 2026-11-03 by the twelfth
+its reason, in `3b93b8d` (#46). Opened 2026-11-03 by the twelfth
 `/review-since` (`805a5ed..0572592`, #42 to #45), logged in
 `docs/logs/code-review-log.md`, as step 2 of `plans/todo/v0.0.3.md`. Part
 5, W-044 to W-049, is closed (`plans/completed/code-review-w-series-5.md`).
@@ -36,7 +36,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   there is shown as it is typed, which S-003 meant to avoid.
 - Remediation: refuse when stdin is a terminal, as before S-003 clap did.
 - Verified: by a fresh agent, by reading.
-- Status: fixed in the PR after #45. With the link left out or `-`,
+- Status: fixed in `3b93b8d` (#46). With the link left out or `-`,
   `link_or_stdin` refuses a terminal on stdin with "no link: give it as an
   argument, or on stdin from a file or a pipe"; both `--help`s say "a file
   or a pipe". Checked by hand under a pseudo-terminal (`script`) for `open`
@@ -54,7 +54,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Remediation: `(umask 077; …)`, and a sentence saying why.
 - Verified: by a fresh agent, by reading (`seal` prints the link, and
   nothing sets the file's mode).
-- Status: fixed in the PR after #45. Documentation only.
+- Status: fixed in `3b93b8d` (#46). Documentation only.
 
 ### W-052 (cleanup): `open` keeps the rebuilt parity while it fills the output
 
@@ -65,7 +65,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Remediation: drop the parity after the check, and each data shard as it
   is copied.
 - Verified: by a fresh agent, by reading.
-- Status: fixed in the PR after #45: `all.truncate(k)` after the check, and
+- Status: fixed in `3b93b8d` (#46): `all.truncate(k)` after the check, and
   the data shards are consumed as they are copied; the comment says so. It
   keeps behaviour, so every open test covers it, among them
   `s002_shards_that_are_not_one_codeword_are_refused` and the CLI round
@@ -91,7 +91,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   among them, and the loop that stores the missing ones hashes them again.
 - Remediation: hash again only after a mismatch.
 - Verified: by a fresh agent, by reading.
-- Status: fixed in the PR after #45: with no mismatch in the segment, the
+- Status: fixed in `3b93b8d` (#46): with no mismatch in the segment, the
   loop stores the missing shards without hashing them again. It keeps
   behaviour: the heal round trips cover the case with no mismatch, and
   `s011_an_inconsistent_segment_does_not_stop_heal` and
@@ -108,7 +108,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Remediation: say so; returning `Zeroizing<[u8; 32]>` would not remove the
   copies a move makes either.
 - Verified: by a fresh agent, by reading.
-- Status: fixed in the PR after #45, in `decode_32`'s doc and the
+- Status: fixed in `3b93b8d` (#46), in `decode_32`'s doc and the
   changelog. Documentation only.
 
 ## Not tracked

@@ -83,8 +83,9 @@ and the v1 vectors are unchanged.
   holds a segment's n shards at once, which a publisher can make about
   4 GiB (2-of-128 with 64 MiB segments). At the defaults it is 2.6 MB. An
   intact open or heal used to hold at most k shards; decoding from parity
-  already held n. Checking the rebuilt shards one at a time would remove
-  this, and waits until after v0.0.3.
+  already held n. Checking the rebuilt shards one at a time would not
+  remove it, as the codec works on as many again; decision 0011 bounds it
+  with a memory budget in the CLI instead, after v0.0.3.
 
 ## Considered options
 
