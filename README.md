@@ -41,7 +41,8 @@ Defaults are 20-of-50 shards over 1 MiB segments ([decision
 segment at a time, so the memory they allocate does not grow with the file
 size, apart from the manifest's shard hashes (about 0.16% of the file). It
 grows with a segment's n shards instead: 2.6 MB at the defaults, but up to
-about 4 GiB for parameters a publisher may choose (review S-037). Heal's
+several GiB for parameters a publisher may choose (review S-037); the CLI
+will refuse such a file unless asked (decision 0011, after v0.0.3). Heal's
 measured peak still steps up a few MiB between a 256 MiB and a 1 GiB file
 (decision 0009, finding 2).
 The network (Phase 2), storage swaps and leases (Phase 3) and blind search
