@@ -31,10 +31,11 @@ neoblast open --from ./store --out photo-copy.jpg <photo.link
 ```
 
 Anyone who can read `photo.link` can decrypt the file, so `umask 077` makes
-it readable by you alone (review W-051). `open` and `heal` read the link from
-stdin, a file or a pipe, when it is left out or `-`. A read link given as an
-argument works too, but other local users can see it, and the shell keeps it
-in its history.
+a new one readable by you alone (review W-051). It leaves the mode of a file
+that already exists as it is, so remove an old `photo.link` first (review
+W-061). `open` and `heal` read the link from stdin, a file or a pipe, when
+it is left out or `-`. A read link given as an argument works too, but other
+local users can see it, and the shell keeps it in its history.
 
 Defaults are 20-of-50 shards over 1 MiB segments ([decision
 0009](decisions/0009-segment-size.md)). `seal`, `open` and `heal` work one

@@ -1,6 +1,6 @@
 # Code Review Log
 
-<!-- baseline --> **Next review diffs from:** `0572592f6469c003a8ba9f7c14ca9fd0ef910a42` (`main`, recorded 2026-11-03)
+<!-- baseline --> **Next review diffs from:** `281bd1a6b7d9513a635a9af14bbccd9ebc465df8` (`main`, recorded 2026-11-08)
 
 A running record of code-review events: branch/pre-PR reviews, review worklists, and
 remediation programmes. Newest entry first. The baseline marker line above is the
@@ -27,6 +27,53 @@ merge-base fallback). Side-branch pre-PR reviews are logged as entries marked
 "frontier unchanged (side branch)" and never move the line.
 
 ## Entries
+
+### 2026-11-08: `0572592..281bd1a` (#46 and #49)
+
+| | SHA | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `0572592f6469c003a8ba9f7c14ca9fd0ef910a42` | 2026-11-03 | chore: bump to 0.0.3; plan the release (#45) |
+| Tip | `281bd1a6b7d9513a635a9af14bbccd9ebc465df8` | 2026-11-07 | docs: decision 0011, a memory budget for the CLI (S-037) (#49) |
+
+- **Scope:** 2 commits (`git rev-list --count 0572592..281bd1a`) and 15
+  files, +481/−37 (`git diff --shortstat 0572592 281bd1a`): the twelfth
+  reviews' fixes and logs (#46), and decision 0011 (#49). Of them, 3
+  files, +35/−21, under `crates/` and none under `.github/` (the same
+  command with `-- crates` and `-- .github`). Base equals the previous
+  entry's Tip. Only the committed range is covered. Run during the v0.0.3
+  campaign (`plans/todo/v0.0.3.md`, step 3), so that step 5 reviews only
+  what follows.
+- **Method:** the `code-review` skill over the range, at high effort; a
+  fresh agent then tried to refute each claim, reading the code at the
+  Tip, reading `reed-solomon-simd`'s high-rate sizing and computing it for
+  every k and n the header allows, and running a mutant of
+  `link_or_stdin` on a copy. Of the review's 9 claims, 6 are tracked (W-061
+  also raised by the security review) and 3 rejected; the security
+  review's two wording points on decision 0011 are tracked here too, as
+  W-062 and W-063.
+- **Findings:** 8 in a new code worklist, none a bug:
+  W-056 (low), decision 0011 explains its bound by a rate the codec never
+  runs; W-057 (cleanup), it says the manifest alone can pass the budget;
+  W-058 (low), no test fails when W-050's terminal check is removed;
+  W-059 (cleanup), the spec's largest segment is 64 bytes a shard short;
+  W-060 (cleanup), two messages for giving no link; W-061 (low), the
+  README's `umask` does not protect a link file that already exists;
+  W-062 (cleanup), "up to k = 2"; W-063 (cleanup), decision 0011's first
+  "Good" claims more than its estimate supports.
+- **Not tracked,** with the reasons in the worklist: the library left
+  unbounded (decision 0011's choice), W-052's comment (it says what is
+  freed, not the peak), and the twelfth entries' "the PR after #45",
+  which is `3b93b8d` (#46).
+- **Checked, no finding:** W-052 and W-054 keep behaviour: with no
+  mismatch, `first_mismatch` has hashed every shard heal stores, and
+  mutants of the new filter fail the S-011 and S-019 tests;
+  `cargo test --all` (106 passed) at the Tip.
+- **Outcome:** no blocker. W-056, W-057, W-059 and W-061 to W-063 are
+  fixed in the PR after #49, outside `code_id`; W-058 and W-060 change
+  `crates/` and wait until after v0.0.3. Worklist:
+  [`plans/todo/code-review-w-series-7.md`](../../plans/todo/code-review-w-series-7.md).
+- **Carried-over items:** W-050 to W-052, W-054 and W-055 fixed, and
+  W-053 won't be, in `3b93b8d` (#46), which closed part 6.
 
 ### 2026-11-03: `805a5ed..0572592` (#42 to #45)
 

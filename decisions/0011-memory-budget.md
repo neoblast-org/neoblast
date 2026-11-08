@@ -6,24 +6,21 @@
 
 ## Context and problem statement
 
-The header lets a publisher choose k, n and the segment size, up to k = 2,
-n = 128 and 64 MiB segments. Every operation works one segment at a time,
-but one segment's shards can then be 128 × 32 MiB, about 4 GiB, and the
-erasure codec works on about as many again. Since decision 0010, an intact
-`open` or `heal` rebuilds all n shards, so a publisher can make every reader
-and every healer of a file need gigabytes (S-037). Seal, opening from parity
-and healing after losses always did.
+The header lets a publisher choose k, n and the segment size, down to k = 2
+and up to n = 128 and 64 MiB segments. Every operation works one segment at
+a time, but one segment's shards can then be 128 of just over 32 MiB, about
+4 GiB, and the erasure codec works on about as many again. Since decision
+0010, an intact `open` or `heal` rebuilds all n shards, so a publisher can
+make every reader and every healer of a file need gigabytes (S-037). Seal,
+opening from parity and healing after losses always did.
 
 Checking the rebuilt shards one at a time does not help: the codec's work
-buffers have the same scale (`reed-solomon-simd` 3.1.0). It picks the
-high-rate algorithm, or the low-rate one when `next_pow2(k) <
-next_pow2(n − k)`, or when the two are equal and k > n − k (`rate_default.rs`).
-With P = `next_pow2(n − k)` and Q = `next_pow2(k)`, the high-rate encoder
-works on k rounded up to a multiple of P shards, and its decoder on
-`next_pow2(P + k)`; the low-rate encoder on n − k rounded up to a multiple of
-Q, and its decoder on `next_pow2(Q + n − k)` (`rate_high.rs`, `rate_low.rs`).
-Over every pair the header allows, with the rate the codec picks, the largest
-of these is at most W = `next_pow2(P + k)`. Only a limit bounds it.
+buffers have the same scale. `neoblast-erasure` always runs the high-rate
+algorithm of `reed-solomon-simd` 3.1.0, never the crate's own choice of rate
+(`spec/header.md`). With P = `next_pow2(n − k)`, its encoder works on k
+rounded up to a multiple of P shards, which is less than P + k, and its
+decoder on W = `next_pow2(P + k)` (`rate_high.rs`), so W bounds both for
+every k and n the header allows (review W-056). Only a limit bounds it.
 
 The maintainer chose a limit in the CLI, with an option to raise it, and to
 leave the library as it is: a program that embeds the library sets its own.
@@ -52,8 +49,9 @@ then it is opened with every shard present and from the last k shards of
 each segment, and healed with nothing missing and from the last k shards.
 Cases A to E are one segment long; F, at the defaults, is 1 GiB, 1,056
 segments with padding. The same operations on a 1 KB file at the defaults peak at 11.4
-to 11.6 MB, the fixed cost. Case A ran the low-rate algorithm, the others
-the high-rate one.
+to 11.6 MB, the fixed cost. Every case ran the high-rate algorithm, the only
+one `neoblast-erasure` uses; this record first said A ran the low-rate one
+(review W-056).
 
 ## Findings
 
@@ -94,19 +92,22 @@ segments too.
 budget.** The default is 1 GiB; `--max-memory <MiB>` on `seal`, `open` and
 `heal` raises or lowers it. The error names the estimate and the option.
 At 20-of-50, a file with segments of 64 MiB, the header's largest, comes to
-about 557 MiB plus its manifest, so it passes; at very small segments the
-manifest (n × 32 bytes a segment) can itself pass the budget. Of the cases
-above only A is refused by default. The
-library's functions do not check: a program that embeds it applies its own
-limit, as `spec/header.md` already advises (S-037).
+about 557 MiB plus its manifest, so it passes. The manifest term is at
+most 256 MiB, the largest manifest a store reads (`MAX_MANIFEST_LEN`), so
+at the default budget it never refuses a file by itself; only a lower
+`--max-memory` can (review W-057). Of the cases above only A is refused by
+default. The library's functions do not check: a program that embeds it
+applies its own limit, as `spec/header.md` already advises (S-037).
 
 No bytes change, and no file becomes unreadable: a refused file opens with a
 higher `--max-memory`.
 
 ### Consequences
 
-- Good: a link can no longer make a reader or healer that uses the CLI run
-  out of memory by default, whichever shards it holds.
+- Good: by default, a link can no longer make a reader or healer that uses
+  the CLI need more than about 1 GiB, whichever shards it holds, as far as
+  the estimate holds (see the second "Bad"); a machine with less free than
+  that is still exposed (review W-063).
 - Good: the bound is stated, and covers every operation, not just the
   intact ones S-037 found.
 - Bad: legal v1 files with extreme parameters need the option to open.

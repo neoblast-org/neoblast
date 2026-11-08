@@ -1,6 +1,6 @@
 # Security Review Log
 
-<!-- baseline --> **Next review diffs from:** `0572592f6469c003a8ba9f7c14ca9fd0ef910a42` (`main`, recorded 2026-11-03)
+<!-- baseline --> **Next review diffs from:** `281bd1a6b7d9513a635a9af14bbccd9ebc465df8` (`main`, recorded 2026-11-08)
 
 A running record of branch security reviews. Each entry records the exact commit range
 reviewed; the baseline marker line above is the machine-owned frontier the next
@@ -21,6 +21,62 @@ marker line; a frontier-moving entry's Base must equal the previous one's Tip un
 the entry explains why not.
 
 ## Entries
+
+### 2026-11-08 · `0572592..281bd1a` (#46 and #49)
+
+| | Commit | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `0572592f6469c003a8ba9f7c14ca9fd0ef910a42` | 2026-11-03T13:50:05Z | chore: bump to 0.0.3; plan the release (#45) |
+| Tip | `281bd1a6b7d9513a635a9af14bbccd9ebc465df8` | 2026-11-07T04:34:56Z | docs: decision 0011, a memory budget for the CLI (S-037) (#49) |
+
+- **Scope:** 2 commits (`git rev-list --count 0572592..281bd1a`) and 15
+  files, +481/−37 (`git diff --shortstat 0572592 281bd1a`): the twelfth
+  reviews' fixes and logs (#46), and decision 0011 (#49). Of them, 3
+  files, +35/−21, under `crates/` and none under `.github/` (the same
+  command with `-- crates` and `-- .github`). Base equals the previous
+  entry's Tip. Only the committed range is covered. Run during the v0.0.3
+  campaign (`plans/todo/v0.0.3.md`, step 3), so that step 5 reviews only
+  what follows.
+- **Method:** a fresh agent reviewed the range diff on a scratch copy: it
+  tried to make `heal` store a shard the manifest does not list now that
+  W-054 skips the second hash, with three mutants of the filter and of
+  `first_mismatch`; truncated before `open`'s check; read the stdin link
+  path for a way past W-050's terminal check and for link material in
+  errors; and checked the docs' claims. A second fresh agent checked each
+  claim.
+- **Findings:** none new. The one low point, that the README's `umask`
+  does not protect a link file that already exists, is the code review's
+  W-061, tracked in the code log.
+- **Not tracked:**
+  - Two wording points in decision 0011 ("up to k = 2", and a "Good" that
+    claims more than its estimate): the code review's W-062 and W-063.
+  - `cat | neoblast open` at a terminal passes W-050's check: the user has
+    chosen to type into a pipe, and the terminal echoes either way.
+- **Checked, no finding:**
+  - With no mismatch, every index `heal` stores was hashed by
+    `first_mismatch` against the manifest; a missing hash is a mismatch;
+    nothing is read from the store after it is verified. Each mutant
+    fails the S-011, S-019 or W-024 tests.
+  - `open` checks all n shards before it truncates to k, decrypts or
+    writes; a mutant that truncates first fails every open.
+  - Every `link_or_stdin` and `CapError` message is fixed text; `</dev/tty`
+    is refused.
+  - The README's, the spec's and decision 0011's figures (2.6 MB at the
+    defaults, cases A to E, 557 MiB) recompute.
+  - The 2 commits are the project's, in UTC, signed off once and signed
+    with the project's key; `cargo test --all` (106 passed) at the Tip.
+  - Privacy: no names, addresses, paths or session links in the range's
+    text or its commit messages.
+  - No open finding of medium severity or higher is described in public:
+    S-027 appears only by ID, severity, open status and the release rule.
+- **Outcome:** no blocker, nothing that changes `code_id`.
+- **Carried-over items:** S-007 open, with every merge a fast-forward;
+  S-008 open until the GitHub-side copies are removed; S-027 handled
+  privately and open, and the maintainer is checking that it is not
+  shipped in v0.0.3, which the release waits for; S-037 open, documented
+  in `3b93b8d` (#46) and decided in `281bd1a` (#49, decision 0011), its
+  code waiting until after v0.0.3. The twelfth entry's "the PR after #45"
+  is `3b93b8d` (#46).
 
 ### 2026-11-03 · `805a5ed..0572592` (#42 to #45)
 
