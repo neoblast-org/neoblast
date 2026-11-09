@@ -524,3 +524,119 @@ fn s003_open_and_heal_read_the_link_from_stdin() {
         assert!(help.contains("stdin") && help.contains("history"), "{help}");
     }
 }
+
+/// The MiB a refusal says a file needs: `--max-memory 1` is below any file.
+fn needed_mib(out: &Output) -> u64 {
+    assert!(!out.status.success());
+    let err = String::from_utf8_lossy(&out.stderr);
+    let (_, rest) = err
+        .split_once("needs about ")
+        .unwrap_or_else(|| panic!("{err}"));
+    rest.split(' ').next().unwrap().parse().unwrap()
+}
+
+/// S-037, decision 0011: `seal`, `open` and `heal` refuse a file whose
+/// estimated working memory is over `--max-memory`, before writing
+/// anything, and take it at exactly its estimate. Each refused run differs
+/// from one that passes only by a budget one MiB lower.
+#[test]
+fn s037_seal_open_and_heal_keep_to_the_memory_budget() {
+    let dir = scratch("cli-memory-budget");
+    let (link, store) = sealed_store(&dir);
+    let store_arg = store.to_str().unwrap();
+
+    // seal: a refused seal leaves its output directory as it was.
+    let input = dir.join("in.bin");
+    let seal = |out: &Path, mib: &str| {
+        neoblast(&[
+            "seal",
+            input.to_str().unwrap(),
+            "--out",
+            out.to_str().unwrap(),
+            "--k",
+            "2",
+            "--n",
+            "3",
+            "--segment-size",
+            "16384",
+            "--max-memory",
+            mib,
+        ])
+    };
+    let mib = needed_mib(&seal(&dir.join("seal-probe"), "1"));
+    assert!(!dir.join("seal-probe").exists());
+    let refused = seal(&dir.join("seal-refused"), &(mib - 1).to_string());
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("--max-memory"));
+    assert!(!dir.join("seal-refused").exists());
+    let sealed = seal(&dir.join("seal-ok"), &mib.to_string());
+    assert!(
+        sealed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&sealed.stderr)
+    );
+    // A refused `seal --force` leaves the store it would replace whole.
+    let before = sorted_names(&store);
+    let forced = neoblast(&[
+        "seal",
+        input.to_str().unwrap(),
+        "--out",
+        store_arg,
+        "--k",
+        "2",
+        "--n",
+        "3",
+        "--segment-size",
+        "16384",
+        "--force",
+        "--max-memory",
+        &(mib - 1).to_string(),
+    ]);
+    assert!(!forced.status.success());
+    assert_eq!(sorted_names(&store), before);
+    assert!(store.join("manifest.nbl").exists());
+
+    // open: a refused open writes no output file.
+    let open = |out: &Path, mib: &str| {
+        neoblast(&[
+            "open",
+            &link,
+            "--from",
+            store_arg,
+            "--out",
+            out.to_str().unwrap(),
+            "--max-memory",
+            mib,
+        ])
+    };
+    let mib = needed_mib(&open(&dir.join("probe.bin"), "1"));
+    let files = sorted_names(&dir);
+    assert!(
+        !open(&dir.join("refused.bin"), &(mib - 1).to_string())
+            .status
+            .success()
+    );
+    // A refused open leaves no file behind, not even a partial one.
+    assert_eq!(sorted_names(&dir), files);
+    let opened = open(&dir.join("ok.bin"), &mib.to_string());
+    assert!(
+        opened.status.success(),
+        "{}",
+        String::from_utf8_lossy(&opened.stderr)
+    );
+
+    // heal: a refused heal rebuilds nothing.
+    let lost = shard(&store, 0, 0);
+    fs::remove_file(&lost).unwrap();
+    let heal = |mib: &str| neoblast(&["heal", &link, "--from", store_arg, "--max-memory", mib]);
+    let mib = needed_mib(&heal("1"));
+    assert!(!heal(&(mib - 1).to_string()).status.success());
+    assert!(!lost.exists());
+    let healed = heal(&mib.to_string());
+    assert!(
+        healed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&healed.stderr)
+    );
+    assert!(lost.exists());
+}

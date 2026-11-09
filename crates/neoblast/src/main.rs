@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use neoblast::store::{DirStore, MAX_MANIFEST_LEN};
-use neoblast::{FileReadCap, FileVerifyCap, Manifest, Params};
+use neoblast::store::{DirStore, MAX_MANIFEST_LEN, manifest_len};
+use neoblast::{FileReadCap, FileVerifyCap, Header, Manifest, Params};
 use neoblast_format::HeaderError;
 use zeroize::{Zeroize, Zeroizing};
 
@@ -42,6 +42,10 @@ enum Command {
         /// Overwrite the output directory even if it is not empty.
         #[arg(long)]
         force: bool,
+        /// Refuse a file that would need more working memory than this, in
+        /// MiB.
+        #[arg(long, value_name = "MIB", default_value_t = DEFAULT_MAX_MEMORY_MIB)]
+        max_memory: u64,
     },
     /// Rebuild a file from its read link and a shard directory.
     Open {
@@ -55,6 +59,10 @@ enum Command {
         /// Where to write the recovered file.
         #[arg(long)]
         out: PathBuf,
+        /// Refuse a file that would need more working memory than this, in
+        /// MiB.
+        #[arg(long, value_name = "MIB", default_value_t = DEFAULT_MAX_MEMORY_MIB)]
+        max_memory: u64,
     },
     /// Rebuild missing or corrupt shards. Needs only the verify link, never the key.
     Heal {
@@ -66,6 +74,10 @@ enum Command {
         /// Directory holding the manifest and shards.
         #[arg(long)]
         from: PathBuf,
+        /// Refuse a file that would need more working memory than this, in
+        /// MiB.
+        #[arg(long, value_name = "MIB", default_value_t = DEFAULT_MAX_MEMORY_MIB)]
+        max_memory: u64,
     },
 }
 
@@ -88,6 +100,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             n,
             segment_size,
             force,
+            max_memory,
         } => {
             let mut store = DirStore::new(&out);
             let params = Params { k, n, segment_size };
@@ -113,7 +126,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 (data.len() as u64, Some(data))
             };
             // Everything that can refuse the input runs before the store is touched.
-            check_params(len, params)?;
+            check_params(len, params, max_memory)?;
             if replacing {
                 // Without a manifest the directory no longer claims to hold a
                 // complete file, even if this seal fails part-way.
@@ -137,20 +150,31 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("read link (anyone holding it can decrypt):");
             println!("{}", cap.to_link());
         }
-        Command::Open { link, from, out } => {
+        Command::Open {
+            link,
+            from,
+            out,
+            max_memory,
+        } => {
             let cap = FileReadCap::parse(&link_or_stdin(link)?)?;
             let store = DirStore::new(&from);
             // Taken over, not copied, so the manifest is in memory once.
             let manifest = Manifest::decode_owned(store.read_manifest()?, &cap.root)?;
+            within_budget(manifest.header(), max_memory)?;
             let len = write_atomically(&out, |w| {
                 neoblast::open_manifest(&cap, &manifest, &store, w)
             })?;
             eprintln!("recovered {len} bytes to {}", out.display());
         }
-        Command::Heal { link, from } => {
+        Command::Heal {
+            link,
+            from,
+            max_memory,
+        } => {
             let cap = FileVerifyCap::parse(&link_or_stdin(link)?)?;
             let store = DirStore::new(&from);
             let manifest = Manifest::decode_owned(store.read_manifest()?, &cap.root)?;
+            within_budget(manifest.header(), max_memory)?;
             let rebuilt = neoblast::heal_manifest(&cap, &manifest, &store, &mut store.clone())?;
             eprintln!("rebuilt {rebuilt} shard(s) without the read key");
         }
@@ -172,15 +196,29 @@ const MAX_LINK_LINE: usize = 4096;
 /// its largest size, so it is never moved, and is wiped on drop; the
 /// standard library's own stdin buffer is not.
 fn link_or_stdin(link: Option<String>) -> Result<Zeroizing<String>, Box<dyn std::error::Error>> {
+    let stdin = std::io::stdin();
+    link_or_input(link, stdin.is_terminal(), &mut stdin.lock())
+}
+
+/// What `neoblast` says when it gets no link, whether stdin is a terminal or
+/// empty (review W-060).
+const NO_LINK: &str = "no link: give it as an argument, or on stdin from a file or a pipe";
+
+/// [`link_or_stdin`], with stdin and whether it is a terminal passed in, so
+/// that a test can reach the terminal check (review W-058).
+fn link_or_input(
+    link: Option<String>,
+    input_is_terminal: bool,
+    input: &mut impl BufRead,
+) -> Result<Zeroizing<String>, Box<dyn std::error::Error>> {
     if let Some(link) = link.filter(|l| l.as_str() != "-") {
         return Ok(Zeroizing::new(link));
     }
-    if std::io::stdin().is_terminal() {
-        return Err("no link: give it as an argument, or on stdin from a file or a pipe".into());
+    if input_is_terminal {
+        return Err(NO_LINK.into());
     }
     let mut line = Zeroizing::new(Vec::with_capacity(MAX_LINK_LINE + 1));
-    std::io::stdin()
-        .lock()
+    input
         .take(MAX_LINK_LINE as u64 + 1)
         .read_until(b'\n', &mut line)?;
     if line.len() > MAX_LINK_LINE {
@@ -193,7 +231,7 @@ fn link_or_stdin(link: Option<String>) -> Result<Zeroizing<String>, Box<dyn std:
         line.pop();
     }
     if line.is_empty() {
-        return Err("no link: give it as an argument, or on stdin".into());
+        return Err(NO_LINK.into());
     }
     match String::from_utf8(std::mem::take(&mut *line)) {
         Ok(link) => Ok(Zeroizing::new(link)),
@@ -207,10 +245,15 @@ fn link_or_stdin(link: Option<String>) -> Result<Zeroizing<String>, Box<dyn std:
 /// Refuses, before anything is written, bad parameters and a file whose
 /// manifest would be too large for `open` and `heal` to read back (review
 /// W-001). Too many segments, or too many shards, whether for the manifest or
-/// for the header, gets the same hint (review W-009).
-fn check_params(len: u64, params: Params) -> Result<(), Box<dyn std::error::Error>> {
+/// for the header, gets the same hint (review W-009). So is a file over the
+/// memory budget, which readers would refuse too (decision 0011).
+fn check_params(
+    len: u64,
+    params: Params,
+    max_memory: u64,
+) -> Result<(), Box<dyn std::error::Error>> {
     match params.header(len) {
-        Ok(_) => Ok(()),
+        Ok(header) => within_budget(&header, max_memory),
         Err(neoblast::Error::ManifestTooLarge | neoblast::Error::Params(HeaderError::Layout)) => {
             Err(format!(
                 "a {len}-byte file needs too many shards at these parameters \
@@ -221,6 +264,50 @@ fn check_params(len: u64, params: Params) -> Result<(), Box<dyn std::error::Erro
         }
         Err(e) => Err(e.into()),
     }
+}
+
+/// The default `--max-memory`, in MiB: one operation fits a 2 GiB VPS or a
+/// 4 GiB phone with room to spare (decision 0011).
+const DEFAULT_MAX_MEMORY_MIB: u64 = 1024;
+
+/// What the estimate allows for buffers that do not grow with the shards:
+/// decision 0009's budget for one operation at the defaults.
+const FIXED_ALLOWANCE: u64 = 32 << 20;
+
+/// An upper bound on the working memory `seal`, `open` or `heal` needs for a
+/// file with this header, in bytes (decision 0011): two sets of its `n`
+/// shards, the erasure codec's largest work buffer, its manifest, and
+/// [`FIXED_ALLOWANCE`]. The first segment's shards are the largest. `None`
+/// if it overflows, which no budget allows.
+fn working_memory(header: &Header) -> Option<u64> {
+    let k = u64::from(header.k());
+    let n = u64::from(header.n());
+    // The high-rate codec, the only one used, works on at most this many
+    // shards: its decoder on exactly this, its encoder on fewer.
+    let work = n
+        .saturating_sub(k)
+        .checked_next_power_of_two()?
+        .checked_add(k)?
+        .checked_next_power_of_two()?;
+    u64::from(header.segment_shard_len(0)?)
+        .checked_mul(n.checked_mul(2)?.checked_add(work)?)?
+        .checked_add(manifest_len(header)?)?
+        .checked_add(FIXED_ALLOWANCE)
+}
+
+/// Refuses a file whose estimated working memory, rounded up to MiB, is over
+/// `max_memory` MiB (review S-037, decision 0011).
+fn within_budget(header: &Header, max_memory: u64) -> Result<(), Box<dyn std::error::Error>> {
+    // In whole MiB, rounded up; past u64 is past any budget.
+    let needed = working_memory(header).map_or(u64::MAX, |bytes| bytes.div_ceil(1 << 20));
+    if needed <= max_memory {
+        return Ok(());
+    }
+    Err(format!(
+        "this file needs about {needed} MiB of working memory, over the {max_memory} MiB \
+         allowed; raise --max-memory to allow it"
+    )
+    .into())
 }
 
 /// Writes to a new hidden file next to `out` (`.<name>.<pid>.partial`) and
@@ -258,4 +345,97 @@ fn write_atomically(
         let _ = fs::remove_file(&partial);
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+
+    const MIB: u64 = 1 << 20;
+
+    /// Decision 0011: the estimate for each case it measured is two sets of
+    /// n shards, the codec's largest work buffer (in shards), the manifest
+    /// and 32 MiB, and only case A is over the default budget.
+    #[test]
+    fn working_memory_is_decision_0011s_estimate() {
+        // (k, n, segment size, file length, the codec's work in shards,
+        // refused by default)
+        let cases = [
+            (2, 128, 8 * MIB, 8 * MIB, 256, true),     // A
+            (20, 50, 16 * MIB, 16 * MIB, 64, false),   // B
+            (64, 128, 64 * MIB, 64 * MIB, 128, false), // C
+            (2, 3, 64 * MIB, 64 * MIB, 4, false),      // D
+            (20, 50, MIB, 16 * MIB, 64, false),        // E, the defaults
+            (20, 50, 64 * MIB, 64 * MIB, 64, false),   // the largest segments at 20-of-50
+            (20, 50, 64 * MIB, 100 * MIB, 64, false),  // a short last segment
+        ];
+        for (k, n, segment_size, len, work, refused) in cases {
+            let params = Params {
+                k,
+                n,
+                segment_size: u32::try_from(segment_size).unwrap(),
+            };
+            let header = params.header(len).unwrap();
+            let shards =
+                u64::from(header.segment_shard_len(0).unwrap()) * (2 * u64::from(n) + work);
+            assert_eq!(
+                working_memory(&header),
+                Some(shards + manifest_len(&header).unwrap() + 32 * MIB),
+                "{k}-of-{n}"
+            );
+            assert_eq!(
+                within_budget(&header, DEFAULT_MAX_MEMORY_MIB).is_err(),
+                refused,
+                "{k}-of-{n}"
+            );
+        }
+    }
+
+    /// At a terminal, no link and `-` are refused at once, before stdin is
+    /// read, and with the same message as an empty stdin; a link given as an
+    /// argument is used either way (reviews W-050, W-058 and W-060).
+    #[test]
+    fn a_terminal_gives_no_link() {
+        let piped = b"nbl://f/root#key\n";
+        for (link, terminal, expected) in [
+            (None, true, Err(NO_LINK)),
+            (Some("-"), true, Err(NO_LINK)),
+            (None, false, Ok("nbl://f/root#key")),
+            (Some("-"), false, Ok("nbl://f/root#key")),
+            (Some("nbl://f/arg#key"), true, Ok("nbl://f/arg#key")),
+            (Some("nbl://f/arg#key"), false, Ok("nbl://f/arg#key")),
+        ] {
+            let mut input = &piped[..];
+            let result = link_or_input(link.map(String::from), terminal, &mut input)
+                .map(|l| l.to_string())
+                .map_err(|e| e.to_string());
+            assert_eq!(
+                result.as_deref().map_err(String::as_str),
+                expected,
+                "{link:?}, {terminal}"
+            );
+            let read = input.len() < piped.len();
+            assert_eq!(
+                read,
+                link.is_none_or(|l| l == "-") && !terminal,
+                "{link:?}, {terminal}"
+            );
+        }
+        let mut empty: &[u8] = b"";
+        let err = link_or_input(None, false, &mut empty).unwrap_err();
+        assert_eq!(err.to_string(), NO_LINK);
+    }
+
+    /// A budget of the estimate rounded up to MiB passes; one MiB less is
+    /// refused, with a message naming the option.
+    #[test]
+    fn the_budget_is_in_mib_and_inclusive() {
+        let header = Params::default().header(16 * MIB).unwrap();
+        let mib = working_memory(&header).unwrap().div_ceil(MIB);
+        assert!(within_budget(&header, mib).is_ok());
+        let err = within_budget(&header, mib - 1).unwrap_err().to_string();
+        assert!(err.contains(&format!("about {mib} MiB")), "{err}");
+        assert!(err.contains("--max-memory"), "{err}");
+    }
 }

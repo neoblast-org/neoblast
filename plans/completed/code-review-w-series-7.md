@@ -1,17 +1,19 @@
 # Code-review worklist (W-series, part 7)
 
-Status: todo. Opened 2026-11-08 by the thirteenth `/review-since`
-(`0572592..281bd1a`, #46 and #49), logged in `docs/logs/code-review-log.md`
-after the v0.0.3 campaign (`plans/completed/v0.0.3.md`, step 3) had ended; this
-paragraph first said during it (W-064). W-064 to W-066 were added by step
-5's reviews (`281bd1a..05bbd95`, #50 and #51). Part 6, W-050 to W-055, is
-closed (`plans/completed/code-review-w-series-6.md`). All items are low or
-cleanup, and none blocks v0.0.3. W-058 and W-060 change `crates/`, and so
-every target's `code_id`, which may not change between the campaign and the
-tag; they wait until after v0.0.3, with the code of decision 0011. W-065 and
-W-066 change files the release commit may not, and wait too. The others are
-fixed in `96efd53` (#50), and W-064 in `9ccdaad` (#52), the commit `v0.0.3`
-tags.
+Status: completed 2026-11-09: every item is fixed, W-058, W-060, W-065 and
+W-066 in the PR after #53. Opened 2026-11-08 by the thirteenth
+`/review-since` (`0572592..281bd1a`, #46 and #49), logged in
+`docs/logs/code-review-log.md` after the v0.0.3 campaign
+(`plans/completed/v0.0.3.md`, step 3) had ended; this paragraph first said
+during it (W-064). W-064 to W-066 were added by step 5's reviews
+(`281bd1a..05bbd95`, #50 and #51). Part 6, W-050 to W-055, is closed
+(`plans/completed/code-review-w-series-6.md`). All items are low or cleanup,
+and none blocks v0.0.3. W-058 and W-060 change `crates/`, and so every
+target's `code_id`, which may not change between the campaign and the tag;
+they waited until after v0.0.3, with the code of decision 0011. W-065 and
+W-066 change files the release commit may not, and waited too. The others
+are fixed in `96efd53` (#50), and W-064 in `9ccdaad` (#52), the commit
+`v0.0.3` tags.
 
 IDs are unique across all worklists and continue from the highest W-number used.
 
@@ -81,7 +83,9 @@ IDs are unique across all worklists and continue from the highest W-number used.
   of the branch or the CLI under `script`.
 - Verified: by a fresh agent, with that mutant and `cargo test -p
   neoblast`; the tip binary under `script -q /dev/null` refused at once.
-- Status: open. It changes `crates/`, so it waits until after v0.0.3.
+- Status: fixed in the PR after #53: `link_or_stdin` passes whether stdin is
+  a terminal to `link_or_input`, and the unit test `a_terminal_gives_no_link`
+  in `main.rs` fails when the check is removed.
 
 ### W-059 (cleanup): the spec's largest segment is 64 bytes a shard short
 
@@ -102,7 +106,9 @@ IDs are unique across all worklists and continue from the highest W-number used.
   drift apart.
 - Remediation: one message for both.
 - Verified: by a fresh agent, by reading.
-- Status: open. It changes `crates/`, so it waits until after v0.0.3.
+- Status: fixed in the PR after #53: both return `NO_LINK`, "no link: give
+  it as an argument, or on stdin from a file or a pipe", which
+  `a_terminal_gives_no_link` checks for both.
 
 ### W-061 (low): the README's `umask` does not protect a link file that already exists
 
@@ -162,8 +168,8 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Remediation: "as many again, or twice as many to decode".
 - Verified: by a fresh agent, from `rate_high.rs` and the decision's
   table.
-- Status: open. `decisions/` is not among the files the release commit may
-  change, so it waits until after v0.0.3.
+- Status: fixed in the PR after #53, with the remediation's words and the
+  review's ID.
 
 ### W-066 (low): the README's quick-start still writes into a link file that exists
 
@@ -177,8 +183,8 @@ IDs are unique across all worklists and continue from the highest W-number used.
   `set -C` a new file is made with mode 0600, and an existing file, a
   symlink to one and a dangling symlink are each refused and left as they
   were; a symlink to a device such as `/dev/null` is still written.
-- Status: open. `README.md` is not among the files the release commit may
-  change, so it waits until after v0.0.3.
+- Status: fixed in the PR after #53: the snippet's subshell runs `set -C`,
+  and the prose says why.
 
 ## Not tracked
 

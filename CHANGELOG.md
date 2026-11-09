@@ -8,6 +8,25 @@ the frozen v1 byte format).
 
 ## [Unreleased]
 
+### Changed
+
+- `neoblast open` and `heal` give one message when they get no link,
+  whether stdin is a terminal or empty (review W-060).
+
+### Security
+
+- `neoblast seal`, `open` and `heal` refuse a file whose estimated working
+  memory is over `--max-memory`, in MiB, 1024 by default, and the error
+  names the estimate and the option (review S-037, decision 0011). Before,
+  a publisher could choose parameters that made every reader and healer of
+  a file need several GiB. The estimate is two sets of a segment's n
+  shards, the erasure codec's work buffer, the manifest and 32 MiB: about
+  40 MiB plus the manifest at the defaults. `seal` refuses too, so that it
+  does not by default make a file that readers refuse; a refused file opens
+  with a higher `--max-memory`, and no bytes change. A `seal` from a pipe
+  first reads its input into memory, and the estimate does not count it.
+  The library does not check: a program that embeds it sets its own limit.
+
 ## [0.0.3] - 2026-11-09
 
 Hardening of the offline core, fuzzed again for 24 hours per target with no

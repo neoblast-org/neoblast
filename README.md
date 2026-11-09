@@ -24,7 +24,7 @@ The key sits after `#`, so a web gateway serving the link never sees it.
 ```sh
 cargo install --path crates/neoblast          # or: cargo run -p neoblast --
 
-(umask 077; neoblast seal photo.jpg --out ./store >photo.link)   # the read link
+(umask 077; set -C; neoblast seal photo.jpg --out ./store >photo.link)   # the read link
 rm ./store/seg-000000/00{0..9}.shard                # lose shards (up to n - k per segment)
 neoblast heal 'nbl://fv/...' --from ./store         # rebuild them with the verify link only
 neoblast open --from ./store --out photo-copy.jpg <photo.link
@@ -32,20 +32,22 @@ neoblast open --from ./store --out photo-copy.jpg <photo.link
 
 Anyone who can read `photo.link` can decrypt the file, so `umask 077` makes
 a new one readable by you alone (review W-051). It leaves the mode of a file
-that already exists as it is, so remove an old `photo.link` first (review
-W-061). `open` and `heal` read the link from stdin, a file or a pipe, when
-it is left out or `-`. A read link given as an argument works too, but other
-local users can see it, and the shell keeps it in its history.
+that already exists as it is, so `set -C` makes the shell refuse to write
+into one, and `seal` does not run: remove an old `photo.link` first (reviews
+W-061 and W-066). `open` and `heal` read the link from stdin, a file or a
+pipe, when it is left out or `-`. A read link given as an argument works
+too, but other local users can see it, and the shell keeps it in its
+history.
 
 Defaults are 20-of-50 shards over 1 MiB segments ([decision
 0009](decisions/0009-segment-size.md)). `seal`, `open` and `heal` work one
 segment at a time, so the memory they allocate does not grow with the file
 size, apart from the manifest's shard hashes (about 0.16% of the file). It
 grows with a segment's n shards instead: 2.6 MB at the defaults, but up to
-several GiB for parameters a publisher may choose (review S-037); the CLI
-will refuse such a file unless asked (decision 0011, after v0.0.3). Heal's
-measured peak still steps up a few MiB between a 256 MiB and a 1 GiB file
-(decision 0009, finding 2).
+several GiB for parameters a publisher may choose (review S-037), so the
+CLI refuses a file that would need more than 1 GiB unless `--max-memory`
+raises the limit (decision 0011). Heal's measured peak still steps up a few
+MiB between a 256 MiB and a 1 GiB file (decision 0009, finding 2).
 The network (Phase 2), storage swaps and leases (Phase 3) and blind search
 (Phase 4) are not built yet.
 See [ROADMAP.md](ROADMAP.md) for phases, gates and open questions.

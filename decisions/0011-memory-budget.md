@@ -1,6 +1,6 @@
 # 0011: The CLI refuses files over a memory budget
 
-- Status: accepted; the code lands after v0.0.3, as it changes `crates/`
+- Status: accepted; implemented after v0.0.3
 - Date: 2026-11-07
 - Settles: review finding S-037
 
@@ -9,10 +9,11 @@
 The header lets a publisher choose k, n and the segment size, down to k = 2
 and up to n = 128 and 64 MiB segments. Every operation works one segment at
 a time, but one segment's shards can then be 128 of just over 32 MiB, about
-4 GiB, and the erasure codec works on about as many again. Since decision
-0010, an intact `open` or `heal` rebuilds all n shards, so a publisher can
-make every reader and every healer of a file need gigabytes (S-037). Seal,
-opening from parity and healing after losses always did.
+4 GiB, and the erasure codec works on as many again, or up to twice as many
+to decode (review W-065). Since decision 0010, an intact `open` or `heal`
+rebuilds all n shards, so a publisher can make every reader and every healer
+of a file need gigabytes (S-037). Seal, opening from parity and healing
+after losses always did.
 
 Checking the rebuilt shards one at a time does not help: the codec's work
 buffers have the same scale. `neoblast-erasure` always runs the high-rate
@@ -115,6 +116,9 @@ higher `--max-memory`.
   allocator; the 32 MiB constant is a stated allowance, not a measured part,
   and a platform whose allocator keeps more could exceed it.
 - Bad: library users are not protected unless they check.
+- Bad: a `seal` from a pipe reads its input into memory first, to learn its
+  length before the header exists, and the estimate does not count it. A
+  file given by its path is read one segment at a time.
 
 ### Revisit
 

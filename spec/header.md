@@ -106,4 +106,5 @@ The check holds a segment's `n` shards at once: `n · shard_len` bytes, at most
 128 × 33,554,496, about 4 GiB (k = 2, 64 MiB segments), under the header's
 limits. Decoding from fewer than all `k` data shards already needs as much,
 and the header's author chooses `k`, `n` and the segment size, so a reader or
-healer SHOULD set its own memory limit (review S-037).
+healer SHOULD set its own memory limit (review S-037). The `neoblast` CLI's
+limit is 1 GiB by default (decision 0011).

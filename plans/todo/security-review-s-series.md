@@ -990,11 +990,15 @@ that fixed it.
 - **Verified:** by the reviewer and a fresh agent, each on release builds of
   `805a5ed` and `0572592`.
 - **Release:** not blocking.
-- **Status:** open. Documented in `3b93b8d` (#46): `spec/header.md`
-  ("Check the codeword"), decision 0010's consequences and the README give
-  the scaling and its bound. Fix decided in decision 0011, the maintainer's
-  choice: checking shards one at a time cannot bound it, as the codec's
-  work buffer has the same scale, so `seal`, `open` and `heal` refuse a
-  file whose estimated working memory is over 1 GiB unless `--max-memory`
-  raises it; the library is left as it is. The code waits until after
-  v0.0.3, as it would restart the campaign.
+- **Status:** fixed in the PR after #53, as decision 0011 decides.
+  Documented first in `3b93b8d` (#46): `spec/header.md` ("Check the
+  codeword"), decision 0010's consequences and the README give the scaling
+  and its bound. Checking shards one at a time cannot bound it, as the
+  codec's work buffer has the same scale, so `seal`, `open` and `heal`
+  refuse a file whose estimated working memory is over `--max-memory` MiB,
+  1024 by default (`working_memory` and `within_budget` in
+  `crates/neoblast/src/main.rs`). Unit tests pin the estimate for the
+  decision's cases and the budget's rounding; `cli.rs` tests that each
+  command passes at a file's estimate, and refuses one MiB below it and
+  writes nothing. The
+  library is left as it is.
