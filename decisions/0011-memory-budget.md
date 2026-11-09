@@ -91,14 +91,18 @@ segments too.
 
 **The CLI estimates each file's working memory and refuses one over the
 budget.** The default is 1 GiB; `--max-memory <MiB>` on `seal`, `open` and
-`heal` raises or lowers it. The error names the estimate and the option.
-At 20-of-50, a file with segments of 64 MiB, the header's largest, comes to
-about 557 MiB plus its manifest, so it passes. The manifest term is at
-most 256 MiB, the largest manifest a store reads (`MAX_MANIFEST_LEN`), so
-at the default budget it never refuses a file by itself; only a lower
-`--max-memory` can (review W-057). Of the cases above only A is refused by
-default. The library's functions do not check: a program that embeds it
-applies its own limit, as `spec/header.md` already advises (S-037).
+`heal` raises or lowers it. The error names the estimate and the option. At
+20-of-50, a file with segments of 64 MiB, the header's largest, comes to
+about 557 MiB plus its manifest, so it passes. The manifest term is at most
+256 MiB, the largest manifest a store reads (`MAX_MANIFEST_LEN`), so at the
+default budget it never refuses a file by itself; only a lower
+`--max-memory` can (review W-057). `open` and `heal` can estimate only once
+they have read the manifest and checked it against the link, as parameters
+come only from a verified header, so a lower `--max-memory` that refuses a
+file for its manifest does so after reading it (review S-038). Of the cases
+above only A is refused by default. The library's functions do not check: a
+program that embeds it applies its own limit, as `spec/header.md` already
+advises (S-037).
 
 No bytes change, and no file becomes unreadable: a refused file opens with a
 higher `--max-memory`.

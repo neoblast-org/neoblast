@@ -1,6 +1,6 @@
 # Code Review Log
 
-<!-- baseline --> **Next review diffs from:** `05bbd95e1238de51c81808a6ffc2f7ce0ea14870` (`main`, recorded 2026-11-08)
+<!-- baseline --> **Next review diffs from:** `6c2e947cce83e038f34ec697d10eec8c2b2ca9b7` (`main`, recorded 2026-11-09)
 
 A running record of code-review events: branch/pre-PR reviews, review worklists, and
 remediation programmes. Newest entry first. The baseline marker line above is the
@@ -27,6 +27,46 @@ merge-base fallback). Side-branch pre-PR reviews are logged as entries marked
 "frontier unchanged (side branch)" and never move the line.
 
 ## Entries
+
+### 2026-11-09: `05bbd95..6c2e947` (#52 to #55)
+
+| | SHA | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `05bbd95e1238de51c81808a6ffc2f7ce0ea14870` | 2026-11-08 | fuzz: 24 h campaign on 3b93b8d; all five targets clean (#51) |
+| Tip | `6c2e947cce83e038f34ec697d10eec8c2b2ca9b7` | 2026-11-09 | chore: bump ctutils to 0.4.8 and rustix to 1.1.6 (#55) |
+
+- **Scope:** 4 commits (`git rev-list --count 05bbd95..6c2e947`) and 17
+  files, +605/−84 (`git diff --shortstat 05bbd95 6c2e947`): the commit
+  `v0.0.3` tags (#52), the plan's close (#53), the CLI's memory budget
+  with W-058, W-060, W-065 and W-066 (#54), and ctutils 0.4.8 and rustix
+  1.1.6 in the three lock files (#55). Of them, 2 files, +309/−13, under
+  `crates/`, and none under `.github/` (the same command with `-- crates`
+  and `-- .github`). Base equals the previous entry's Tip. Only the
+  committed range is covered.
+- **Method:** the `code-review` skill over the range, at high effort; a
+  fresh agent then tried to refute each claim, from the code, decision
+  0011, `set -C` under three shells, and the estimate recomputed for each
+  of the decision's cases. Of the review's 9 claims, 5 are tracked and 4
+  are not.
+- **Findings:** 5 in a new worklist, none a bug: W-067 (low), a failed
+  `seal` in the README's quick-start leaves an empty link file, which
+  `set -C` then refuses; W-068 (cleanup), `seal`'s refusal advises only a
+  higher budget; W-069 (cleanup), an estimate that overflows passes the
+  largest budget, though none can; W-070 (cleanup), `check_params`'s doc
+  is ambiguous; W-071 (cleanup), the estimate's test does not use the
+  decision's one-segment cases.
+- **Not tracked,** with the reasons in the worklist: the piped seal's
+  buffer (a stated "Bad" of decision 0011), the manifest read before the
+  check (the security review's S-038), the CHANGELOG without rustix (no
+  lock-only bump is listed), and the limit in the CLI only (decision 0011's
+  choice).
+- **Outcome:** no blocker. All five are fixed in the PR after #55, which
+  logs this review. Worklist:
+  [`plans/completed/code-review-w-series-8.md`](../../plans/completed/code-review-w-series-8.md).
+- **Carried-over items:** W-058, W-060, W-065 and W-066 fixed in `05b7838`
+  (#54), which the worklist called "the PR after #53"; the W-series part 7
+  worklist is closed (`plans/completed/code-review-w-series-7.md`). No
+  W-item is open.
 
 ### 2026-11-08: `281bd1a..05bbd95` (#50 and #51)
 

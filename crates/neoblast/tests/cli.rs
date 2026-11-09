@@ -567,7 +567,9 @@ fn s037_seal_open_and_heal_keep_to_the_memory_budget() {
     assert!(!dir.join("seal-probe").exists());
     let refused = seal(&dir.join("seal-refused"), &(mib - 1).to_string());
     assert!(!refused.status.success());
-    assert!(String::from_utf8_lossy(&refused.stderr).contains("--max-memory"));
+    // It advises a smaller file, not only a higher budget (review W-068).
+    let err = String::from_utf8_lossy(&refused.stderr);
+    assert!(err.contains("use a smaller --n or --segment-size"), "{err}");
     assert!(!dir.join("seal-refused").exists());
     let sealed = seal(&dir.join("seal-ok"), &mib.to_string());
     assert!(

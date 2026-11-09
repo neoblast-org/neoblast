@@ -1,7 +1,7 @@
 # Code-review worklist (W-series, part 7)
 
 Status: completed 2026-11-09: every item is fixed, W-058, W-060, W-065 and
-W-066 in the PR after #53. Opened 2026-11-08 by the thirteenth
+W-066 in `05b7838` (#54). Opened 2026-11-08 by the thirteenth
 `/review-since` (`0572592..281bd1a`, #46 and #49), logged in
 `docs/logs/code-review-log.md` after the v0.0.3 campaign
 (`plans/completed/v0.0.3.md`, step 3) had ended; this paragraph first said
@@ -83,7 +83,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   of the branch or the CLI under `script`.
 - Verified: by a fresh agent, with that mutant and `cargo test -p
   neoblast`; the tip binary under `script -q /dev/null` refused at once.
-- Status: fixed in the PR after #53: `link_or_stdin` passes whether stdin is
+- Status: fixed in `05b7838` (#54): `link_or_stdin` passes whether stdin is
   a terminal to `link_or_input`, and the unit test `a_terminal_gives_no_link`
   in `main.rs` fails when the check is removed.
 
@@ -106,7 +106,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   drift apart.
 - Remediation: one message for both.
 - Verified: by a fresh agent, by reading.
-- Status: fixed in the PR after #53: both return `NO_LINK`, "no link: give
+- Status: fixed in `05b7838` (#54): both return `NO_LINK`, "no link: give
   it as an argument, or on stdin from a file or a pipe", which
   `a_terminal_gives_no_link` checks for both.
 
@@ -168,7 +168,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Remediation: "as many again, or twice as many to decode".
 - Verified: by a fresh agent, from `rate_high.rs` and the decision's
   table.
-- Status: fixed in the PR after #53, with the remediation's words and the
+- Status: fixed in `05b7838` (#54), with the remediation's words and the
   review's ID.
 
 ### W-066 (low): the README's quick-start still writes into a link file that exists
@@ -183,7 +183,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
   `set -C` a new file is made with mode 0600, and an existing file, a
   symlink to one and a dangling symlink are each refused and left as they
   were; a symlink to a device such as `/dev/null` is still written.
-- Status: fixed in the PR after #53: the snippet's subshell runs `set -C`,
+- Status: fixed in `05b7838` (#54): the snippet's subshell runs `set -C`,
   and the prose says why.
 
 ## Not tracked

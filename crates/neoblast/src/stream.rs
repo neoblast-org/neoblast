@@ -99,9 +99,18 @@ fn seal_segments(
     let k = usize::from(header.k());
     let n = usize::from(header.n());
     let mut remaining = payload_len;
-    // The manifest's encoding: grows segment by segment, never sized up front
-    // from a caller's length.
-    let mut manifest = header.encode().to_vec();
+    // The manifest's encoding, sized once from the header, which
+    // `Params::header` has held to `MAX_MANIFEST_LEN`, not from a caller's
+    // length. Grown by doubling instead, it held its old and new buffers at
+    // once each time it grew, which the CLI's estimate does not count (review
+    // S-039).
+    let mut manifest = Vec::new();
+    manifest.reserve_exact(
+        crate::store::manifest_len(header)
+            .and_then(|len| usize::try_from(len).ok())
+            .unwrap_or(0),
+    );
+    manifest.extend_from_slice(&header.encode());
     // One buffer holds a segment's plaintext, then its ciphertext, then its k
     // zero-padded data shards. It starts as plaintext, so it is wiped on drop.
     let mut buf = Zeroizing::new(Vec::new());
@@ -494,5 +503,44 @@ fn unrecoverable(e: ErasureError, segment: u32, held: &[Option<Vec<u8>>], k: usi
             need: k,
         },
         other => Error::Erasure(other),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+
+    /// Takes every shard and keeps none.
+    struct Discard;
+
+    impl ShardSink for Discard {
+        fn put(&mut self, _: u32, _: u16, _: &[u8]) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// The manifest is allocated once, at its final length, so it never
+    /// holds two buffers while it grows (review S-039).
+    #[test]
+    fn seal_sizes_the_manifest_once() {
+        let params = Params {
+            segment_size: 64,
+            ..Params::default()
+        };
+        let input = vec![7u8; 10_000];
+        let header = params.header(input.len() as u64).unwrap();
+        let manifest = seal_segments(
+            &input[..],
+            input.len() as u64,
+            &header,
+            &[1; 32],
+            &mut Discard,
+        )
+        .unwrap();
+        let len = usize::try_from(crate::store::manifest_len(&header).unwrap()).unwrap();
+        assert!(header.segment_count() > 100);
+        assert_eq!(manifest.len(), len);
+        assert_eq!(manifest.capacity(), len);
     }
 }

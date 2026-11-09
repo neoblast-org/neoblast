@@ -1,6 +1,6 @@
 # Security Review Log
 
-<!-- baseline --> **Next review diffs from:** `05bbd95e1238de51c81808a6ffc2f7ce0ea14870` (`main`, recorded 2026-11-08)
+<!-- baseline --> **Next review diffs from:** `6c2e947cce83e038f34ec697d10eec8c2b2ca9b7` (`main`, recorded 2026-11-09)
 
 A running record of branch security reviews. Each entry records the exact commit range
 reviewed; the baseline marker line above is the machine-owned frontier the next
@@ -21,6 +21,64 @@ marker line; a frontier-moving entry's Base must equal the previous one's Tip un
 the entry explains why not.
 
 ## Entries
+
+### 2026-11-09 · `05bbd95..6c2e947` (#52 to #55)
+
+| | Commit | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `05bbd95e1238de51c81808a6ffc2f7ce0ea14870` | 2026-11-08T20:46:31Z | fuzz: 24 h campaign on 3b93b8d; all five targets clean (#51) |
+| Tip | `6c2e947cce83e038f34ec697d10eec8c2b2ca9b7` | 2026-11-09T18:00:20Z | chore: bump ctutils to 0.4.8 and rustix to 1.1.6 (#55) |
+
+- **Scope:** 4 commits (`git rev-list --count 05bbd95..6c2e947`) and 17
+  files, +605/−84 (`git diff --shortstat 05bbd95 6c2e947`): the commit
+  `v0.0.3` tags (#52), the plan's close (#53), the CLI's memory budget for
+  S-037 (#54), and ctutils 0.4.8 and rustix 1.1.6 in the three lock files
+  (#55). Of them, 2 files, +309/−13, under `crates/`, and none under
+  `.github/`. Base equals the previous entry's Tip. Only the committed
+  range is covered.
+- **Method:** a fresh agent reviewed the range diff and the tip: it checked
+  the estimate against `reed-solomon-simd` 3.1.0's high-rate encoder and
+  decoder and each phase of seal, open and heal, the order of the check and
+  what it protects, the link-reading refactor, both bumps' sources and
+  lock files, the release commit and tag, and the new rule in
+  `RELEASING.md`. A second fresh agent tried to refute each finding.
+- **Findings:** 2, both low, none blocking. S-038: `open` and `heal` read
+  the manifest, at most 256 MiB, before they check the budget. S-039:
+  `seal` grew the manifest by doubling, holding two copies at once, up to
+  about 128 MiB more than the estimate counts (the reviewer said 256 MiB;
+  the verifier corrected it).
+- **Informational:** `RELEASING.md` did not say what to do when the day
+  passes after the release commit merges but before the tag. Nothing
+  unreviewed can be released that way, only a CHANGELOG date a day early;
+  `RELEASING.md` now says so, in the PR after #55.
+- **Checked, no finding:**
+  - S-037's fix: the estimate's codec term is the high-rate decoder's
+    work size, which bounds the encoder's; every phase's shards stay
+    within two sets of n plus that; the first segment's shards are the
+    largest; nothing overflows or panics; each command checks before it
+    writes; `open` and `heal` check the header verified against the link.
+  - The link-reading refactor keeps the line in a pre-sized, wiped buffer,
+    and no error or `Debug` output carries link bytes.
+  - ctutils 0.4.8 and rustix 1.1.6 change nothing the crates call; the
+    three lock files agree; `cargo deny check` passes.
+  - The release commit changes only `docs/logs/`, `plans/` and
+    `CHANGELOG.md`, with one parent, the previous Tip; `v0.0.3` is a
+    signed tag of it, by the project, in UTC, on the day `CHANGELOG.md`
+    gives.
+  - The 4 commits are the project's, in UTC, signed off once and signed
+    with the project's key.
+  - Privacy: no names, addresses, paths or session links in the range's
+    text or commit messages.
+  - No open finding of medium severity or higher is described in public:
+    S-027 appears only by ID, severity, open status and the release rule.
+- **Outcome:** no blocker. S-039 is fixed in the PR after #55, which logs
+  this review; S-038 won't be fixed in code, as refusing before the
+  manifest is checked would take parameters from an unverified header, and
+  decision 0011 now says when the check runs.
+- **Carried-over items:** S-007 open, with every merge a fast-forward;
+  S-008 open until the GitHub-side copies are removed; S-027 handled
+  privately and open; S-037 fixed in `05b7838` (#54), which its status
+  called "the PR after #53".
 
 ### 2026-11-08 · `281bd1a..05bbd95` (#50 and #51)
 

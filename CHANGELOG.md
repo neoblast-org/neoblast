@@ -12,6 +12,9 @@ the frozen v1 byte format).
 
 - `neoblast open` and `heal` give one message when they get no link,
   whether stdin is a terminal or empty (review W-060).
+- When `seal` refuses a file over `--max-memory`, it advises a smaller `--n`
+  or `--segment-size`, as a higher `--max-memory` makes a file that every
+  reader and healer refuses by default (review W-068).
 
 ### Security
 
@@ -26,6 +29,13 @@ the frozen v1 byte format).
   with a higher `--max-memory`, and no bytes change. A `seal` from a pipe
   first reads its input into memory, and the estimate does not count it.
   The library does not check: a program that embeds it sets its own limit.
+  `open` and `heal` read the manifest, at most 256 MiB, before they can
+  estimate, as they take parameters only from a manifest checked against
+  the link (review S-038).
+- `seal` allocates the manifest once, at its final length. Before, it grew
+  by doubling and held two copies at once each time, up to about 128 MiB
+  more than the estimate counts for a manifest just over 128 MiB (review
+  S-039).
 - `ctutils` moves to 0.4.8 in every lock file (from 0.4.5), which hardens
   its constant-time comparisons on Thumb-1 (Cortex-M0) and 32-bit RISC-V.
   A program that uses the crates as a library picks its own `ctutils`.

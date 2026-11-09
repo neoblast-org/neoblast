@@ -15,7 +15,8 @@ and S-026, both low. The eighth (2026-10-27, `118f710..f2380e7`, #28, #30 and
 (2026-10-28, `ee97e24..8c34bca`, #36) added S-033 and S-034, both low. The
 eleventh (2026-11-02, `8c34bca..805a5ed`, #37 to #41) added S-035 and
 S-036, both low. The twelfth (2026-11-03, `805a5ed..0572592`, #42 to
-#45) added S-037, low.
+#45) added S-037, low. The fifteenth (2026-11-09, `05bbd95..6c2e947`, #52
+to #55) added S-038 and S-039, both low.
 
 IDs are unique across all worklists and continue from the highest S-number used,
 including one that so far appears only in a review log (`SECURITY.md`, "Our own
@@ -990,7 +991,7 @@ that fixed it.
 - **Verified:** by the reviewer and a fresh agent, each on release builds of
   `805a5ed` and `0572592`.
 - **Release:** not blocking.
-- **Status:** fixed in the PR after #53, as decision 0011 decides.
+- **Status:** fixed in `05b7838` (#54), as decision 0011 decides.
   Documented first in `3b93b8d` (#46): `spec/header.md` ("Check the
   codeword"), decision 0010's consequences and the README give the scaling
   and its bound. Checking shards one at a time cannot bound it, as the
@@ -1000,5 +1001,51 @@ that fixed it.
   `crates/neoblast/src/main.rs`). Unit tests pin the estimate for the
   decision's cases and the budget's rounding; `cli.rs` tests that each
   command passes at a file's estimate, and refuses one MiB below it and
-  writes nothing. The
-  library is left as it is.
+  writes nothing. The library is left as it is. S-038 and S-039 are what
+  the fifteenth review found the estimate leaves out.
+
+### S-038 · Low · `open` and `heal` read the manifest before they check the memory budget
+
+- **Where:** `crates/neoblast/src/main.rs`, `Command::Open` and
+  `Command::Heal`: `read_manifest` and `Manifest::decode_owned` run before
+  `within_budget` (`05b7838`, #54).
+- **Problem:** the estimate counts the manifest, but the CLI has read and
+  hashed it, up to `MAX_MANIFEST_LEN` (256 MiB), by the time it checks. A
+  `--max-memory` below about 289 MiB does not bound that read.
+- **Impact:** a publisher can seal a small file with a manifest of up to
+  256 MiB (for example 64-byte segments at n = 128), and a healer run with
+  `--max-memory 128` reads and hashes all of it, then refuses. It is
+  bounded by `MAX_MANIFEST_LEN`, as before #54, and at the default budget
+  it never matters.
+- **Fix:** refuse from the 32-byte header `read_manifest` decodes first, or
+  say that the budget applies once the manifest is read.
+- **Verified:** by the reviewer, and by a fresh agent from `store.rs`'s
+  `read_manifest`, which already refuses a manifest over the cap or of the
+  wrong length before it reads it.
+- **Release:** not blocking.
+- **Status:** won't fix in code: that header is not yet checked against the
+  link, and parameters come only from a verified header. Decision 0011 now
+  says that a lower `--max-memory` refuses a file for its manifest only
+  after reading it, in the PR after #55.
+
+### S-039 · Low · `seal` held two copies of the manifest as it grew
+
+- **Where:** `crates/neoblast/src/stream.rs`, `seal_segments`: the
+  manifest's encoding grew by `extend_from_slice`, never reserved
+  (predates the range; the estimate of `05b7838`, #54, counts it once).
+- **Problem:** each time the vector grew it held its old and new buffers
+  at once. For a manifest just over 128 MiB, the last growth held about
+  128 MiB more than the estimate counts, and reserved 256 MiB.
+- **Impact:** only the publisher's own `seal`, of a file over about 20 GiB
+  at the defaults, could exceed a `--max-memory` it set; readers hold the
+  manifest once (`decode_owned`). Allocators that grow a large block in
+  place lower the cost.
+- **Fix:** reserve the manifest's exact length once: `Params::header` has
+  already held it to `MAX_MANIFEST_LEN`, so it is not a caller's length.
+- **Verified:** by the reviewer, and by a fresh agent from `Vec`'s growth,
+  which put the worst case at about 128 MiB, not the 256 MiB first
+  claimed.
+- **Release:** not blocking.
+- **Status:** fixed in the PR after #55: `seal_segments` reserves
+  `manifest_len` exactly, and `seal_sizes_the_manifest_once` checks that
+  the manifest's capacity is its length; it fails without the reserve.

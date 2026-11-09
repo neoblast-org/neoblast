@@ -27,7 +27,10 @@ All four crates (`neoblast`, `neoblast-format`, `neoblast-crypto`,
    it merges, amend it to date the version on the day it will be tagged, in
    `CHANGELOG.md` and the commit's subject, and change nothing else: the
    logs keep the days the reviews ran. A second agent then reviews it
-   again, and it merges once CI has passed again (v0.0.3).
+   again, and it merges once CI has passed again (v0.0.3). If the day
+   passes after it merges, tag it anyway: the date in `CHANGELOG.md` is
+   then a day early, and the next release's notes say so. A merged release
+   commit cannot be amended, as `main` holds it.
 
    Once it has merged, at the top of the work tree, bring `main` up to
    date and check that the release commit's parent is the newest Tip in

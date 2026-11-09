@@ -160,7 +160,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             let store = DirStore::new(&from);
             // Taken over, not copied, so the manifest is in memory once.
             let manifest = Manifest::decode_owned(store.read_manifest()?, &cap.root)?;
-            within_budget(manifest.header(), max_memory)?;
+            within_budget(manifest.header(), max_memory, RAISE_THE_BUDGET)?;
             let len = write_atomically(&out, |w| {
                 neoblast::open_manifest(&cap, &manifest, &store, w)
             })?;
@@ -174,7 +174,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             let cap = FileVerifyCap::parse(&link_or_stdin(link)?)?;
             let store = DirStore::new(&from);
             let manifest = Manifest::decode_owned(store.read_manifest()?, &cap.root)?;
-            within_budget(manifest.header(), max_memory)?;
+            within_budget(manifest.header(), max_memory, RAISE_THE_BUDGET)?;
             let rebuilt = neoblast::heal_manifest(&cap, &manifest, &store, &mut store.clone())?;
             eprintln!("rebuilt {rebuilt} shard(s) without the read key");
         }
@@ -245,15 +245,17 @@ fn link_or_input(
 /// Refuses, before anything is written, bad parameters and a file whose
 /// manifest would be too large for `open` and `heal` to read back (review
 /// W-001). Too many segments, or too many shards, whether for the manifest or
-/// for the header, gets the same hint (review W-009). So is a file over the
-/// memory budget, which readers would refuse too (decision 0011).
+/// for the header, gets the same hint (review W-009). A file over the memory
+/// budget, which readers would refuse too, is refused by [`within_budget`],
+/// with [`SHRINK_THE_FILE`] as its advice (decision 0011, reviews W-068 and
+/// W-070).
 fn check_params(
     len: u64,
     params: Params,
     max_memory: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     match params.header(len) {
-        Ok(header) => within_budget(&header, max_memory),
+        Ok(header) => within_budget(&header, max_memory, SHRINK_THE_FILE),
         Err(neoblast::Error::ManifestTooLarge | neoblast::Error::Params(HeaderError::Layout)) => {
             Err(format!(
                 "a {len}-byte file needs too many shards at these parameters \
@@ -278,7 +280,8 @@ const FIXED_ALLOWANCE: u64 = 32 << 20;
 /// file with this header, in bytes (decision 0011): two sets of its `n`
 /// shards, the erasure codec's largest work buffer, its manifest, and
 /// [`FIXED_ALLOWANCE`]. The first segment's shards are the largest. `None`
-/// if it overflows, which no budget allows.
+/// if it overflows, which [`check_budget`] refuses whatever the budget; no v1
+/// header does.
 fn working_memory(header: &Header) -> Option<u64> {
     let k = u64::from(header.k());
     let n = u64::from(header.n());
@@ -295,17 +298,41 @@ fn working_memory(header: &Header) -> Option<u64> {
         .checked_add(FIXED_ALLOWANCE)
 }
 
+/// What `open` and `heal` advise when they refuse a file over the budget.
+const RAISE_THE_BUDGET: &str = "raise --max-memory to allow it";
+
+/// What `seal` advises instead: a file over the default budget is one that
+/// every reader and healer refuses by default (decision 0011, review W-068).
+const SHRINK_THE_FILE: &str = "use a smaller --n or --segment-size; a higher --max-memory \
+     seals it, but every reader and healer would need one too";
+
 /// Refuses a file whose estimated working memory, rounded up to MiB, is over
-/// `max_memory` MiB (review S-037, decision 0011).
-fn within_budget(header: &Header, max_memory: u64) -> Result<(), Box<dyn std::error::Error>> {
-    // In whole MiB, rounded up; past u64 is past any budget.
-    let needed = working_memory(header).map_or(u64::MAX, |bytes| bytes.div_ceil(1 << 20));
+/// `max_memory` MiB, ending the message with `advice` (review S-037,
+/// decision 0011).
+fn within_budget(
+    header: &Header,
+    max_memory: u64,
+    advice: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    check_budget(working_memory(header), max_memory, advice)
+}
+
+/// [`within_budget`] for an estimate in bytes. One that overflowed is
+/// refused whatever the budget (review W-069).
+fn check_budget(
+    bytes: Option<u64>,
+    max_memory: u64,
+    advice: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let Some(needed) = bytes.map(|bytes| bytes.div_ceil(1 << 20)) else {
+        return Err("this file's working memory is too large to estimate".into());
+    };
     if needed <= max_memory {
         return Ok(());
     }
     Err(format!(
         "this file needs about {needed} MiB of working memory, over the {max_memory} MiB \
-         allowed; raise --max-memory to allow it"
+         allowed; {advice}"
     )
     .into())
 }
@@ -356,21 +383,26 @@ mod tests {
 
     /// Decision 0011: the estimate for each case it measured is two sets of
     /// n shards, the codec's largest work buffer (in shards), the manifest
-    /// and 32 MiB, and only case A is over the default budget.
+    /// and 32 MiB, and only case A is over the default budget. Cases A to E
+    /// are one segment long, as the decision's are: the 8-byte length prefix
+    /// fills the segment. In MiB, rounded up, the estimates are the
+    /// decision's figures, which round down (review W-071).
     #[test]
     fn working_memory_is_decision_0011s_estimate() {
         // (k, n, segment size, file length, the codec's work in shards,
-        // refused by default)
+        // the estimate in MiB, refused by default)
+        let one = |segment_size| segment_size - 8;
         let cases = [
-            (2, 128, 8 * MIB, 8 * MIB, 256, true),     // A
-            (20, 50, 16 * MIB, 16 * MIB, 64, false),   // B
-            (64, 128, 64 * MIB, 64 * MIB, 128, false), // C
-            (2, 3, 64 * MIB, 64 * MIB, 4, false),      // D
-            (20, 50, MIB, 16 * MIB, 64, false),        // E, the defaults
-            (20, 50, 64 * MIB, 64 * MIB, 64, false),   // the largest segments at 20-of-50
-            (20, 50, 64 * MIB, 100 * MIB, 64, false),  // a short last segment
+            (2, 128, 8 * MIB, one(8 * MIB), 256, 2081, true), // A
+            (20, 50, 16 * MIB, one(16 * MIB), 64, 164, false), // B
+            (64, 128, 64 * MIB, one(64 * MIB), 128, 417, false), // C
+            (2, 3, 64 * MIB, one(64 * MIB), 4, 353, false),   // D
+            (20, 50, MIB, one(MIB), 64, 41, false),           // E, the defaults
+            (20, 50, MIB, 16 * MIB, 64, 41, false),           // 17 segments at the defaults
+            (20, 50, 64 * MIB, 64 * MIB, 64, 557, false),     // the largest segments at 20-of-50
+            (20, 50, 64 * MIB, 100 * MIB, 64, 557, false),    // a short last segment
         ];
-        for (k, n, segment_size, len, work, refused) in cases {
+        for (k, n, segment_size, len, work, mib, refused) in cases {
             let params = Params {
                 k,
                 n,
@@ -385,11 +417,23 @@ mod tests {
                 "{k}-of-{n}"
             );
             assert_eq!(
-                within_budget(&header, DEFAULT_MAX_MEMORY_MIB).is_err(),
+                working_memory(&header).unwrap().div_ceil(MIB),
+                mib,
+                "{k}-of-{n}"
+            );
+            assert_eq!(
+                within_budget(&header, DEFAULT_MAX_MEMORY_MIB, RAISE_THE_BUDGET).is_err(),
                 refused,
                 "{k}-of-{n}"
             );
         }
+        let a = Params {
+            k: 2,
+            n: 128,
+            segment_size: 8 << 20,
+        };
+        assert_eq!(a.header(one(8 * MIB)).unwrap().segment_count(), 1);
+        assert_eq!(a.header(8 * MIB).unwrap().segment_count(), 2);
     }
 
     /// At a terminal, no link and `-` are refused at once, before stdin is
@@ -433,9 +477,23 @@ mod tests {
     fn the_budget_is_in_mib_and_inclusive() {
         let header = Params::default().header(16 * MIB).unwrap();
         let mib = working_memory(&header).unwrap().div_ceil(MIB);
-        assert!(within_budget(&header, mib).is_ok());
-        let err = within_budget(&header, mib - 1).unwrap_err().to_string();
+        assert!(within_budget(&header, mib, RAISE_THE_BUDGET).is_ok());
+        let err = within_budget(&header, mib - 1, RAISE_THE_BUDGET)
+            .unwrap_err()
+            .to_string();
         assert!(err.contains(&format!("about {mib} MiB")), "{err}");
-        assert!(err.contains("--max-memory"), "{err}");
+        assert!(err.ends_with(RAISE_THE_BUDGET), "{err}");
+        let err = within_budget(&header, mib - 1, SHRINK_THE_FILE)
+            .unwrap_err()
+            .to_string();
+        assert!(err.ends_with(SHRINK_THE_FILE), "{err}");
+    }
+
+    /// An estimate that overflowed is refused even at the largest budget,
+    /// and one just under it passes (review W-069).
+    #[test]
+    fn an_estimate_that_overflowed_is_refused() {
+        assert!(check_budget(None, u64::MAX, RAISE_THE_BUDGET).is_err());
+        assert!(check_budget(Some(u64::MAX), u64::MAX, RAISE_THE_BUDGET).is_ok());
     }
 }
