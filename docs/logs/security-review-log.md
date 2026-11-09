@@ -1,6 +1,6 @@
 # Security Review Log
 
-<!-- baseline --> **Next review diffs from:** `281bd1a6b7d9513a635a9af14bbccd9ebc465df8` (`main`, recorded 2026-11-08)
+<!-- baseline --> **Next review diffs from:** `05bbd95e1238de51c81808a6ffc2f7ce0ea14870` (`main`, recorded 2026-11-08)
 
 A running record of branch security reviews. Each entry records the exact commit range
 reviewed; the baseline marker line above is the machine-owned frontier the next
@@ -21,6 +21,66 @@ marker line; a frontier-moving entry's Base must equal the previous one's Tip un
 the entry explains why not.
 
 ## Entries
+
+### 2026-11-08 · `281bd1a..05bbd95` (#50 and #51)
+
+| | Commit | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `281bd1a6b7d9513a635a9af14bbccd9ebc465df8` | 2026-11-07T04:34:56Z | docs: decision 0011, a memory budget for the CLI (S-037) (#49) |
+| Tip | `05bbd95e1238de51c81808a6ffc2f7ce0ea14870` | 2026-11-08T20:46:31Z | fuzz: 24 h campaign on 3b93b8d; all five targets clean (#51) |
+
+- **Scope:** 2 commits (`git rev-list --count 281bd1a..05bbd95`) and 17
+  files, +555/−39 (`git diff --shortstat 281bd1a 05bbd95`): the
+  thirteenth reviews' logs and fixes (#50), and the v0.0.3 campaign's
+  records with the README's status line (#51). Of them, 10 files, +270,
+  under `fuzz/`, all records, and none under `crates/` or `.github/` (the
+  same command with `-- fuzz`, `-- crates` and `-- .github`). Base equals
+  the previous entry's Tip. Only the committed range is covered. This is
+  step 5 of `plans/todo/v0.0.3.md`, logged in the commit `v0.0.3` tags.
+- **Method:** a fresh agent reviewed the range diff and the tip: it
+  recomputed each target's `code_id` with `campaign.sh`'s recipe at
+  `3b93b8d` and at the Tip, checked each record against what `record()`
+  writes, ran `fuzz/campaign.sh summary`, compared the records' compiler
+  with CI's pin, recomputed decision 0011's figures, and read the open
+  S-series items' release lines.
+- **Findings:** none.
+- **Corrections to the entry below:** it says it ran during the v0.0.3
+  campaign; the campaign ended on 2026-11-07 at 19:13 UTC, and that
+  review ran on 2026-11-08 (the code review's W-064).
+- **Not tracked:**
+  - `code_id` leaves out the compiler: `summary` warns on mixed
+    compilers, and every record here has the one CI pins.
+  - The stopped 58 s start is counted: the script counts stopped runs on
+    purpose, it ends before the 24 h runs begin, and each of those is
+    clean for at least 86,400 s on its own.
+  - The README's quick-start still writes into a link file that exists:
+    the code review's W-066.
+- **Checked, no finding:**
+  - The release ships the fuzzed code: nothing under `crates/`, the
+    Cargo files, `fuzz/Cargo.*`, the fuzz targets, `rust-toolchain.toml`,
+    `deny.toml` or `.github/` changed since `3b93b8d`, and every
+    `code_id` matches its records at both ends.
+  - The records are what `record()` writes: start plus run time is the
+    end, executions match the rate, no new artifacts; the compiler is
+    `nightly-2026-10-14`'s and `cargo-fuzz` is 0.13.2, as CI pins; they
+    name no host, user or path.
+  - Decision 0011's rate, manifest and size figures (W-056, W-057, W-059)
+    recompute; the README's `umask` note (W-061) is right.
+  - The 2 commits are the project's, in UTC, signed off once and signed
+    with the project's key.
+  - Privacy: no names, addresses, paths or session links in the range's
+    text, records or commit messages.
+  - No open finding of medium severity or higher is described in public:
+    S-027 appears only by ID, severity, open status and the release rule.
+  - The open items' release lines: S-007 asks for the merge method to be
+    decided before tagging, and every merge is a fast-forward; S-008's
+    line is met by v0.0.1's corrected tag; S-037 does not block.
+- **Outcome:** no blocker.
+- **Carried-over items:** S-007 open, with every merge a fast-forward;
+  S-008 open until the GitHub-side copies are removed; S-027 handled
+  privately and open; the maintainer has checked that it is not shipped in
+  v0.0.3, so it does not block the release and needs no advisory; S-037
+  open, its code after v0.0.3.
 
 ### 2026-11-08 · `0572592..281bd1a` (#46 and #49)
 

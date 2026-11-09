@@ -1,6 +1,6 @@
 # Code Review Log
 
-<!-- baseline --> **Next review diffs from:** `281bd1a6b7d9513a635a9af14bbccd9ebc465df8` (`main`, recorded 2026-11-08)
+<!-- baseline --> **Next review diffs from:** `05bbd95e1238de51c81808a6ffc2f7ce0ea14870` (`main`, recorded 2026-11-08)
 
 A running record of code-review events: branch/pre-PR reviews, review worklists, and
 remediation programmes. Newest entry first. The baseline marker line above is the
@@ -27,6 +27,49 @@ merge-base fallback). Side-branch pre-PR reviews are logged as entries marked
 "frontier unchanged (side branch)" and never move the line.
 
 ## Entries
+
+### 2026-11-08: `281bd1a..05bbd95` (#50 and #51)
+
+| | SHA | Date | Subject |
+| --- | --- | --- | --- |
+| Base | `281bd1a6b7d9513a635a9af14bbccd9ebc465df8` | 2026-11-07 | docs: decision 0011, a memory budget for the CLI (S-037) (#49) |
+| Tip | `05bbd95e1238de51c81808a6ffc2f7ce0ea14870` | 2026-11-08 | fuzz: 24 h campaign on 3b93b8d; all five targets clean (#51) |
+
+- **Scope:** 2 commits (`git rev-list --count 281bd1a..05bbd95`) and 17
+  files, +555/−39 (`git diff --shortstat 281bd1a 05bbd95`): the
+  thirteenth reviews' logs and fixes (#50), and the v0.0.3 campaign's
+  records with the README's status line (#51). Of them, 10 files, +270,
+  under `fuzz/`, all records, and none under `crates/` or `.github/` (the
+  same command with `-- fuzz`, `-- crates` and `-- .github`). Base equals
+  the previous entry's Tip. Only the committed range is covered. This is
+  step 5 of `plans/todo/v0.0.3.md`, logged in the commit `v0.0.3` tags.
+- **Method:** the `code-review` skill over the range, at high effort; a
+  fresh agent then tried to refute each claim, from the records, the
+  entries' dates, `rate_high.rs`, and `set -C` under four shells. Of the
+  review's 6 claims, 3 are tracked and 3 rejected.
+- **Findings:** 3 in the open worklist, none a bug: W-064 (low), the
+  thirteenth reviews say they ran during the campaign, which had ended
+  the day before; W-065 (cleanup), decision 0011 says the codec works on
+  "about as many again" shards, when decoding takes up to twice as many;
+  W-066 (low), the README's quick-start still writes into a link file
+  that exists.
+- **Corrections to the entry below:** it says it ran during the v0.0.3
+  campaign; the campaign ran from 2026-11-06 19:13 to 2026-11-07 19:13
+  UTC, and that review on 2026-11-08 (W-064).
+- **Not tracked,** with the reasons in the worklist: the spec's "already
+  needs as much" (a true lower bound), its figure without n = 128 (stated
+  in place), the plan's step 3 without #49 (`code_id` unchanged), and the
+  README's status line before the tag (as v0.0.2 did, in `7c06619`).
+- **Checked, no finding:** the records' `code_id` is the one
+  `fuzz/campaign.sh summary` computes at the Tip, which shows `met` ×5;
+  nothing in `code_id` changed since `3b93b8d`.
+- **Outcome:** no blocker. W-064 is fixed in the commit `v0.0.3` tags;
+  W-065 and W-066 change files that commit may not, and wait until after
+  v0.0.3. Worklist:
+  [`plans/todo/code-review-w-series-7.md`](../../plans/todo/code-review-w-series-7.md).
+- **Carried-over items:** W-056, W-057, W-059 and W-061 to W-063 fixed in
+  `96efd53` (#50), which the entry below calls "the PR after #49"; W-058
+  and W-060 open, after v0.0.3.
 
 ### 2026-11-08: `0572592..281bd1a` (#46 and #49)
 

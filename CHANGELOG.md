@@ -8,6 +8,11 @@ the frozen v1 byte format).
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-11-09
+
+Hardening of the offline core, fuzzed again for 24 hours per target with no
+crash. Still experimental and **not audited**.
+
 ### Changed
 
 - `neoblast open` and `heal` read the link from the first line of stdin when
@@ -32,7 +37,10 @@ the frozen v1 byte format).
   shards opened one content and the parity shards another, from the same
   link (review S-002, decision 0010). An intact open is about 40% slower,
   and a manifest that lists a shard of the wrong length can no longer be
-  opened.
+  opened. It also holds a segment's n shards, as opening from parity and
+  healing after losses already did: 2.6 MB at the defaults, but up to
+  several GiB at parameters a publisher may choose (review S-037). A memory
+  limit in the CLI is planned for a later release (decision 0011).
 - Parsing a read link decodes its key into buffers that are wiped when
   dropped, and `neoblast` reads a link from stdin into one (review S-003);
   a copy the compiler leaves on the stack on the way is not wiped (review W-055).
@@ -220,6 +228,7 @@ not hide who published or read it ([`spec/threat-model.md`](spec/threat-model.md
   Files sealed with any segment size stay readable, because the size is
   recorded in the header.
 
-[Unreleased]: https://github.com/neoblast-org/neoblast/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/neoblast-org/neoblast/compare/v0.0.3...HEAD
+[0.0.3]: https://github.com/neoblast-org/neoblast/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/neoblast-org/neoblast/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/neoblast-org/neoblast/releases/tag/v0.0.1
