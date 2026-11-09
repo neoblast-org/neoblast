@@ -26,6 +26,9 @@ the frozen v1 byte format).
   with a higher `--max-memory`, and no bytes change. A `seal` from a pipe
   first reads its input into memory, and the estimate does not count it.
   The library does not check: a program that embeds it sets its own limit.
+- `ctutils` moves to 0.4.8 in every lock file (from 0.4.5), which hardens
+  its constant-time comparisons on Thumb-1 (Cortex-M0) and 32-bit RISC-V.
+  A program that uses the crates as a library picks its own `ctutils`.
 
 ## [0.0.3] - 2026-11-09
 
