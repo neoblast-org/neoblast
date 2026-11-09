@@ -22,11 +22,17 @@ All four crates (`neoblast`, `neoblast-format`, `neoblast-crypto`,
    `CHANGELOG.md` and logs the code and security reviews of every commit
    before it, so it changes only `docs/logs/`, `plans/` and `CHANGELOG.md`;
    a second agent reviews it before it merges, and the next reviews log it
-   (W-037, S-032, S-033). Tag it on the UTC day `CHANGELOG.md` gives. First,
-   at the top of the work tree, bring `main` up to date and check that the
-   release commit's parent is the newest Tip in both review logs (the first
-   two lines) and both baselines (the next two), that it has one parent, and
-   that the last command prints nothing:
+   (W-037, S-032, S-033). Tag it on the UTC day `CHANGELOG.md` gives, so
+   merge it only when it can be tagged that day. If the day passes before
+   it merges, amend it to date the version on the day it will be tagged, in
+   `CHANGELOG.md` and the commit's subject, and change nothing else: the
+   logs keep the days the reviews ran. A second agent then reviews it
+   again, and it merges once CI has passed again (v0.0.3).
+
+   Once it has merged, at the top of the work tree, bring `main` up to
+   date and check that the release commit's parent is the newest Tip in
+   both review logs (the first two lines) and both baselines (the next
+   two), that it has one parent, and that the last command prints nothing:
 
    ```sh
    git switch main && git pull

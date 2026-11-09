@@ -3,7 +3,7 @@
 Status: completed 2026-11-03: every item is fixed, or won't be fixed with
 its reason, in `3b93b8d` (#46). Opened 2026-11-03 by the twelfth
 `/review-since` (`805a5ed..0572592`, #42 to #45), logged in
-`docs/logs/code-review-log.md`, as step 2 of `plans/todo/v0.0.3.md`. Part
+`docs/logs/code-review-log.md`, as step 2 of `plans/completed/v0.0.3.md`. Part
 5, W-044 to W-049, is closed (`plans/completed/code-review-w-series-5.md`).
 All items are low or cleanup, and none blocks v0.0.3. W-050, W-052, W-054
 and W-055 change `crates/`, and so every target's `code_id`; they land

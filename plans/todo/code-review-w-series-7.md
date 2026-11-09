@@ -2,7 +2,7 @@
 
 Status: todo. Opened 2026-11-08 by the thirteenth `/review-since`
 (`0572592..281bd1a`, #46 and #49), logged in `docs/logs/code-review-log.md`
-after the v0.0.3 campaign (`plans/todo/v0.0.3.md`, step 3) had ended; this
+after the v0.0.3 campaign (`plans/completed/v0.0.3.md`, step 3) had ended; this
 paragraph first said during it (W-064). W-064 to W-066 were added by step
 5's reviews (`281bd1a..05bbd95`, #50 and #51). Part 6, W-050 to W-055, is
 closed (`plans/completed/code-review-w-series-6.md`). All items are low or
@@ -10,7 +10,8 @@ cleanup, and none blocks v0.0.3. W-058 and W-060 change `crates/`, and so
 every target's `code_id`, which may not change between the campaign and the
 tag; they wait until after v0.0.3, with the code of decision 0011. W-065 and
 W-066 change files the release commit may not, and wait too. The others are
-fixed in `96efd53` (#50), and W-064 in the commit `v0.0.3` tags.
+fixed in `96efd53` (#50), and W-064 in `9ccdaad` (#52), the commit `v0.0.3`
+tags.
 
 IDs are unique across all worklists and continue from the highest W-number used.
 
@@ -139,7 +140,7 @@ IDs are unique across all worklists and continue from the highest W-number used.
 ### W-064 (low): the thirteenth reviews say they ran during the campaign
 
 - Where: both thirteenth log entries, this worklist's status paragraph,
-  `plans/todo/v0.0.3.md` step 5, and `96efd53`'s message (#50).
+  `plans/completed/v0.0.3.md` step 5, and `96efd53`'s message (#50).
 - What: they say the reviews ran "during the v0.0.3 campaign". The
   records show it ran from 2026-11-06 19:13 to 2026-11-07 19:13 UTC; the
   reviews ran on 2026-11-08. Nothing rests on it: the plan's steps hold
@@ -147,8 +148,8 @@ IDs are unique across all worklists and continue from the highest W-number used.
 - Remediation: correct the plans; the next log entries correct the old
   ones, which are not rewritten, and the commit message stays.
 - Verified: by a fresh agent, from the records and the entries' dates.
-- Status: fixed in the commit `v0.0.3` tags, in this worklist, the plan and
-  the fourteenth log entries.
+- Status: fixed in `9ccdaad` (#52), the commit `v0.0.3` tags, in this
+  worklist, the plan and the fourteenth log entries.
 
 ### W-065 (cleanup): decision 0011 says the codec works on "about as many again" shards
 
