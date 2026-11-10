@@ -24,6 +24,17 @@ cargo test --all
 cargo deny check
 ```
 
+## How changes land
+
+Pull requests are never merged with GitHub's button (decision 0012). Once CI
+has passed and GitHub shows every new commit as verified, a maintainer pushes
+the project's own commits to `main` as a fast-forward. A change from outside
+the project is re-made as a project commit first; the pull request keeps the
+record of who proposed it, and your signed-off commits there are its DCO
+record; your name does not appear in `main`'s history. The `hygiene` check
+fails on a pull request from outside by design, as only the project's identity
+may author or sign off a commit on `main`.
+
 ## Changing the byte format
 
 The v1 format is frozen (`spec/header.md`): its golden vectors never change, and

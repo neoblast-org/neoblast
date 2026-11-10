@@ -237,9 +237,16 @@ that fixed it.
 - **Verified:** by reading the commit metadata of all merges on `main`.
 - **Release:** not blocking, but decide the merge method before tagging, since
   the release commit will be one of these merges.
-- **Status:** open. #9 and #10 were re-made on `main` with the project's
-  identity (`36cb370`, `5393f67`); the merges up to #8 keep GitHub's metadata.
-  Merging by fast-forward avoids it from #11 on.
+- **Status:** fixed in the PR after #56, by decision 0012: every change
+  reaches `main` as a fast-forward of the project's own commits, and the
+  merge button is never used. #9 and #10 were re-made on `main` with the
+  project's identity (`36cb370`, `5393f67`), and every merge from #11 on
+  was a fast-forward. The merges up to #8 keep GitHub's metadata; rewriting
+  them would need a force-push to `main`, which stays the maintainer's
+  call. `protect-main` allows the button only to squash, and one method
+  must stay allowed, so a squash from the button is caught only after the
+  fact, by the hygiene job on `main`; the maintainer's own push cannot
+  land unless that job has passed (`hygiene-required`, S-014).
 
 ### S-008 · Medium · A maintainer's personal account reached public history
 
