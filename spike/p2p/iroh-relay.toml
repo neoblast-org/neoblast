@@ -1,0 +1,23 @@
+# iroh-relay 1.4.1 for the libp2p or iroh spike; see README.md.
+# Run: iroh-relay --config-path iroh-relay.toml
+# Fill in the two values marked below on the VPS; do not commit them.
+
+enable_relay = true
+http_bind_addr = "0.0.0.0:80"
+
+# Off by default; without it iroh's peers cannot learn their public
+# addresses from this relay (plan, step 2 notes, item 4).
+enable_quic_addr_discovery = true
+
+# No rate limits (the default when absent), and access for anyone, while the
+# relay runs. No limit here can cut an attempt short (criterion 3).
+enable_metrics = false
+
+[tls]
+https_bind_addr = "0.0.0.0:443"
+quic_bind_addr = "0.0.0.0:7842"
+cert_mode = "LetsEncrypt"
+hostname = "relay.example.org"       # the VPS's domain name
+contact = "you@example.org"          # for Let's Encrypt
+prod_tls = true
+cert_dir = "iroh-relay-certs"

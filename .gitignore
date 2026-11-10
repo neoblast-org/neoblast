@@ -2,6 +2,10 @@
 /fuzz/target
 /bench/heal-heap/target
 /bench/heal-heap/dhat-heap.json
+/spike/p2p/target
+/spike/p2p/logs
+/spike/p2p/relays.env
+/spike/p2p/__pycache__
 /fuzz/corpus
 /fuzz/artifacts
 /fuzz/logs

@@ -3,7 +3,7 @@
 Status: todo. Opened 2026-11-10, before any spike code or run. Owner:
 maintainer, with Claude doing the code and docs. Step 1 done 2026-11-10
 (#58): the maintainer approved the rule, readings (a) and (b) included.
-Step 2's notes 2026-11-10, below.
+Step 2's notes 2026-11-10, below. Step 3's code is in `spike/p2p/`.
 
 ## Why now
 
@@ -388,3 +388,74 @@ pages, as read on this date, issue and pull-request states included.
     address, but went direct when dialled with its ID alone
     ([iroh#4658](https://github.com/n0-computer/iroh/issues/4658)); rule 1
     gives B the node ID and the relay URL only.
+
+### 2026-11-10: step 3, before any run
+
+Rule 3 asks for the exact calls to be named here. Both programs share one
+judge, `spike/p2p/common`, so the libraries differ only in what counts as
+an echo that went direct:
+
+- **libp2p:** B's echo is libp2p's ping, sent every second on each
+  connection with a 5-second timeout. `ping::Event` names the connection
+  each round trip used; it went direct if that connection's
+  `ConnectedPoint::is_relayed()` is false, which is rule 3's named
+  connection with no `/p2p-circuit`.
+- **iroh:** B's echo is 32 bytes on a new QUIC stream, sent back by A,
+  every second with a 5-second timeout. It went direct if, in
+  `Connection::paths()`, the path with `is_selected()` was `is_ip()` both
+  when it was sent and when it came back.
+- **"At that moment":** rule 3's reading is met by an echo that went
+  direct and came back within 5 seconds of the reading's time, the echo
+  timeout, so an echo sent at the reading counts. The readings at 10 and
+  60 seconds use the same window.
+
+The tests on one machine pass for both: direct with the relayed path still
+open, relayed with hole punching off, IPv4 only, and, at the full timings,
+a relayed connection still carrying echoes at the last reading.
+
+**For the maintainer to confirm before the first run:**
+
+1. **iroh's port mapping.** iroh asks the router for a port mapping (UPnP,
+   PCP, NAT-PMP) by default; libp2p's hole punching does not, and its
+   separate UPnP behaviour would not help, as DCUtR uses only the addresses
+   peers observe. Rule 1 asks for each library's documented NAT traversal,
+   so the proposal is iroh's default, on (`IROH_PORTMAP=on`), recorded in
+   every record. Off would measure hole punching alone. Either is set
+   before the first run and kept for all of them.
+2. **libp2p over QUIC.** libp2p reaches its relay over QUIC, so DCUtR
+   punches over UDP, as iroh does. The examples show TCP; the 2022–23
+   campaign found the two alike.
+
+**`cargo deny`, run once with the repository's `deny.toml` against
+`spike/p2p/Cargo.toml` (criterion 6).** Sources are fine; duplicate
+versions only warn. It fails on:
+
+- licences outside `deny.toml`'s list, all three through iroh alone:
+  `attohttpc` (MPL-2.0), which iroh's default port mapping pulls in
+  through `portmapper` and `igd-next`; and `webpki-roots` and
+  `webpki-root-certs` (CDLA-Permissive-2.0, the bundled root
+  certificates), through `iroh-relay`, `iroh-dns` and `reqwest`;
+- one advisory for both: `paste` is unmaintained (RUSTSEC-2024-0436),
+  through each library's network-interface crates.
+
+**For the maintainer, under rule 12:** whether these licences rule iroh
+out, or are accepted, perhaps with port mapping left out of a build that
+adopts it. The unmaintained `paste` affects both alike. Nothing here is
+decided by the spike's code; decision 0013 records the answer.
+
+**Two readings of the rule in `summary.py`,** for the maintainer to
+confirm:
+
+- Rules 11 and 12 come before rule 13. A library not completed leaves
+  every decisive pair short of its 50 attempts, so if rule 13 came first,
+  rule 11 could never choose the other library. With no declaration, no
+  complete decisive pair leaves item 6 open.
+- Criterion 5 asks for a test where the mean of the pairs' rates differs
+  from the rate pooled over their attempts. Once rule 7 counts only pairs
+  with all 50 attempts each, the two are always equal; they differ only if
+  an incomplete pair is pooled, which the tests check is not done.
+
+`run.sh` makes A the first-named end of each pair: home 1 in both decisive
+pairs and in `home1-vps`, the hotspot in `cgnat-vps`. `home1-cgnat` starts
+with libp2p and `home1-home2` with iroh (rule 8); the order is in
+`spike/p2p/README.md`.
