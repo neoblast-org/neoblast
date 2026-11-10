@@ -1,7 +1,9 @@
 # libp2p or iroh (ROADMAP open item 6)
 
 Status: todo. Opened 2026-11-10, before any spike code or run. Owner:
-maintainer, with Claude doing the code and docs.
+maintainer, with Claude doing the code and docs. Step 1 done 2026-11-10
+(#58): the maintainer approved the rule, readings (a) and (b) included.
+Step 2's notes 2026-11-10, below.
 
 ## Why now
 
@@ -201,3 +203,188 @@ before it is handed over.
 Kademlia, the Mainline DHT, placement and shard transfer: the spike
 measures only how often two peers get a direct path. Those come after the
 decision, in Phase 2's own plan.
+
+## Notes
+
+### 2026-11-10: the networks
+
+The maintainer has more than one home network, so home–home runs and is a
+decisive pair beside home–CGNAT (rule 4): two decisive pairs, as the time
+estimate assumed. Rule 4 names one home–home pair, so two home networks are
+used, "home 1" and "home 2"; home 1 is also the home end of home–CGNAT, so
+the two pairs share one NAT and are not independent. Rule 7 still weighs
+them equally. Where there is a choice, the two homes have different routers
+and providers, so the pair is not one router's behaviour twice; that is a
+preference, not a rule. The maintainer chooses them before the first run,
+and the records name them only as home 1 and home 2 (criterion 4).
+
+Two computers are enough, as pairs run one after another: one stays on
+home 1 throughout, and the other is on home 2 for home–home and on the
+phone's hotspot for home–CGNAT. **For the maintainer to confirm:** the
+line after the rules says the result holds for the networks measured,
+"one of each kind". With two homes that phrase is not exact, so decision
+0013 states what was measured, one CGNAT network and two home networks.
+This clarifies the sentence; it does not change what the rule decides.
+
+### 2026-11-10: what step 2 found
+
+Read before any spike code, as `decisions/README.md` asks: each library's
+design docs, its code, the projects that use it and its issue tracker.
+Versions, licences, MSRVs and the relay defaults below were checked in the
+released crates' sources and on crates.io; the rest comes from the linked
+pages, as read on this date, issue and pull-request states included.
+
+| | libp2p | iroh |
+| --- | --- | --- |
+| Current release | 0.57.1 (2026-10-15) | 1.4.1 (2026-10-21) |
+| Licence | MIT | MIT OR Apache-2.0 |
+| `rust-version` | 1.88 | 1.91 |
+| Reverse dependencies | 300 | 340 |
+| Blast radius | medium | medium |
+| Open advisories | none; seven fixed in 2026 | none; three fixed in 1.1.0 |
+
+- **Licences:** both are on `deny.toml`'s list. Their dependency trees are
+  checked by `cargo deny` in step 3 (criterion 6).
+- **MSRV:** both releases need more than the workspace's 1.87. The spike's
+  `rust-toolchain.toml` names 1.91 or later. Adopting either in Phase 2
+  would mean raising the workspace's MSRV, which is Phase 2's to decide;
+  decision 0013 records the cost. It is not a veto under rule 12. libp2p
+  0.56.0 declares 1.83 but has an older relay (0.21); the spike uses each
+  library's current release.
+- **Advisories,** checked in RustSec and in each project's GitHub
+  advisories. RustSec's entries for libp2p crates are old and patched.
+  rust-libp2p published seven on GitHub in 2026, all high: four in
+  gossipsub and two in rendezvous, which the spike does not use, and one
+  in `libp2p-quic` (a remote panic), fixed in 0.13.1; libp2p 0.57.1 takes
+  0.14 ([advisories](https://github.com/libp2p/rust-libp2p/security/advisories)).
+  libp2p's QUIC transport also uses `quinn-proto`, which had several
+  RustSec advisories in 2026, the latest fixed in 0.11.18; the spike's lock
+  file has 0.11.19 or later. iroh's three, one high, are on GitHub only
+  ([advisories](https://github.com/n0-computer/iroh/security/advisories)).
+- **Blast radius:** both fall in "medium" (100 to 1,000 dependents):
+  either would go behind our own types with an exact pin
+  (`decisions/README.md`).
+
+**How each one gets a direct path**
+
+- libp2p: the relay v2 client and server, DCUtR and identify, as in the
+  project's `examples/dcutr` and `examples/relay-server`. Over the relayed
+  connection, the two peers swap their observed addresses and dial each
+  other at the same moment, up to three times. The relayed connection stays
+  open after a direct one is made
+  ([DCUtR spec](https://github.com/libp2p/specs/blob/master/relay/DCUtR.md)).
+  The example leaves AutoNAT out, and so does the spike; one user found it
+  got in the way of hole punching
+  ([autonomi#1640](https://github.com/maidsafe/autonomi/pull/1640)).
+- iroh: since 0.96, one QUIC connection holds the relay path and direct
+  paths together (QUIC multipath), and the address exchange and hole
+  punching run inside QUIC
+  ([0.96](https://iroh.computer/blog/iroh-0-96-0-the-quic-multipaths-to-1-0)).
+  The relay tells each peer its public address (QAD, which replaced STUN;
+  [QAD](https://iroh.computer/blog/qad)). By default iroh prefers IPv6
+  paths to IPv4.
+
+**What others have measured**
+
+- libp2p: a 2022–23 campaign of 4.4 million attempts from 85,000 networks
+  found 70% ± 7.1% of hole punches succeed, with TCP and QUIC alike,
+  counting only attempts where the relay reservation and address discovery
+  had worked ([arXiv 2510.27500](https://arxiv.org/html/2510.27500v1)). A 2026 follow-up
+  found about 83% behind port-restricted NATs and 40% behind symmetric
+  ones, the latter in doubt
+  ([ProbeLab](https://probelab.io/blog/can-libp2p-punch-through-nats/)).
+  Neither covers mobile networks. Of the production users found, Pathfinder
+  reported "limited success" and dropped DCUtR
+  ([pathfinder#1070](https://github.com/software-mansion/pathfinder/issues/1070)),
+  Ceramic turned relay and DCUtR off
+  ([rust-ceramic#323](https://github.com/ceramicnetwork/rust-ceramic/pull/323)),
+  and Forest uses UPnP, with no relay or DCUtR
+  ([discovery.rs](https://github.com/ChainSafe/forest/blob/main/src/libp2p/discovery.rs)).
+- iroh: n0 says about 9 in 10 connections go direct, with no date or method
+  ([FAQ](https://docs.iroh.computer/about/faq)). Delta Chat uses iroh 0.35
+  ([Cargo.toml](https://github.com/chatmail/core/blob/main/Cargo.toml)),
+  and a case study on n0's blog says 90.7% of Strada's transfer volume
+  stayed off central servers
+  ([Strada](https://www.iroh.computer/blog/strada-direct-file-transfer));
+  neither splits direct from relayed. No independent measurement was found.
+  iroh's own NAT tests skip a symmetric NAT against a port-restricted or
+  symmetric one as "not yet passing (and likely can't without port
+  guessing)" (`tests/patchbay/nat.rs` in 1.4.1).
+- So if the carrier's NAT is symmetric, both libraries may mostly stay
+  relayed on home–CGNAT, as the rule section foresaw, and home–home may
+  carry most of the difference. Nothing here changes the rule; the spike's
+  own records decide.
+
+**What step 3 must get right**
+
+1. libp2p's direct reading (rule 3): `libp2p-stream` (0.5.0-alpha) opens a
+   stream on any connection to the peer, which may be the relayed one. The
+   reading needs its own behaviour that sends on one connection by its ID,
+   and `ConnectedPoint::is_relayed()` to tell that the connection is not
+   relayed (it checks the dialled or the local listen address for
+   `/p2p-circuit`).
+2. **For the maintainer to confirm:** iroh's direct reading (rule 3).
+   iroh 1.x has no connection type, so no "direct" or "mixed" label. The
+   reading is that the path in `Connection::paths()` for which
+   `is_selected()` is true is also `is_ip()`, with a relay path still open
+   beside it or not, as rule 3 says. Old iroh's "mixed" meant "both a UDP
+   and a relay connection are used"
+   ([0.35](https://docs.rs/iroh/0.35.0/iroh/endpoint/enum.ConnectionType.html)),
+   so this is no looser than it. Criterion 3's mixed case becomes a test of
+   a selected IP path with the relay path still open.
+3. The libp2p relay's defaults end a circuit after 2 minutes or 128 KiB;
+   both are raised (criterion 3). Since relay 0.22 the server stops
+   advertising the relay protocol until it has a confirmed external
+   address, so it is given the VPS's
+   ([#6154](https://github.com/libp2p/rust-libp2p/pull/6154)).
+4. `iroh-relay` ships with QUIC address discovery off; it is turned on, or
+   iroh's peers do not learn their public addresses from it.
+5. Both relays run at once, as the libraries alternate, so they cannot both
+   have TCP 443 on one address. Proposed for the matrix: `iroh-relay` on
+   TCP 443 for its HTTPS, with its address discovery on its default UDP
+   port, 7842; libp2p's relay on one other port for TCP and UDP. Either
+   library then reaches its relay off UDP 443. The relay's port decides
+   only whether a peer reaches the relay, not the direct path between the
+   peers. The maintainer confirms this in step 3's review. A network may
+   block the uncommon port and so fail only libp2p's controls (rule 5),
+   which, never passing, would make libp2p not completed (rule 11) for a
+   reason that is not NAT traversal. So a blocked relay port is fixed by
+   moving that relay to another port and rerunning the controls; it never
+   counts against the library. Home 2 has no control pair, so a blocked
+   port there shows only as repeated harness errors (item 9). The 443
+   question in criterion 6 is checked once for each library, outside the
+   matrix.
+6. libp2p: each peer waits for identify to finish with the relay before it
+   listens or dials, as `examples/dcutr` does; otherwise DCUtR may have no
+   addresses to try (open PR
+   [#5583](https://github.com/libp2p/rust-libp2p/pull/5583)).
+7. IPv4 only (rule 6): libp2p listens on `/ip4/` addresses only; iroh clears
+   its IP transports and binds `0.0.0.0` alone. iroh's address filter does
+   not reach the candidates its hole punching sends
+   ([iroh#4399](https://github.com/n0-computer/iroh/issues/4399)), so the
+   test in criterion 3 checks what is sent, not only what is bound.
+8. Relayed-only checks (criterion 3), by each library's option: libp2p
+   without DCUtR; iroh with `clear_ip_transports()` on one endpoint, as
+   iroh's own test `endpoint_two_relay_only_no_ip` does. That removes the
+   endpoint's IP transports rather than only its hole punching, which
+   leaves it no direct path, as criterion 3 wants. The check confirms the
+   relay path still works; a firewall rule only if it does not.
+9. **For the maintainer to confirm**, a reading of rule 10: if A never
+   reaches its relay or never gets its reservation, the script cannot
+   start B, so the attempt is a harness error and is rerun, for either
+   library alike. It would favour the library that fails there more often:
+   a user of rust-libp2p reported about 1% of reservations accepted
+   without the event that says so, on the 0.56 line; it may still occur
+   ([#6141](https://github.com/libp2p/rust-libp2p/issues/6141)). The other
+   reading counts it as failed. Either way, the records log each harness
+   error by library, and decision 0013 reports the counts.
+10. Issues the records may show: on one carrier's CGNAT, iroh's direct path
+    dropped to the relay 48 to 75 seconds after it was made, for 1 to 26
+    seconds, then was punched again; the reporter puts it down to the
+    carrier's fixed UDP mapping timeout, which would hit any library
+    ([iroh#4424](https://github.com/n0-computer/iroh/issues/4424)). The
+    readings at 10, 30 and 60 seconds may catch it. An iroh peer
+    behind a filtering NAT stayed relayed when dialled with its full
+    address, but went direct when dialled with its ID alone
+    ([iroh#4658](https://github.com/n0-computer/iroh/issues/4658)); rule 1
+    gives B the node ID and the relay URL only.
