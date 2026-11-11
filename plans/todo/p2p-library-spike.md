@@ -3,7 +3,8 @@
 Status: todo. Opened 2026-11-10, before any spike code or run. Owner:
 maintainer, with Claude doing the code and docs. Step 1 done 2026-11-10
 (#58): the maintainer approved the rule, readings (a) and (b) included.
-Step 2's notes 2026-11-10, below. Step 3's code is in `spike/p2p/`.
+Step 2's notes 2026-11-10, below. Step 3's code is in `spike/p2p/`
+(#60). The maintainer's answers to step 3's questions 2026-11-11, below.
 
 ## Why now
 
@@ -459,3 +460,29 @@ confirm:
 pairs and in `home1-vps`, the hotspot in `cgnat-vps`. `home1-cgnat` starts
 with libp2p and `home1-home2` with iroh (rule 8); the order is in
 `spike/p2p/README.md`.
+
+### 2026-11-11: the maintainer's answers, before any run
+
+Given before any run, so no rate could bear on them.
+
+- **Step 3's questions.** Merging #60 confirmed the two items above and
+  the two readings in `summary.py`: iroh's port mapping is on
+  (`IROH_PORTMAP=on`) in every run, and libp2p reaches its relay over QUIC.
+- **Rule 12, licences: accepted, so iroh is not ruled out.** If iroh is
+  chosen, `deny.toml` allows each licence for the crates named here only,
+  not for every crate:
+  - `webpki-roots` and `webpki-root-certs`, CDLA-Permissive-2.0: a
+    permissive licence for data, here the bundled root certificates.
+    `iroh-relay` 1.4.1 depends on `webpki-roots` unconditionally, so no
+    build of iroh is without it.
+  - `attohttpc`, MPL-2.0, used unmodified. MPL-2.0's copyleft applies file
+    by file, to changes to `attohttpc`'s own files. A build that adopts
+    iroh keeps port mapping: it is an optional default feature
+    (`portmapper`) of iroh 1.4.1, and leaving it out would ship something
+    other than what was measured.
+- **Rule 12, advisory: not a veto.** `paste` (RUSTSEC-2024-0436,
+  unmaintained) comes through both libraries alike; whichever is chosen
+  adds it to `deny.toml`'s ignored advisories, with this note as the
+  reason.
+
+Decision 0013 refers to this note for rule 12.
