@@ -40,6 +40,11 @@ console:
    | TCP | 4001 | the libp2p relay over TCP |
    | UDP | 4001 | the libp2p relay over QUIC |
    | UDP | 7842 | `iroh-relay`'s QUIC address discovery |
+   | TCP and UDP | 1024–65535 | B on the VPS in the controls, which listens on a random port |
+
+   The last row makes the VPS the public peer the controls assume (plan,
+   rule 4): with it closed, a direct dial to B on the VPS is refused.
+   Only the relays and the spike listen on those ports.
 
 3. **Make an ssh key just for this VPS,** on the home 1 computer. It has
    no passphrase, as `run.sh` uses ssh without prompting:
@@ -69,10 +74,14 @@ and save. With the `REJECT` at number 5:
 ```sh
 sudo iptables -I INPUT 5 -p tcp -m state --state NEW -m multiport --dports 80,443,4001 -j ACCEPT
 sudo iptables -I INPUT 6 -p udp -m multiport --dports 4001,7842 -j ACCEPT
+sudo iptables -I INPUT 7 -p tcp -m state --state NEW --dport 1024:65535 -j ACCEPT
+sudo iptables -I INPUT 8 -p udp --dport 1024:65535 -j ACCEPT
 sudo netfilter-persistent save
 ```
 
-On an image that uses `ufw` instead, `sudo ufw allow` each port.
+On an image that uses `ufw` instead, `sudo ufw allow` each port or range.
+Ports below 1024 other than 22, 80 and 443 stay closed; on some images
+`rpcbind` listens on 111.
 
 ### 1.3 Tools and build
 
@@ -291,6 +300,12 @@ in at least 18 of 20 (rule 5). If one does not pass, stop and find the
 cause in the harness or the relay before going on; a blocked port is
 moved, never counted against the library. Then run that control again with
 the same command and `--run 2`.
+
+In the controls, B runs on the same host as both relays. A libp2p B there
+learns its own address from a relay on its own host, so its hole punch can
+fail where a remote B's would not: a `relayed` libp2p result on those
+pairs is weak evidence about libp2p. The controls count connections only
+(rule 5), and the decisive pairs have no peer on the relays' host.
 
 One evening can hold the setup and runs 1 and 2; runs 3 and 4 can each
 have their own.
