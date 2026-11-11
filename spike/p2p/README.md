@@ -23,6 +23,7 @@ one, so CI, `cargo deny` and Dependabot do not build or watch it.
 | `iroh-relay.toml` | The settings for iroh's own relay server, `iroh-relay` 1.4.1 |
 | `relays.env.example` | What `run.sh` needs to know about the relays |
 | `run.sh` | Runs a pair's attempts, A on one machine and B on the other |
+| `SETUP.md` | Step 4 step by step: the VPS, each computer, a smoke test and the runs |
 | `summary.py` | Applies the rule to the records; `test_summary.py` tests it |
 | `records/` | One JSON line per attempt, committed after the runs (step 5) |
 
@@ -74,6 +75,9 @@ They cannot test a real NAT; the records from the real networks are the
 evidence.
 
 ## Setting up the VPS
+
+`SETUP.md` has every step, from an empty cloud account to the records;
+this section and the next are the short version.
 
 The VPS needs a public IPv4 address, a domain name pointing at it for
 `iroh-relay`'s certificate, and these ports open:
